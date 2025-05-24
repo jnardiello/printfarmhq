@@ -86,7 +86,7 @@ export function Dashboard() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-xl sm:text-2xl font-semibold text-foreground truncate">WeMakeEverything HQ</h1>
+            <h1 className="text-xl sm:text-2xl font-semibold text-foreground truncate">PrintFarmHQ</h1>
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <UserMenu />
