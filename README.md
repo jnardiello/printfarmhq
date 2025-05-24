@@ -39,8 +39,6 @@ Login with the credentials you set during installation (or the defaults if you p
 ```bash
 make up        # Start PrintFarmHQ
 make down      # Stop PrintFarmHQ
-make logs      # View logs
-make seed-db   # Add sample data
 ```
 
 ## Prerequisites
