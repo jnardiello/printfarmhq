@@ -275,7 +275,7 @@ export function FilamentsTab() {
 
       <Card className="card-hover shadow-md">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xl gradient-heading">Filament Inventory</CardTitle>
+          <CardTitle className="text-xl">Filament Inventory</CardTitle>
           <Button 
             variant="outline" 
             size="sm" 
@@ -440,7 +440,7 @@ export function FilamentsTab() {
         <Collapsible open={purchasesOpen} onOpenChange={setPurchasesOpen}>
           <CollapsibleTrigger className="w-full text-left">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-xl gradient-heading">Filament Purchases</CardTitle>
+              <CardTitle className="text-xl">Filament Purchases</CardTitle>
               {purchasesOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
             </CardHeader>
           </CollapsibleTrigger>
