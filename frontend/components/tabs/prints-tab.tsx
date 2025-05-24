@@ -94,12 +94,12 @@ export function PrintsTab() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="card-hover overflow-hidden border-t-4 border-t-blue-500 shadow-md">
+        <Card className="card-hover shadow-md">
           <Collapsible open={formOpen} onOpenChange={setFormOpen}>
             <CollapsibleTrigger className="w-full text-left">
-              <CardHeader className="bg-gradient-to-r from-blue-500/5 to-transparent flex flex-row items-center justify-between cursor-pointer">
+              <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <ScanLine className="text-blue-500" />
+                  <ScanLine />
                   Create New Print Job
                 </CardTitle>
                 {formOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -216,10 +216,10 @@ export function PrintsTab() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <Card className="card-hover overflow-hidden border-t-4 border-t-purple-500 shadow-md"> {/* Changed border color */}
-          <CardHeader className="bg-gradient-to-r from-purple-500/5 to-transparent"> {/* Changed color */}
+        <Card className="card-hover shadow-md">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <Package className="text-purple-500" /> {/* Changed icon */}
+              <Package />
               Print Jobs
             </CardTitle>
           </CardHeader>
@@ -241,7 +241,7 @@ export function PrintsTab() {
                   </TableHeader>
                   <TableBody>
                     {printJobs.map((job: any) => (
-                      <TableRow key={job.id} className="hover:bg-muted/50">
+                      <TableRow key={job.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{job.name || `Job #${job.id.slice(0,6)}`}</TableCell>
                         <TableCell>
                           {job.products && job.products.length > 0 

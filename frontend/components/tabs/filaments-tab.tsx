@@ -287,14 +287,14 @@ export function FilamentsTab() {
           </Button>
         </CardHeader>
         <CardContent className="p-0">
-          {loadingFilaments ? (
-            <div className="space-y-2 p-6">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
+          <div className="overflow-x-auto">
+            {loadingFilaments ? (
+              <div className="space-y-2 p-6">
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
@@ -431,8 +431,8 @@ export function FilamentsTab() {
                   )}
                 </TableBody>
               </Table>
-            </div>
-          )}
+            )}
+          </div>
         </CardContent>
       </Card>
 

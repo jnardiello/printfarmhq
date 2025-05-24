@@ -49,8 +49,8 @@ export function SubscriptionsTab() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="card-hover overflow-hidden border-t-4 border-t-primary shadow-md">
-          <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent">
+        <Card className="card-hover shadow-md">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -151,8 +151,8 @@ export function SubscriptionsTab() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <Card className="card-hover overflow-hidden border-t-4 border-t-secondary shadow-md">
-          <CardHeader className="bg-gradient-to-r from-secondary/5 to-transparent">
+        <Card className="card-hover shadow-md">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -187,7 +187,7 @@ export function SubscriptionsTab() {
                   </TableHeader>
                   <TableBody>
                     {subscriptions.map((subscription) => (
-                      <TableRow key={subscription.id} className="hover:bg-muted/50">
+                      <TableRow key={subscription.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{subscription.id}</TableCell>
                         <TableCell>{subscription.name}</TableCell>
                         <TableCell>{subscription.platform}</TableCell>

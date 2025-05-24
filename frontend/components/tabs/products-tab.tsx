@@ -255,9 +255,9 @@ export function ProductsTab() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
         <Accordion type="single" collapsible value={activeAccordionItem} onValueChange={setActiveAccordionItem} className="w-full">
           <AccordionItem value="addProductItem" className="border-none">
-            <Card className="card-hover overflow-hidden border-t-4 border-t-primary shadow-md">
+            <Card className="card-hover shadow-md">
               <AccordionTrigger className="w-full p-0 hover:no-underline">
-                <CardHeader className="bg-gradient-to-r from-primary/5 to-transparent w-full">
+                <CardHeader className="w-full">
                   <CardTitle className="flex items-center justify-between gap-2 text-xl w-full">
                     <div className="flex items-center gap-2">
                       <svg
@@ -427,7 +427,7 @@ export function ProductsTab() {
                           <TableBody>
                             {filamentRows.length > 0 ? (
                               filamentRows.map((row, index) => (
-                                <TableRow key={index} className="hover:bg-muted/50">
+                                <TableRow key={index} className="hover:bg-muted/50 transition-colors">
                                   <TableCell>
                                     <Select
                                       value={row.filament_id ? row.filament_id.toString() : undefined}
@@ -517,8 +517,8 @@ export function ProductsTab() {
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <Card className="card-hover overflow-hidden border-t-4 border-t-secondary shadow-md">
-          <CardHeader className="bg-gradient-to-r from-secondary/5 to-transparent">
+        <Card className="card-hover shadow-md">
+          <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -555,7 +555,7 @@ export function ProductsTab() {
                   </TableHeader>
                   <TableBody>
                     {products.map((product: ProductType) => (
-                      <TableRow key={product.id} className="hover:bg-muted/50">
+                      <TableRow key={product.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{product.sku}</TableCell>
                         <TableCell>{product.name}</TableCell>
                         <TableCell>
@@ -872,7 +872,7 @@ export function ProductsTab() {
                     <TableBody>
                       {editFilamentRows.length > 0 ? (
                         editFilamentRows.map((row, index) => (
-                          <TableRow key={index} className="hover:bg-muted/50">
+                          <TableRow key={index} className="hover:bg-muted/50 transition-colors">
                             <TableCell>
                               <Select
                                 value={row.filament_id ? row.filament_id.toString() : undefined}

@@ -362,7 +362,7 @@ export function UsersTab() {
         <CardContent>
           <Table>
             <TableHeader>
-              <TableRow>
+              <TableRow className="bg-muted/50">
                 <TableHead>User</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Role</TableHead>
@@ -372,7 +372,7 @@ export function UsersTab() {
             </TableHeader>
             <TableBody>
               {users.map((user) => (
-                <TableRow key={user.id}>
+                <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell>
                     <div className="flex items-center space-x-2">
                       <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
