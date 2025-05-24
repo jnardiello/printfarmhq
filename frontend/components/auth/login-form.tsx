@@ -34,7 +34,7 @@ export function LoginForm() {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Welcome Back</CardTitle>
         <CardDescription className="text-center">
-          Sign in to your WME HQ account
+          Sign in to your PrintFarmHQ account
         </CardDescription>
       </CardHeader>
       <CardContent>

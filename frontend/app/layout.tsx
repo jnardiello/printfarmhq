@@ -9,7 +9,7 @@ import { AuthProvider } from "@/components/auth/auth-context"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "WeMakeEverything HQ",
+  title: "PrintFarmHQ",
   description: "3D Printing Inventory Management System",
     generator: 'v0.dev'
 }

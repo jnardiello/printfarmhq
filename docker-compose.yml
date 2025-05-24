@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   backend:
     build: ./backend
@@ -8,7 +7,7 @@ services:
       - "8000:8000"
     environment:
       - JWT_SECRET_KEY=docker-development-secret-key-change-in-production
-      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL:-admin3@wme.farm}
+      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL:-changeme@printhq.farm}
       - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD:-superadmin123}
       - SUPERADMIN_NAME=${SUPERADMIN_NAME:-Super Administrator}
     env_file: 

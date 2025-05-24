@@ -18,7 +18,7 @@ logs:
 # Seed database with initial test data
 API_URL ?= http://localhost:8000
 TODAY := $(shell date +%F)
-SUPERADMIN_EMAIL ?= superadmin@wmehq.com
+SUPERADMIN_EMAIL ?= superadmin@printfarmhq.com
 SUPERADMIN_PASSWORD ?= superadmin123
 
 seed-db:

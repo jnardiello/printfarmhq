@@ -52,7 +52,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       <CardHeader className="space-y-1">
         <CardTitle className="text-2xl text-center">Create Account</CardTitle>
         <CardDescription className="text-center">
-          Sign up for WME HQ
+          Sign up for PrintFarmHQ
         </CardDescription>
       </CardHeader>
       <CardContent>

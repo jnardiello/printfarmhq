@@ -1,4 +1,4 @@
-# Security and Code Quality Improvement Plan - WME HQ
+# Security and Code Quality Improvement Plan - PrintFarmHQ
 
 ## Critical Security Issues (Fix Immediately)
 

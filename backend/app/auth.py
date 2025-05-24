@@ -152,7 +152,7 @@ def get_current_superadmin_user(current_user: models.User = Depends(get_current_
 
 def ensure_superadmin_exists(db: Session) -> None:
     """Ensure superadmin user exists and is up to date with environment variables"""
-    superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@wmehq.com")
+    superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@printfarmhq.com")
     superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "superadmin123")
     superadmin_name = os.getenv("SUPERADMIN_NAME", "Super Administrator")
     
