@@ -1,4 +1,4 @@
-![PrintFarmHQ Logo](assets/logo.png)
+![PrintFarmHQ Banner](assets/banner-readme.png)
 
 # 🏭 PrintFarmHQ
 
