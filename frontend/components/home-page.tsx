@@ -176,7 +176,8 @@ export function HomePage() {
         </Card>
       )}
 
-      {/* Recent Activity - Placeholder for future enhancement */}
+      {/* Recent Activity - Hidden until implemented */}
+      {/* 
       <Card>
         <CardHeader>
           <CardTitle>Recent Activity</CardTitle>
@@ -190,6 +191,7 @@ export function HomePage() {
           </div>
         </CardContent>
       </Card>
+      */}
     </div>
   )
 }

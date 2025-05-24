@@ -141,7 +141,7 @@ PrintFarmHQ uses **dual licensing**:
 - **🌍 Open Source**: AGPL-3.0 for community use
 - **🏢 Commercial**: Available for businesses who need proprietary modifications
 
-For commercial licensing: **licensing@reltech.io**
+For commercial licensing: **info@reltech.io**
 
 See [LICENSE](LICENSE) for details.
 
@@ -151,7 +151,7 @@ See [LICENSE](LICENSE) for details.
 
 - **📚 Documentation**: [/docs](docs/)
 - **🐛 Issues**: [GitHub Issues](https://github.com/yourusername/printfarmhq/issues)
-- **💼 Commercial Support**: licensing@reltech.io
+- **💼 Commercial Support**: info@reltech.io
 
 ---
 
