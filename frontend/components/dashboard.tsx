@@ -93,9 +93,14 @@ export function Dashboard() {
           <div className="flex justify-between items-center">
             <button 
               onClick={handleLogoClick}
-              className="text-xl sm:text-2xl font-semibold text-foreground truncate hover:text-foreground/80 transition-colors cursor-pointer"
+              className="flex items-center gap-3 text-xl sm:text-2xl font-semibold text-foreground hover:text-foreground/80 transition-colors cursor-pointer"
             >
-              PrintFarmHQ
+              <img
+                src="/logo.png"
+                alt="PrintFarmHQ Logo"
+                className="w-12 h-12 sm:w-16 sm:h-16 object-contain"
+              />
+              <span className="truncate">PrintFarmHQ</span>
             </button>
             <div className="flex items-center gap-2">
               <ThemeToggle />

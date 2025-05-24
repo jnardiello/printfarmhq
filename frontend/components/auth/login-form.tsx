@@ -31,7 +31,14 @@ export function LoginForm() {
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader className="space-y-1">
+      <CardHeader className="space-y-4">
+        <div className="flex justify-center">
+          <img
+            src="/logo.png"
+            alt="PrintFarmHQ Logo"
+            className="w-48 h-48 object-contain"
+          />
+        </div>
         <CardTitle className="text-2xl text-center">Welcome Back</CardTitle>
         <CardDescription className="text-center">
           Sign in to your PrintFarmHQ account

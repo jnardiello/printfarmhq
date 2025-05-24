@@ -49,7 +49,14 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
   return (
     <Card className="w-full max-w-md">
-      <CardHeader className="space-y-1">
+      <CardHeader className="space-y-4">
+        <div className="flex justify-center">
+          <img
+            src="/logo.png"
+            alt="PrintFarmHQ Logo"
+            className="w-16 h-16 object-contain"
+          />
+        </div>
         <CardTitle className="text-2xl text-center">Create Account</CardTitle>
         <CardDescription className="text-center">
           Sign up for PrintFarmHQ
