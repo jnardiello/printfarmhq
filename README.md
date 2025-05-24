@@ -1,3 +1,5 @@
+![PrintFarmHQ Logo](assets/logo.png)
+
 # 🏭 PrintFarmHQ
 
 > 🚀 Transform your 3D printing business with intelligent inventory management and cost tracking
