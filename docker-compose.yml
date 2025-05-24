@@ -6,10 +6,11 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - JWT_SECRET_KEY=docker-development-secret-key-change-in-production
-      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL:-changeme@printhq.farm}
-      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD:-superadmin123}
-      - SUPERADMIN_NAME=${SUPERADMIN_NAME:-Super Administrator}
+      # WARNING: Change these values for production use!
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-development-only-jwt-secret-change-this}
+      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL:-admin@example.com}
+      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD:-changeme123}
+      - SUPERADMIN_NAME=${SUPERADMIN_NAME:-Administrator}
     env_file: 
       - backend/.env
 

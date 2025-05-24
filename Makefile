@@ -18,8 +18,8 @@ logs:
 # Seed database with initial test data
 API_URL ?= http://localhost:8000
 TODAY := $(shell date +%F)
-SUPERADMIN_EMAIL ?= superadmin@printfarmhq.com
-SUPERADMIN_PASSWORD ?= superadmin123
+SUPERADMIN_EMAIL ?= admin@example.com
+SUPERADMIN_PASSWORD ?= changeme123
 
 seed-db:
 	@echo "Seeding database with initial data (requires authentication)..."

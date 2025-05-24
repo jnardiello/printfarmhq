@@ -10,7 +10,10 @@ from . import models
 from .database import SessionLocal
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "development-only-secret-change-in-production")
+if SECRET_KEY == "development-only-secret-change-in-production":
+    import warnings
+    warnings.warn("Using default JWT secret key. This is insecure! Set JWT_SECRET_KEY in production.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -152,8 +155,8 @@ def get_current_superadmin_user(current_user: models.User = Depends(get_current_
 
 def ensure_superadmin_exists(db: Session) -> None:
     """Ensure superadmin user exists and is up to date with environment variables"""
-    superadmin_email = os.getenv("SUPERADMIN_EMAIL", "superadmin@printfarmhq.com")
-    superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "superadmin123")
+    superadmin_email = os.getenv("SUPERADMIN_EMAIL", "admin@example.com")
+    superadmin_password = os.getenv("SUPERADMIN_PASSWORD", "changeme123")
     superadmin_name = os.getenv("SUPERADMIN_NAME", "Super Administrator")
     
     # Check if superadmin exists

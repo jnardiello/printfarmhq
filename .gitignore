@@ -32,7 +32,13 @@ MANIFEST
 *.db
 *.sqlite
 *.sqlite3
-hq/backend/hq.db
+backend/hq.db
+backend/*.db
+backups/
+
+# Uploaded files
+backend/uploads/
+uploads/
 
 # Node.js
 node_modules/
