@@ -1,19 +1,3 @@
-# PrintFarmHQ
-
-> Transform your 3D printing business with intelligent inventory management and cost tracking
-
-## Quick Start - Local Installation
-### What is PrintFarmHQ?
-
-PrintFarmHQ helps 3D printing businesses **save time and money** by automating the tedious parts of running a print farm:
-
-**Smart Inventory Tracking** - Never run out of filament mid-print again. Track stock levels across multiple materials.
-
-**True Cost Calculator** - Know your *real* profit margins. We calculate material costs, printer depreciation, and time automatically.
-
-**Multi-Material Support** - Building complex products? Track which filaments each product needs and ensure you have everything in stock.
-
-**3D Model Library** - Upload STL/3MF files and link them to products. Keep your designs organized and accessible.
 
 **Fleet Management** - Track multiple printers, their usage hours, and maintenance schedules. Know which machines are profitable.
 

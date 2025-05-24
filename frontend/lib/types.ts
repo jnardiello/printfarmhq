@@ -103,3 +103,27 @@ export interface PrintJob {
   created_at: string
   updated_at: string
 }
+
+// Alert system types
+export enum AlertType {
+  SECURITY = "security",
+  INVENTORY = "inventory", 
+  PRINTER = "printer",
+  BUSINESS = "business",
+  SYSTEM = "system"
+}
+
+export type AlertPriority = 'critical' | 'warning' | 'info'
+
+export interface Alert {
+  id: string
+  type: AlertType
+  priority: AlertPriority
+  title: string
+  message: string
+  actionLabel?: string
+  actionLink?: string
+  dismissible: boolean
+  expiresAt?: string
+  metadata?: Record<string, any>
+}

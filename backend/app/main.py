@@ -20,6 +20,7 @@ from .auth import (
     ensure_superadmin_exists,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from .alerts import generate_alerts
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
@@ -113,6 +114,22 @@ def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
 def get_current_user_info(current_user: models.User = Depends(get_current_user)):
     """Get current authenticated user information"""
     return schemas.UserRead.model_validate(current_user)
+
+
+# ---------- Alerts System ---------- #
+
+@app.get("/alerts")
+def get_alerts(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Get all alerts for the current user"""
+    return generate_alerts(current_user, db)
+
+
+@app.post("/alerts/{alert_id}/dismiss")
+def dismiss_alert(alert_id: str, current_user: models.User = Depends(get_current_user)):
+    """Dismiss an alert (placeholder - in production you'd store dismissals in DB)"""
+    # For now, this is just a placeholder endpoint
+    # In a full implementation, you'd store alert dismissals in a database table
+    return {"status": "dismissed", "alert_id": alert_id}
 
 
 # ---------- User Management (Admin Only) ---------- #

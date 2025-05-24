@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { AlertTriangle, Package, CreditCard, Boxes, ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { AlertsBox } from "@/components/alerts-box"
 
 export function HomePage() {
   const { products, subscriptions, filaments } = useData()
@@ -36,6 +37,9 @@ export function HomePage() {
           <p className="text-sm sm:text-base text-muted-foreground">Welcome to your 3D printing inventory management system</p>
         </div>
       </div>
+
+      {/* Alerts Section */}
+      <AlertsBox />
 
       {/* Main Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">

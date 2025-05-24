@@ -64,6 +64,11 @@ export function Dashboard() {
     }
   }
 
+  // Handle clicking the logo/title to go to home
+  const handleLogoClick = () => {
+    handleTabChange("home")
+  }
+
   const baseTabOptions = [
     { value: "home", label: "Overview" },
     { value: "prints", label: "Prints" },
@@ -86,7 +91,12 @@ export function Dashboard() {
       <header className="border-b bg-card">
         <div className="container mx-auto px-3 sm:px-6 py-3 sm:py-4">
           <div className="flex justify-between items-center">
-            <h1 className="text-xl sm:text-2xl font-semibold text-foreground truncate">PrintFarmHQ</h1>
+            <button 
+              onClick={handleLogoClick}
+              className="text-xl sm:text-2xl font-semibold text-foreground truncate hover:text-foreground/80 transition-colors cursor-pointer"
+            >
+              PrintFarmHQ
+            </button>
             <div className="flex items-center gap-2">
               <ThemeToggle />
               <UserMenu />
