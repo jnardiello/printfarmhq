@@ -1,4 +1,61 @@
-.PHONY: build up down clean logs seed-db dump-db restore-db
+.PHONY: install build up down clean logs seed-db dump-db restore-db
+
+# Load environment variables from backend/.env if it exists
+ifneq (,$(wildcard backend/.env))
+    include backend/.env
+    export
+endif
+
+install:
+	@echo "🏭 PrintFarmHQ Setup"
+	@echo "==================="
+	@echo ""
+	@echo "Setting up your PrintFarmHQ development environment..."
+	@echo ""
+	@# Check if .env files already exist and have content
+	@if [ -f "backend/.env" ] && [ -s "backend/.env" ]; then \
+		echo "⚠️  backend/.env already exists and has content. Skipping..."; \
+	else \
+		echo "📝 Creating backend/.env from example..."; \
+		cp backend/.env.example backend/.env; \
+	fi
+	@if [ -f "frontend/.env.local" ]; then \
+		echo "⚠️  frontend/.env.local already exists. Skipping..."; \
+	else \
+		echo "📝 Creating frontend/.env.local from example..."; \
+		cp frontend/.env.example frontend/.env.local; \
+	fi
+	@echo ""
+	@echo "🔐 Setting up admin credentials..."
+	@read -p "Admin email [admin@example.com]: " admin_email; \
+	admin_email=$${admin_email:-admin@example.com}; \
+	read -p "Admin password [changeme123]: " admin_password; \
+	admin_password=$${admin_password:-changeme123}; \
+	read -p "Admin name [Administrator]: " admin_name; \
+	admin_name=$${admin_name:-Administrator}; \
+	echo ""; \
+	echo "🔑 Generating secure JWT secret..."; \
+	jwt_secret=$$(openssl rand -hex 32); \
+	echo ""; \
+	echo "📝 Updating backend/.env..."; \
+	sed -i.bak "s/SUPERADMIN_EMAIL=.*/SUPERADMIN_EMAIL=$$admin_email/" backend/.env; \
+	sed -i.bak "s/SUPERADMIN_PASSWORD=.*/SUPERADMIN_PASSWORD=$$admin_password/" backend/.env; \
+	sed -i.bak "s/SUPERADMIN_NAME=.*/SUPERADMIN_NAME=$$admin_name/" backend/.env; \
+	sed -i.bak "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$$jwt_secret/" backend/.env; \
+	rm -f backend/.env.bak; \
+	echo ""; \
+	echo "✅ Setup complete!"; \
+	echo ""; \
+	echo "📋 Your configuration:"; \
+	echo "   Email: $$admin_email"; \
+	echo "   Password: $$admin_password"; \
+	echo "   Name: $$admin_name"; \
+	echo ""; \
+	echo "🚀 Next steps:"; \
+	echo "   1. Run: make up"; \
+	echo "   2. Open: http://localhost:3000"; \
+	echo "   3. Login with the credentials above"; \
+	echo ""
 
 build:
 	docker compose -f docker-compose.yml build
@@ -18,14 +75,6 @@ logs:
 # Seed database with initial test data
 API_URL ?= http://localhost:8000
 TODAY := $(shell date +%F)
-
-# Load environment variables from backend/.env
-ifneq (,$(wildcard backend/.env))
-    include backend/.env
-    export
-else
-    $(error backend/.env file not found. Please copy backend/.env.example to backend/.env)
-endif
 
 seed-db:
 	@echo "Seeding database with initial data (requires authentication)..."
