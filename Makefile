@@ -18,8 +18,14 @@ logs:
 # Seed database with initial test data
 API_URL ?= http://localhost:8000
 TODAY := $(shell date +%F)
-SUPERADMIN_EMAIL ?= admin@example.com
-SUPERADMIN_PASSWORD ?= changeme123
+
+# Load environment variables from backend/.env
+ifneq (,$(wildcard backend/.env))
+    include backend/.env
+    export
+else
+    $(error backend/.env file not found. Please copy backend/.env.example to backend/.env)
+endif
 
 seed-db:
 	@echo "Seeding database with initial data (requires authentication)..."

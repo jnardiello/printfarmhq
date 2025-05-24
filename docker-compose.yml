@@ -6,11 +6,10 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # WARNING: Change these values for production use!
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-development-only-jwt-secret-change-this}
-      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL:-admin@example.com}
-      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD:-changeme123}
-      - SUPERADMIN_NAME=${SUPERADMIN_NAME:-Administrator}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL}
+      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD}
+      - SUPERADMIN_NAME=${SUPERADMIN_NAME}
     env_file: 
       - backend/.env
 
