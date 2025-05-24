@@ -274,169 +274,6 @@ export function FilamentsTab() {
       )}
 
       <Card className="card-hover shadow-md">
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xl">Filament Inventory</CardTitle>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={refreshInventory}
-            className="text-xs flex items-center gap-1"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh Inventory
-          </Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            {loadingFilaments ? (
-              <div className="space-y-2 p-6">
-                {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-                ))}
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-muted/50">
-                    <TableHead>Color</TableHead>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Qty (kg)</TableHead>
-                    <TableHead>Min (kg)</TableHead>
-                    <TableHead>Avg €/kg</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filaments.length > 0 ? (
-                    filaments.map((filament) => (
-                      <TableRow
-                        key={filament.id}
-                        className={`
-                          transition-colors hover:bg-muted/50
-                          ${filament.min_filaments_kg !== null && filament.total_qty_kg < filament.min_filaments_kg ? "bg-yellow-50/50 dark:bg-yellow-900/20" : ""}
-                        `}
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-4 h-4 rounded-full border border-gray-300"
-                              style={{
-                                backgroundColor: filament.color.toLowerCase(),
-                                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
-                              }}
-                            ></div>
-                            {filament.color}
-                          </div>
-                        </TableCell>
-                        <TableCell>{filament.brand}</TableCell>
-                        <TableCell>{filament.material}</TableCell>
-                        <TableCell>
-                          <span
-                            className={`font-medium ${filament.min_filaments_kg !== null && filament.total_qty_kg < filament.min_filaments_kg ? "text-yellow-700 dark:text-yellow-400" : ""}`}
-                          >
-                            {filament.total_qty_kg.toFixed(2)}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">
-                            {filament.min_filaments_kg !== null ? filament.min_filaments_kg.toFixed(2) : "—"}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">
-                            €{filament.price_per_kg.toFixed(2)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditQuantity(filament)}
-                            className="h-8 w-8 text-gray-500 hover:text-primary"
-                          >
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Pencil className="h-4 w-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Edit filament quantity
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleSetMinFilaments(filament)}
-                            className="h-8 w-8 text-gray-500 hover:text-yellow-600"
-                          >
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <AlertTriangle className="h-4 w-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Set minimum threshold for low stock alert
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-gray-500 hover:text-red-600"
-                            onClick={() => handleDeleteFilament(filament.id)}
-                          >
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Trash2 className="h-4 w-4" />
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  Delete filament
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        <div className="flex flex-col items-center">
-                          <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            width="40"
-                            height="40"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            className="text-muted-foreground/50 mb-3"
-                          >
-                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                            <polyline points="3.29 7 12 12 20.71 7"></polyline>
-                            <line x1="12" y1="22" x2="12" y2="12"></line>
-                          </svg>
-                          <p>No filaments added yet.</p>
-                          <p className="text-sm mt-1">Add your first filament purchase below.</p>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="card-hover shadow-md">
         <Collapsible open={purchasesOpen} onOpenChange={setPurchasesOpen}>
           <CollapsibleTrigger className="w-full text-left">
             <CardHeader className="flex flex-row items-center justify-between">
@@ -811,6 +648,169 @@ export function FilamentsTab() {
             </CardContent>
           </CollapsibleContent>
         </Collapsible>
+      </Card>
+
+      <Card className="card-hover shadow-md">
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-xl">Filament Inventory</CardTitle>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={refreshInventory}
+            className="text-xs flex items-center gap-1"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh Inventory
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            {loadingFilaments ? (
+              <div className="space-y-2 p-6">
+                {[...Array(5)].map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Color</TableHead>
+                    <TableHead>Brand</TableHead>
+                    <TableHead>Material</TableHead>
+                    <TableHead>Qty (kg)</TableHead>
+                    <TableHead>Min (kg)</TableHead>
+                    <TableHead>Avg €/kg</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filaments.length > 0 ? (
+                    filaments.map((filament) => (
+                      <TableRow
+                        key={filament.id}
+                        className={`
+                          transition-colors hover:bg-muted/50
+                          ${filament.min_filaments_kg !== null && filament.total_qty_kg < filament.min_filaments_kg ? "bg-yellow-50/50 dark:bg-yellow-900/20" : ""}
+                        `}
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-4 h-4 rounded-full border border-gray-300"
+                              style={{
+                                backgroundColor: filament.color.toLowerCase(),
+                                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
+                              }}
+                            ></div>
+                            {filament.color}
+                          </div>
+                        </TableCell>
+                        <TableCell>{filament.brand}</TableCell>
+                        <TableCell>{filament.material}</TableCell>
+                        <TableCell>
+                          <span
+                            className={`font-medium ${filament.min_filaments_kg !== null && filament.total_qty_kg < filament.min_filaments_kg ? "text-yellow-700 dark:text-yellow-400" : ""}`}
+                          >
+                            {filament.total_qty_kg.toFixed(2)}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {filament.min_filaments_kg !== null ? filament.min_filaments_kg.toFixed(2) : "—"}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            €{filament.price_per_kg.toFixed(2)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleEditQuantity(filament)}
+                            className="h-8 w-8 text-gray-500 hover:text-primary"
+                          >
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Pencil className="h-4 w-4" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Edit filament quantity
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleSetMinFilaments(filament)}
+                            className="h-8 w-8 text-gray-500 hover:text-yellow-600"
+                          >
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <AlertTriangle className="h-4 w-4" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Set minimum threshold for low stock alert
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-gray-500 hover:text-red-600"
+                            onClick={() => handleDeleteFilament(filament.id)}
+                          >
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Trash2 className="h-4 w-4" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  Delete filament
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <div className="flex flex-col items-center">
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="40"
+                            height="40"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="text-muted-foreground/50 mb-3"
+                          >
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            <polyline points="3.29 7 12 12 20.71 7"></polyline>
+                            <line x1="12" y1="22" x2="12" y2="12"></line>
+                          </svg>
+                          <p>No filaments added yet.</p>
+                          <p className="text-sm mt-1">Add your first filament purchase below.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </CardContent>
       </Card>
     </div>
   )
