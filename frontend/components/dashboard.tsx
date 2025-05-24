@@ -242,7 +242,7 @@ export function Dashboard() {
       <main className="flex-1 container mx-auto px-3 sm:px-6 py-4 sm:py-8">
         {activeTab === "home" && <HomePage />}
         {activeTab === "filaments" && <FilamentsTab />}
-        {activeTab === "products" && <ProductsTab />}
+        {activeTab === "products" && <ProductsTab onNavigateToTab={setActiveTab} />}
         {activeTab === "printers" && <PrintersTab />}
         {activeTab === "prints" && <PrintsTab />}
         {activeTab === "subscriptions" && <SubscriptionsTab />}

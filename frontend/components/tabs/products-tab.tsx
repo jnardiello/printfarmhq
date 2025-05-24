@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Trash2, Plus, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard } from "lucide-react"
+import { Trash2, Plus, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard, AlertTriangle } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import type { FilamentRowData, ProductFormData, Product as ProductType, Printer, Filament, Subscription, FilamentUsage } from "@/lib/types"
@@ -26,7 +26,11 @@ interface ProductEditFormData {
   // Filament usages and model file will be handled separately in state for the edit modal
 }
 
-export function ProductsTab() {
+interface ProductsTabProps {
+  onNavigateToTab?: (tab: string) => void
+}
+
+export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
   const { filaments, products, printers, subscriptions, addProduct, deleteProduct, updateProduct } = useData()
 
   const [productForm, setProductForm] = useState<ProductFormData>({
@@ -59,6 +63,10 @@ export function ProductsTab() {
   // State for License Details Modal
   const [selectedLicenseDetails, setSelectedLicenseDetails] = useState<Subscription | null>(null)
   const [isLicenseModalOpen, setIsLicenseModalOpen] = useState(false)
+
+  // Check if filaments are available for creating products
+  const hasFilaments = filaments && filaments.length > 0
+  const canCreateProduct = hasFilaments
 
   useEffect(() => {
     if (editingProduct) {
@@ -253,37 +261,38 @@ export function ProductsTab() {
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Accordion type="single" collapsible value={activeAccordionItem} onValueChange={setActiveAccordionItem} className="w-full">
-          <AccordionItem value="addProductItem" className="border-none">
-            <Card className="card-hover shadow-md">
-              <AccordionTrigger className="w-full p-0 hover:no-underline">
-                <CardHeader className="w-full">
-                  <CardTitle className="flex items-center justify-between gap-2 text-xl w-full">
-                    <div className="flex items-center gap-2">
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="20"
-                        height="20"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-primary"
-                      >
-                        <path d="M16.5 9.4 7.55 4.24"></path>
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
-                        <polyline points="3.29 7 12 12 20.71 7"></polyline>
-                        <line x1="12" y1="22" x2="12" y2="12"></line>
-                      </svg>
-                      Add Product
-                    </div>
-                    {activeAccordionItem === "addProductItem" ? <ChevronUp className="h-5 w-5 text-primary" /> : <ChevronDown className="h-5 w-5 text-primary" />}
-                  </CardTitle>
-                </CardHeader>
-              </AccordionTrigger>
-              <AccordionContent>
+        {canCreateProduct ? (
+          <Accordion type="single" collapsible value={activeAccordionItem} onValueChange={setActiveAccordionItem} className="w-full">
+            <AccordionItem value="addProductItem" className="border-none">
+              <Card className="card-hover shadow-md">
+                <AccordionTrigger className="w-full p-0 hover:no-underline">
+                  <CardHeader className="w-full">
+                    <CardTitle className="flex items-center justify-between gap-2 text-xl w-full">
+                      <div className="flex items-center gap-2">
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          width="20"
+                          height="20"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="text-primary"
+                        >
+                          <path d="M16.5 9.4 7.55 4.24"></path>
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                          <polyline points="3.29 7 12 12 20.71 7"></polyline>
+                          <line x1="12" y1="22" x2="12" y2="12"></line>
+                        </svg>
+                        Add Product
+                      </div>
+                      {activeAccordionItem === "addProductItem" ? <ChevronUp className="h-5 w-5 text-primary" /> : <ChevronDown className="h-5 w-5 text-primary" />}
+                    </CardTitle>
+                  </CardHeader>
+                </AccordionTrigger>
+                <AccordionContent>
                 <CardContent className="p-6">
                   <form onSubmit={handleAddProduct} className="space-y-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end p-4 bg-muted/30 rounded-lg border border-muted">
@@ -514,6 +523,27 @@ export function ProductsTab() {
             </Card>
           </AccordionItem>
         </Accordion>
+        ) : (
+          <Card className="border-orange-200 bg-orange-50 dark:border-orange-800 dark:bg-orange-950/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
+                <AlertTriangle className="h-5 w-5" />
+                Filaments Required
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-orange-600 dark:text-orange-400 mb-4">
+                You need to add filaments to your inventory before you can create products. Products require at least one filament to be specified.
+              </p>
+              <Button 
+                onClick={() => onNavigateToTab?.("filaments")}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                Add filament now
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>

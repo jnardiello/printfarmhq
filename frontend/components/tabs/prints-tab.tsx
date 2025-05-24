@@ -4,12 +4,13 @@ import type React from "react"
 
 import { useState } from "react"
 import { useData } from "@/components/data-provider" // Placeholder - will need to update useData
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Trash2, Plus, Printer, Package, ScanLine, ChevronDown, ChevronUp } from "lucide-react" // Added ChevronDown, ChevronUp icons
+import { Trash2, Plus, Printer, Package, ScanLine, ChevronDown, ChevronUp, AlertCircle, ExternalLink } from "lucide-react" // Added ChevronDown, ChevronUp icons
 import { motion } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -18,6 +19,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 export function PrintsTab() {
   // Placeholder - will need to update useData and related functions/state
   const { products, printers, printJobs, addPrintJob, deletePrintJob } = useData()
+  const router = useRouter()
 
   // Add state to control collapsible form
   const [formOpen, setFormOpen] = useState(false)
@@ -91,20 +93,35 @@ export function PrintsTab() {
   }
 
 
+  // Check if requirements are met to show the form
+  const hasProducts = products && products.length > 0
+  const hasPrinters = printers && printers.length > 0
+  const canCreatePrintJob = hasProducts && hasPrinters
+
+  // Navigation functions
+  const goToProducts = () => {
+    router.push('/?tab=products')
+  }
+
+  const goToPrinters = () => {
+    router.push('/?tab=printers')
+  }
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="card-hover shadow-md">
-          <Collapsible open={formOpen} onOpenChange={setFormOpen}>
-            <CollapsibleTrigger className="w-full text-left">
-              <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
-                <CardTitle className="flex items-center gap-2 text-xl">
-                  <ScanLine />
-                  Create New Print Job
-                </CardTitle>
-                {formOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-              </CardHeader>
-            </CollapsibleTrigger>
+      {canCreatePrintJob ? (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <Card className="card-hover shadow-md">
+            <Collapsible open={formOpen} onOpenChange={setFormOpen}>
+              <CollapsibleTrigger className="w-full text-left">
+                <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
+                  <CardTitle className="flex items-center gap-2 text-xl">
+                    <ScanLine />
+                    Create New Print Job
+                  </CardTitle>
+                  {formOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                </CardHeader>
+              </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="p-6">
                 <form
@@ -214,6 +231,65 @@ export function PrintsTab() {
           </Collapsible>
         </Card>
       </motion.div>
+      ) : (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <Card className="border-amber-200 bg-amber-50 dark:bg-amber-900/20 dark:border-amber-700">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-xl text-amber-800 dark:text-amber-400">
+                <AlertCircle className="h-5 w-5" />
+                Requirements Not Met
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <p className="text-amber-700 dark:text-amber-300">
+                  To create print jobs, you need at least one product and one printer configured.
+                </p>
+                
+                <div className="space-y-2">
+                  {!hasProducts && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                      <Package className="h-4 w-4" />
+                      <span>No products available</span>
+                    </div>
+                  )}
+                  {!hasPrinters && (
+                    <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400">
+                      <Printer className="h-4 w-4" />
+                      <span>No printers available</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {!hasProducts && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={goToProducts}
+                      className="text-amber-700 border-amber-300 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-600 dark:hover:bg-amber-800"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Create a product now
+                    </Button>
+                  )}
+                  {!hasPrinters && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={goToPrinters}
+                      className="text-amber-700 border-amber-300 hover:bg-amber-100 dark:text-amber-300 dark:border-amber-600 dark:hover:bg-amber-800"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add a printer now
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
 
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
         <Card className="card-hover shadow-md">
