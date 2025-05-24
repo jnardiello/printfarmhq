@@ -1,0 +1,225 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    --primary: 222 47% 11%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 210 40% 98%;
+
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222 47% 11%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer components {
+  .gradient-heading {
+    @apply bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+  }
+
+  .card-hover {
+    @apply transition-all duration-300 hover:shadow-lg hover:shadow-primary/10;
+  }
+
+  .tab-button {
+    @apply relative overflow-hidden transition-all duration-300;
+  }
+
+  .tab-button::after {
+    @apply content-[''] absolute bottom-0 left-0 w-0 h-1 bg-secondary transition-all duration-300;
+  }
+
+  .tab-button[data-state="active"]::after {
+    @apply w-full;
+  }
+
+  .animated-border {
+    @apply relative rounded-lg;
+  }
+
+  .animated-border::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--secondary)), hsl(var(--primary)));
+    background-size: 200% 200%;
+    animation: border-animation 4s linear infinite;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+
+  .animated-border:hover::before {
+    opacity: 1;
+  }
+
+  @keyframes border-animation {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .glass-effect {
+    @apply bg-white/80 backdrop-blur-sm dark:bg-black/50;
+  }
+
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .stat-card {
+    @apply bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-900 
+           rounded-xl shadow-md p-6 flex flex-col space-y-2 border border-gray-100 dark:border-gray-800
+           hover:shadow-lg transition-all duration-300 hover:border-primary/30;
+  }
+
+  .stat-value {
+    @apply text-3xl font-bold text-gray-800 dark:text-white;
+  }
+
+  .stat-label {
+    @apply text-sm font-medium text-gray-500 dark:text-gray-400;
+  }
+
+  .stat-icon {
+    @apply p-3 rounded-full bg-primary/10 text-primary;
+  }
+
+  .section-title {
+    @apply text-lg font-medium text-foreground mb-4;
+  }
+
+  .card-header {
+    @apply border-b px-6 py-4;
+  }
+
+  .card-content {
+    @apply p-6;
+  }
+
+  .data-table {
+    @apply w-full border-collapse;
+  }
+
+  .data-table th {
+    @apply bg-muted px-4 py-3 text-left text-sm font-medium text-muted-foreground;
+  }
+
+  .data-table td {
+    @apply px-4 py-3 text-sm;
+  }
+
+  .data-table tr {
+    @apply border-b border-border;
+  }
+
+  .data-table tr:last-child {
+    @apply border-0;
+  }
+
+  .form-group {
+    @apply space-y-2;
+  }
+
+  .form-label {
+    @apply text-sm font-medium text-foreground;
+  }
+
+  .form-input {
+    @apply w-full rounded-md border border-input bg-background px-3 py-2 text-sm;
+  }
+
+  .status-indicator {
+    @apply inline-flex h-2 w-2 rounded-full;
+  }
+
+  .status-low {
+    @apply bg-destructive;
+  }
+
+  .status-medium {
+    @apply bg-yellow-500;
+  }
+
+  .status-good {
+    @apply bg-success;
+  }
+}

@@ -1,0 +1,34 @@
+# Docker related
+Dockerfile
+.dockerignore
+
+# Node modules
+node_modules
+
+# PNPM
+pnpm-debug.log*
+
+# Next.js build outputs
+.next
+
+# Local environment variables
+.env
+.env*.local
+
+# Git files
+.git
+.gitignore
+
+# Editor/IDE specific
+.vscode
+.idea
+*.iml
+
+# OS specific
+.DS_Store
+
+# Test results and coverage
+coverage
+junit.xml
+
+*.log 

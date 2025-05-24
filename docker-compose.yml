@@ -1,0 +1,29 @@
+version: "3.8"
+services:
+  backend:
+    build: ./backend
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - JWT_SECRET_KEY=docker-development-secret-key-change-in-production
+      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL:-admin3@wme.farm}
+      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD:-superadmin123}
+      - SUPERADMIN_NAME=${SUPERADMIN_NAME:-Super Administrator}
+    env_file: 
+      - backend/.env
+
+  frontend:
+    build: 
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    env_file: 
+      - frontend/.env.local 
