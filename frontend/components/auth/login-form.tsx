@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useAuth } from './auth-context'
+import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +15,7 @@ export function LoginForm() {
   const [error, setError] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const { login } = useAuth()
+  const { theme } = useTheme()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,7 +36,7 @@ export function LoginForm() {
       <CardHeader className="space-y-4">
         <div className="flex justify-center">
           <img
-            src="/logo.png"
+            src={theme === 'dark' ? "/logo-white.png" : "/logo.png"}
             alt="PrintFarmHQ Logo"
             className="w-48 h-48 object-contain"
           />

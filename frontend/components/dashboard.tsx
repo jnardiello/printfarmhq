@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useTheme } from "next-themes"
+// Removed Tabs components as we now use custom navigation
 import { FilamentsTab } from "@/components/tabs/filaments-tab"
 import { ProductsTab } from "@/components/tabs/products-tab"
 import { PrintersTab } from "@/components/tabs/printers-tab"
@@ -22,7 +23,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuItem
 } from "@/components/ui/dropdown-menu"
-import { Menu } from "lucide-react"
+import { Menu, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export function Dashboard() {
@@ -32,6 +33,7 @@ export function Dashboard() {
   const { setCurrentTab } = useData()
   const { user } = useAuth()
   const isMobile = useIsMobile()
+  const { theme } = useTheme()
 
   // Set the active tab based on URL parameter on initial load
   useEffect(() => {
@@ -71,20 +73,26 @@ export function Dashboard() {
 
   const baseTabOptions = [
     { value: "home", label: "Overview" },
-    { value: "prints", label: "Prints" },
+    { value: "prints", label: "Print Jobs" }
+  ]
+
+  const inventoryOptions = [
     { value: "filaments", label: "Filaments" },
     { value: "products", label: "Products" },
     { value: "printers", label: "Printers" },
     { value: "subscriptions", label: "Commercial Licenses" }
   ]
   
-  const adminTabOptions = [
+  const administrationOptions = [
     { value: "users", label: "Users" }
   ]
   
-  const tabOptions = user?.is_admin 
-    ? [...baseTabOptions, ...adminTabOptions]
-    : baseTabOptions
+  const tabOptions = baseTabOptions
+
+  const allTabOptions = [...baseTabOptions, ...inventoryOptions, ...(user?.is_admin ? administrationOptions : [])]
+  
+  const isInventoryTab = inventoryOptions.some(option => option.value === activeTab)
+  const isAdministrationTab = administrationOptions.some(option => option.value === activeTab)
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -96,7 +104,7 @@ export function Dashboard() {
               className="flex items-center gap-3 text-xl sm:text-2xl font-semibold text-foreground hover:text-foreground/80 transition-colors cursor-pointer"
             >
               <img
-                src="/logo.png"
+                src={theme === 'dark' ? "/logo-white.png" : "/logo.png"}
                 alt="PrintFarmHQ Logo"
                 className="w-12 h-12 sm:w-16 sm:h-16 object-contain"
               />
@@ -117,7 +125,7 @@ export function Dashboard() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="w-full flex justify-between items-center">
-                    <span>{tabOptions.find(tab => tab.value === activeTab)?.label || "Menu"}</span>
+                    <span>{allTabOptions.find(tab => tab.value === activeTab)?.label || "Menu"}</span>
                     <Menu className="ml-2 h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -131,59 +139,114 @@ export function Dashboard() {
                       {tab.label}
                     </DropdownMenuItem>
                   ))}
+                  
+                  <DropdownMenuItem className="font-medium text-muted-foreground">
+                    Inventory
+                  </DropdownMenuItem>
+                  {inventoryOptions.map((tab) => (
+                    <DropdownMenuItem 
+                      key={tab.value}
+                      className={`ml-4 ${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""}`}
+                      onClick={() => handleTabChange(tab.value)}
+                    >
+                      {tab.label}
+                    </DropdownMenuItem>
+                  ))}
+                  
+                  {user?.is_admin && (
+                    <>
+                      <DropdownMenuItem className="font-medium text-muted-foreground">
+                        Administration
+                      </DropdownMenuItem>
+                      {administrationOptions.map((tab) => (
+                        <DropdownMenuItem 
+                          key={tab.value}
+                          className={`ml-4 ${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""}`}
+                          onClick={() => handleTabChange(tab.value)}
+                        >
+                          {tab.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
           ) : (
-            <Tabs defaultValue="home" value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="h-12 bg-transparent space-x-2 mt-1">
+            <div className="py-2">
+              <div className="flex items-center space-x-1">
                 {tabOptions.map((tab) => (
-                  <TabsTrigger 
-                    key={tab.value} 
-                    value={tab.value} 
-                    className="data-[state=active]:bg-background"
+                  <Button
+                    key={tab.value}
+                    variant={activeTab === tab.value ? "default" : "ghost"}
+                    className="h-10"
+                    onClick={() => handleTabChange(tab.value)}
                   >
                     {tab.label}
-                  </TabsTrigger>
+                  </Button>
                 ))}
-              </TabsList>
-            </Tabs>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant={isInventoryTab ? "default" : "ghost"}
+                      className="h-10 flex items-center gap-1"
+                    >
+                      Inventory
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    {inventoryOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onClick={() => handleTabChange(option.value)}
+                        className={activeTab === option.value ? "bg-accent text-accent-foreground" : ""}
+                      >
+                        {option.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {user?.is_admin && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant={isAdministrationTab ? "default" : "ghost"}
+                        className="h-10 flex items-center gap-1"
+                      >
+                        Administration
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      {administrationOptions.map((option) => (
+                        <DropdownMenuItem
+                          key={option.value}
+                          onClick={() => handleTabChange(option.value)}
+                          className={activeTab === option.value ? "bg-accent text-accent-foreground" : ""}
+                        >
+                          {option.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
       <main className="flex-1 container mx-auto px-3 sm:px-6 py-4 sm:py-8">
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-          <TabsContent value="home">
-            <HomePage />
-          </TabsContent>
-
-          <TabsContent value="filaments">
-            <FilamentsTab />
-          </TabsContent>
-
-          <TabsContent value="products">
-            <ProductsTab />
-          </TabsContent>
-
-          <TabsContent value="printers">
-            <PrintersTab />
-          </TabsContent>
-
-          <TabsContent value="prints">
-            <PrintsTab />
-          </TabsContent>
-
-          <TabsContent value="subscriptions">
-            <SubscriptionsTab />
-          </TabsContent>
-
-          {user?.is_admin && (
-            <TabsContent value="users">
-              <UsersTab />
-            </TabsContent>
-          )}
-        </Tabs>
+        {activeTab === "home" && <HomePage />}
+        {activeTab === "filaments" && <FilamentsTab />}
+        {activeTab === "products" && <ProductsTab />}
+        {activeTab === "printers" && <PrintersTab />}
+        {activeTab === "prints" && <PrintsTab />}
+        {activeTab === "subscriptions" && <SubscriptionsTab />}
+        {user?.is_admin && activeTab === "users" && <UsersTab />}
       </main>
       <Toaster />
     </div>
