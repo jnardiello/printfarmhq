@@ -64,6 +64,11 @@ def get_db():
 # ---------- Health Check ---------- #
 
 @app.get("/")
+def root():
+    """Root endpoint"""
+    return {"status": "healthy", "version": "1.0.0"}
+
+@app.get("/health")
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "version": "1.0.0"}
