@@ -74,6 +74,55 @@ logs/
 # Docker
 .dockerignore
 
+# Testing
+test-results/
+playwright-report/
+coverage/
+htmlcov/
+.coverage
+coverage.xml
+.pytest_cache/
+*.coverage
+e2e/screenshots/
+junit.xml
+
+# Screenshots and debug files
+safari-debug-*.png
+screenshot*.png
+*.webm
+*.zip
+debug*.py
+*.bak
+*.tmp
+*.temp
+
+# Next.js build
+.next/
+next-env.d.ts
+out/
+build/
+*.tsbuildinfo
+
+# Package managers
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Deployment
+.vercel
+
+# Development tools
+.venv/
+venv/
+env/
+ENV/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Cache directories
+.cache/
+.parcel-cache/
+
 # Claude Code
 .claude/
 CLAUDE.md
