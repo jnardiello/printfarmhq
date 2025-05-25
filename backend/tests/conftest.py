@@ -10,11 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# Set test environment variables
-os.environ["JWT_SECRET_KEY"] = "test_secret_key_for_testing_only"
-os.environ["SUPERADMIN_EMAIL"] = "test@admin.com"
-os.environ["SUPERADMIN_PASSWORD"] = "testpass"
-os.environ["SUPERADMIN_NAME"] = "Test Admin"
+# Remove environment variables that are now database-based
 
 # Create test database engine
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
@@ -34,7 +30,7 @@ app.database.SessionLocal = TestingSessionLocal
 # NOW import the app and other dependencies
 from app.database import Base, SessionLocal
 from app.main import app, get_db
-from app.models import User
+from app.models import User, AppConfig  # Import AppConfig to ensure table creation
 from app.auth import get_password_hash
 
 

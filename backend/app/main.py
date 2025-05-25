@@ -17,9 +17,10 @@ from .auth import (
     create_access_token, 
     authenticate_user,
     create_user,
-    ensure_superadmin_exists,
+    create_superadmin,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from .database import setup_required
 from .alerts import generate_alerts
 
 # Create DB tables
@@ -30,12 +31,7 @@ from .database import _ensure_columns
 
 _ensure_columns()
 
-# Ensure superadmin exists and is up to date
-db = SessionLocal()
-try:
-    ensure_superadmin_exists(db)
-finally:
-    db.close()
+# Remove environment-based superadmin creation - now handled via setup endpoint
 
 UPLOAD_DIRECTORY = os.path.join(os.getcwd(), "uploads/product_models")
 # Ensure upload directory exists
@@ -85,7 +81,7 @@ def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
         # Create JWT token
         access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         access_token = create_access_token(
-            data={"sub": user.email, "token_version": user.token_version}, expires_delta=access_token_expires
+            data={"sub": user.email, "token_version": user.token_version}, db=db, expires_delta=access_token_expires
         )
         
         return schemas.AuthResponse(
@@ -114,7 +110,7 @@ def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
     # Create JWT token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
-        data={"sub": user.email, "token_version": user.token_version}, expires_delta=access_token_expires
+        data={"sub": user.email, "token_version": user.token_version}, db=db, expires_delta=access_token_expires
     )
     
     return schemas.AuthResponse(
@@ -127,6 +123,37 @@ def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
 def get_current_user_info(current_user: models.User = Depends(get_current_user)):
     """Get current authenticated user information"""
     return schemas.UserRead.model_validate(current_user)
+
+
+@app.get("/auth/setup-status", response_model=schemas.SetupStatusResponse)
+def get_setup_status(db: Session = Depends(get_db)):
+    """Check if initial setup is required"""
+    return schemas.SetupStatusResponse(setup_required=setup_required(db))
+
+
+@app.post("/auth/setup", response_model=schemas.AuthResponse)
+def setup_application(setup_data: schemas.SetupRequest, db: Session = Depends(get_db)):
+    """Initial application setup - create superadmin user"""
+    try:
+        user = create_superadmin(setup_data.email, setup_data.password, setup_data.name, db)
+        
+        # Create JWT token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email, "token_version": user.token_version}, db=db, expires_delta=access_token_expires
+        )
+        
+        return schemas.AuthResponse(
+            access_token=access_token,
+            user=schemas.UserRead.model_validate(user)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Setup failed: {str(e)}"
+        )
 
 
 # ---------- Alerts System ---------- #
@@ -249,6 +276,44 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin_user: models.
     db.delete(user)
     db.commit()
     return
+
+
+@app.put("/users/me", response_model=schemas.UserRead)
+def update_current_user(
+    user_data: schemas.UserSelfUpdate, 
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Allow users to update their own profile"""
+    from .auth import get_password_hash
+    
+    update_data = user_data.model_dump(exclude_unset=True)
+    
+    if "email" in update_data:
+        # Check if new email is already in use by another user
+        existing_user = db.query(models.User).filter(
+            models.User.email == update_data["email"],
+            models.User.id != current_user.id
+        ).first()
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+        current_user.email = update_data["email"]
+    
+    if "name" in update_data:
+        current_user.name = update_data["name"]
+    
+    if "password" in update_data:
+        current_user.hashed_password = get_password_hash(update_data["password"])
+        # Increment token version to invalidate existing tokens
+        current_user.token_version += 1
+    
+    db.commit()
+    # Query the user fresh from database to avoid session issues
+    updated_user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    return schemas.UserRead.model_validate(updated_user)
 
 
 # ---------- Filaments ---------- #

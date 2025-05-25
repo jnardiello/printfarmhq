@@ -1,5 +1,6 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
+import secrets
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./hq.db"
 
@@ -103,3 +104,26 @@ def _ensure_columns():
             print("Migrated products table: removed model_file column, kept file_path")
 
 # _ensure_columns will be called after tables are created 
+
+
+def get_jwt_secret(db_session) -> str:
+    """Get or create JWT secret from database."""
+    from .models import AppConfig
+    
+    config = db_session.query(AppConfig).filter(AppConfig.key == "jwt_secret").first()
+    if not config:
+        # Generate new secret and store it
+        secret = secrets.token_urlsafe(32)
+        config = AppConfig(key="jwt_secret", value=secret)
+        db_session.add(config)
+        db_session.commit()
+        return secret
+    return config.value
+
+
+def setup_required(db_session) -> bool:
+    """Check if initial setup is required (no superadmin exists)."""
+    from .models import User
+    
+    superadmin = db_session.query(User).filter(User.is_superadmin == True).first()
+    return superadmin is None

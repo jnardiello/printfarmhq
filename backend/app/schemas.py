@@ -214,4 +214,20 @@ class UserLogin(BaseModel):
 class AuthResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    user: UserRead 
+    user: UserRead
+
+
+class SetupRequest(BaseModel):
+    email: str
+    name: str
+    password: str
+
+
+class SetupStatusResponse(BaseModel):
+    setup_required: bool
+
+
+class UserSelfUpdate(BaseModel):
+    email: Optional[str] = None
+    name: Optional[str] = None
+    password: Optional[str] = None

@@ -59,7 +59,7 @@ const authStorage = {
 
 const authApi = {
   login: async (credentials: { email: string; password: string }) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/login`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -76,7 +76,7 @@ const authApi = {
   },
   
   register: async (credentials: { email: string; password: string; name: string }) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/register`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -96,7 +96,7 @@ const authApi = {
     const token = authStorage.getToken()
     if (!token) throw new Error('No token found')
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/me`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -104,6 +104,16 @@ const authApi = {
     
     if (!response.ok) {
       throw new Error('Failed to get user info')
+    }
+    
+    return response.json()
+  },
+
+  getSetupStatus: async () => {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/setup-status`)
+    
+    if (!response.ok) {
+      throw new Error('Failed to get setup status')
     }
     
     return response.json()
@@ -116,6 +126,7 @@ interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>
   logout: () => void
   isLoading: boolean
+  setupRequired: boolean | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -123,11 +134,27 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
 
   useEffect(() => {
-    // Check if user is logged in on mount
+    // Check setup status and auth on mount
     const checkAuth = async () => {
       try {
+        // First check if setup is required
+        try {
+          const setupStatus = await authApi.getSetupStatus()
+          setSetupRequired(setupStatus.setup_required)
+          
+          // If setup is required, no need to check auth
+          if (setupStatus.setup_required) {
+            setIsLoading(false)
+            return
+          }
+        } catch (error) {
+          console.error('Error checking setup status:', error)
+          // Continue with auth check if setup status fails
+        }
+        
         const token = authStorage.getToken()
         const savedUser = authStorage.getUser()
         
@@ -179,7 +206,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, setupRequired }}>
       {children}
     </AuthContext.Provider>
   )

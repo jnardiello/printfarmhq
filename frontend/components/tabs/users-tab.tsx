@@ -22,6 +22,7 @@ export function UsersTab() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
   
@@ -39,8 +40,14 @@ export function UsersTab() {
     password: "",
     is_admin: false
   })
+  const [profileFormData, setProfileFormData] = useState({
+    email: "",
+    name: "",
+    password: ""
+  })
   const [formError, setFormError] = useState("")
   const [editFormError, setEditFormError] = useState("")
+  const [profileFormError, setProfileFormError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const fetchUsers = async () => {
@@ -146,6 +153,63 @@ export function UsersTab() {
     }
   }
 
+  const handleEditProfile = () => {
+    if (!currentUser) return
+    setProfileFormData({
+      email: currentUser.email,
+      name: currentUser.name,
+      password: ""
+    })
+    setProfileFormError("")
+    setIsProfileDialogOpen(true)
+  }
+
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!currentUser) return
+
+    setIsSubmitting(true)
+    setProfileFormError("")
+
+    try {
+      // Only include fields that have changed or password if provided
+      const updateData: any = {}
+      
+      if (profileFormData.email !== currentUser.email) {
+        updateData.email = profileFormData.email
+      }
+      if (profileFormData.name !== currentUser.name) {
+        updateData.name = profileFormData.name
+      }
+      if (profileFormData.password.trim()) {
+        updateData.password = profileFormData.password
+      }
+
+      const updatedUser = await api("/users/me", {
+        method: "PUT",
+        body: JSON.stringify(updateData),
+      })
+      
+      toast({
+        title: "Success",
+        description: "Profile updated successfully",
+      })
+      
+      setIsProfileDialogOpen(false)
+      
+      // Update auth context with new user data
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_user', JSON.stringify(updatedUser))
+      }
+      
+      fetchUsers()
+    } catch (error) {
+      setProfileFormError(error instanceof Error ? error.message : "Failed to update profile")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   const handleDeleteUser = async (userId: number) => {
     setIsDeleting(userId)
     try {
@@ -186,13 +250,19 @@ export function UsersTab() {
           <p className="text-muted-foreground">Manage user accounts and permissions</p>
         </div>
         
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <UserPlus className="w-4 h-4 mr-2" />
-              Add User
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center space-x-2">
+          <Button variant="outline" onClick={handleEditProfile}>
+            <Edit className="w-4 h-4 mr-2" />
+            Edit Profile
+          </Button>
+          
+          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add User
+              </Button>
+            </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create New User</DialogTitle>
@@ -272,6 +342,69 @@ export function UsersTab() {
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
                   {isSubmitting ? "Creating..." : "Create User"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+        </div>
+
+        <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Profile</DialogTitle>
+              <DialogDescription>
+                Update your profile information. Leave password blank to keep current password.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <form onSubmit={handleUpdateProfile}>
+              <div className="space-y-4 py-4">
+                {profileFormError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{profileFormError}</AlertDescription>
+                  </Alert>
+                )}
+                
+                <div className="space-y-2">
+                  <Label htmlFor="profile-email">Email</Label>
+                  <Input
+                    id="profile-email"
+                    type="email"
+                    value={profileFormData.email}
+                    onChange={(e) => setProfileFormData({ ...profileFormData, email: e.target.value })}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="profile-name">Full Name</Label>
+                  <Input
+                    id="profile-name"
+                    value={profileFormData.name}
+                    onChange={(e) => setProfileFormData({ ...profileFormData, name: e.target.value })}
+                    required
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="profile-password">New Password</Label>
+                  <Input
+                    id="profile-password"
+                    type="password"
+                    placeholder="Leave blank to keep current password"
+                    value={profileFormData.password}
+                    onChange={(e) => setProfileFormData({ ...profileFormData, password: e.target.value })}
+                  />
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsProfileDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Updating..." : "Update Profile"}
                 </Button>
               </DialogFooter>
             </form>
@@ -404,7 +537,18 @@ export function UsersTab() {
                   </TableCell>
                   <TableCell>{formatDate(user.created_at)}</TableCell>
                   <TableCell>
-                    {!user.is_superadmin && (
+                    {user.is_superadmin && user.id === currentUser?.id ? (
+                      <div className="flex items-center space-x-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleEditProfile}
+                          title="Edit your profile"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : !user.is_superadmin ? (
                       <div className="flex items-center space-x-1">
                         <Button
                           variant="ghost"
@@ -424,7 +568,7 @@ export function UsersTab() {
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
-                    )}
+                    ) : null}
                   </TableCell>
                 </TableRow>
               ))}

@@ -46,10 +46,13 @@ install: ## Set up PrintFarmHQ for first time
 	@echo "✅ Setup complete! Run 'make dev' to start."
 
 # Development commands
-up: check-env ## Start services (builds if needed)
-	@$(COMPOSE) up
+up: check-env ## Start services (always rebuild)
+	@echo "🚀 Starting PrintFarmHQ (rebuilding for latest changes)..."
+	@$(COMPOSE) up --build
 
-dev: up ## Alias for up
+dev: check-env ## Start in development mode with hot reload
+	@echo "🔥 Starting development environment with hot reload..."
+	@$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 down: ## Stop all services
 	@$(COMPOSE) down

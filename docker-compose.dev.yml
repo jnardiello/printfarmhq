@@ -1,0 +1,21 @@
+# Development override for hot reloading
+services:
+  backend:
+    volumes:
+      - ./backend:/app
+      - /app/__pycache__  # Exclude cache
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - PYTHONPATH=/app
+      - DEVELOPMENT=true
+  
+  frontend:
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules  # Preserve node_modules
+      - /app/.next  # Preserve Next.js cache
+    command: npm run dev
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - FAST_REFRESH=true

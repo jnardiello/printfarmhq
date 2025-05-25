@@ -6,14 +6,18 @@ import { useAuth } from '@/components/auth/auth-context'
 import { LoginForm } from '@/components/auth/login-form'
 
 export default function AuthPage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, setupRequired } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!isLoading && user) {
-      router.push('/')
+    if (!isLoading) {
+      if (setupRequired) {
+        router.push('/setup')
+      } else if (user) {
+        router.push('/')
+      }
     }
-  }, [user, isLoading, router])
+  }, [user, isLoading, setupRequired, router])
 
   if (isLoading) {
     return (
@@ -23,7 +27,7 @@ export default function AuthPage() {
     )
   }
 
-  if (user) {
+  if (user || setupRequired) {
     return null // Will redirect in useEffect
   }
 

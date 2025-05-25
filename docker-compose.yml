@@ -13,13 +13,7 @@ services:
       - ./backend:/app
     ports:
       - "8000:8000"
-    environment:
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - SUPERADMIN_EMAIL=${SUPERADMIN_EMAIL}
-      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD}
-      - SUPERADMIN_NAME=${SUPERADMIN_NAME}
-    env_file: 
-      - backend/.env
+    # No environment variables needed - using database-based configuration
     networks:
       - printfarmhq-network
 

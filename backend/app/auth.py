@@ -1,4 +1,3 @@
-import os
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt
@@ -7,16 +6,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from . import models
-from .database import SessionLocal
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
+from .database import SessionLocal, get_jwt_secret
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-if not SECRET_KEY:
-    raise ValueError("JWT_SECRET_KEY environment variable is required. Set it in your .env file.")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -46,22 +38,24 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, db: Session, expires_delta: Optional[timedelta] = None):
     """Create JWT access token"""
+    secret_key = get_jwt_secret(db)
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, secret_key, algorithm=ALGORITHM)
     return encoded_jwt
 
 
-def verify_token(token: str) -> dict:
+def verify_token(token: str, db: Session) -> dict:
     """Verify JWT token and return payload"""
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        secret_key = get_jwt_secret(db)
+        payload = jwt.decode(token, secret_key, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None:
             raise AuthError("Invalid authentication credentials")
@@ -95,7 +89,7 @@ def get_current_user(
 ) -> models.User:
     """Get current authenticated user"""
     token = credentials.credentials
-    payload = verify_token(token)
+    payload = verify_token(token, db)
     email = payload.get("sub")
     token_version = payload.get("token_version")
     
@@ -156,69 +150,33 @@ def get_current_superadmin_user(current_user: models.User = Depends(get_current_
     return current_user
 
 
-def ensure_superadmin_exists(db: Session) -> None:
-    """Ensure superadmin user exists and is up to date with environment variables"""
-    superadmin_email = os.getenv("SUPERADMIN_EMAIL")
-    superadmin_password = os.getenv("SUPERADMIN_PASSWORD")
-    superadmin_name = os.getenv("SUPERADMIN_NAME", "Administrator")
-    
-    if not superadmin_email or not superadmin_password:
-        raise ValueError("SUPERADMIN_EMAIL and SUPERADMIN_PASSWORD must be set in environment variables")
-    
-    # Check if superadmin exists
-    superadmin = db.query(models.User).filter(models.User.email == superadmin_email).first()
-    
-    if superadmin:
-        # Update existing superadmin if needed
-        needs_update = False
-        credentials_changed = False
-        
-        if superadmin.name != superadmin_name:
-            superadmin.name = superadmin_name
-            needs_update = True
-            
-        # Always update password to match environment (in case it changed)
-        new_hashed_password = get_password_hash(superadmin_password)
-        if superadmin.hashed_password != new_hashed_password:
-            superadmin.hashed_password = new_hashed_password
-            needs_update = True
-            credentials_changed = True
-            
-        # Ensure superadmin flags are set
-        if not superadmin.is_superadmin:
-            superadmin.is_superadmin = True
-            superadmin.is_admin = True  # Superadmin is also admin
-            needs_update = True
-            
-        # Increment token version if credentials changed to invalidate existing tokens
-        if credentials_changed:
-            superadmin.token_version += 1
-            
-        if needs_update:
-            db.commit()
-            print(f"Updated superadmin user: {superadmin_email}")
-    else:
-        # Create new superadmin
-        superadmin = models.User(
-            email=superadmin_email,
-            name=superadmin_name,
-            hashed_password=get_password_hash(superadmin_password),
-            is_admin=True,
-            is_superadmin=True
+def create_superadmin(email: str, password: str, name: str, db: Session) -> models.User:
+    """Create initial superadmin user during setup"""
+    # Check if any superadmin already exists
+    existing_superadmin = db.query(models.User).filter(models.User.is_superadmin == True).first()
+    if existing_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Superadmin already exists. Setup is not required."
         )
-        db.add(superadmin)
-        db.commit()
-        print(f"Created superadmin user: {superadmin_email}")
     
-    # Delete any other superadmin users (in case email changed)
-    other_superadmins = db.query(models.User).filter(
-        models.User.email != superadmin_email,
-        models.User.is_superadmin == True
-    ).all()
+    # Check if email is already in use
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
     
-    for user in other_superadmins:
-        db.delete(user)
-        print(f"Deleted old superadmin user: {user.email}")
-    
-    if other_superadmins:
-        db.commit()
+    # Create superadmin user
+    hashed_password = get_password_hash(password)
+    superadmin = models.User(
+        email=email,
+        name=name,
+        hashed_password=hashed_password,
+        is_admin=True,
+        is_superadmin=True
+    )
+    db.add(superadmin)
+    db.commit()
+    db.refresh(superadmin)
+    return superadmin
