@@ -114,8 +114,14 @@ test:
 	@sleep 15
 	@echo -e "\n📦 Running Backend Tests..."
 	@docker compose -f docker-compose.test.yml run --rm backend-test
-	@echo -e "\n🌐 Running Frontend E2E Tests (Chromium)..."
+	@echo -e "\n🌐 Running Frontend E2E Tests (Desktop Chrome)..."
 	@docker compose -f docker-compose.test.yml run --rm frontend-test npx playwright test --config=playwright.docker.config.ts --project=chromium --reporter=list
+	@echo -e "\n📱 Running Frontend E2E Tests (Mobile Chrome)..."
+	@docker compose -f docker-compose.test.yml run --rm frontend-test npx playwright test --config=playwright.docker.config.ts --project="Mobile Chrome" --reporter=list
+	@echo -e "\n📱 Running Frontend E2E Tests (Safari iPhone 12)..."
+	@docker compose -f docker-compose.test.yml run --rm frontend-test npx playwright test --config=playwright.docker.config.ts --project="Mobile Safari iPhone 12" --reporter=list
+	@echo -e "\n📱 Running Frontend E2E Tests (Safari iPhone 12 Pro Max)..."
+	@docker compose -f docker-compose.test.yml run --rm frontend-test npx playwright test --config=playwright.docker.config.ts --project="Mobile Safari iPhone 12 Pro Max" --reporter=list
 	@echo -e "\n✅ All tests completed!"
 	@docker compose -f docker-compose.test.yml down
 
