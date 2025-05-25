@@ -73,9 +73,10 @@ export default function SetupPage() {
         
         setSuccess(true)
         
-        // Redirect to dashboard after a short delay
+        // Force a full page reload to re-initialize auth context
+        // This ensures setupRequired is re-checked after setup completion
         setTimeout(() => {
-          router.push('/')
+          window.location.href = '/'
         }, 2000)
       } else {
         const errorData = await response.json()

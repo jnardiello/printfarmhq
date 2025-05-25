@@ -1,15 +1,9 @@
-.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci push-images dev help check-env
+.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci push-images dev help
 
 # Configuration
 COMPOSE := docker compose
 COMPOSE_TEST := $(COMPOSE) -f docker-compose.test.yml
 TEST_ARTIFACTS := backend/test-results frontend/test-results test-results backend/htmlcov backend/.coverage frontend/playwright-report
-
-# Load backend/.env only for non-docker commands
-ifeq (,$(findstring docker,$(MAKECMDGOALS)))
--include backend/.env
-export
-endif
 
 # Default target
 .DEFAULT_GOAL := help
@@ -23,34 +17,20 @@ install: ## Set up PrintFarmHQ for first time
 	@echo "🏭 PrintFarmHQ Setup"
 	@echo "==================="
 	@echo ""
-	@if [ -f "backend/.env" ] && [ -s "backend/.env" ]; then \
-		echo "⚠️  backend/.env already exists. Skipping setup."; \
-		echo "   To reconfigure, delete backend/.env and run make install again."; \
-		exit 0; \
-	fi
-	@cp backend/.env.example backend/.env 2>/dev/null || true
-	@cp frontend/.env.example frontend/.env.local 2>/dev/null || true
-	@echo "🔐 Setting up admin credentials..."
-	@read -p "Admin email [admin@example.com]: " admin_email; \
-	admin_email=$${admin_email:-admin@example.com}; \
-	read -p "Admin password [changeme123]: " admin_password; \
-	admin_password=$${admin_password:-changeme123}; \
-	read -p "Admin name [Administrator]: " admin_name; \
-	admin_name=$${admin_name:-Administrator}; \
-	jwt_secret=$$(openssl rand -hex 32); \
-	sed -i.bak "s/SUPERADMIN_EMAIL=.*/SUPERADMIN_EMAIL=$$admin_email/" backend/.env && \
-	sed -i.bak "s/SUPERADMIN_PASSWORD=.*/SUPERADMIN_PASSWORD=$$admin_password/" backend/.env && \
-	sed -i.bak "s/SUPERADMIN_NAME=.*/SUPERADMIN_NAME=$$admin_name/" backend/.env && \
-	sed -i.bak "s/JWT_SECRET_KEY=.*/JWT_SECRET_KEY=$$jwt_secret/" backend/.env && \
-	rm -f backend/.env.bak
-	@echo "✅ Setup complete! Run 'make dev' to start."
+	@echo "✅ PrintFarmHQ now uses database-based configuration."
+	@echo "   No manual setup required!"
+	@echo ""
+	@echo "   Run 'make dev' to start the application."
+	@echo "   On first run, you'll be prompted to create your admin account."
 
 # Development commands
-up: check-env ## Start services (always rebuild)
+up: ## Start services in background (always rebuild)
 	@echo "🚀 Starting PrintFarmHQ (rebuilding for latest changes)..."
-	@$(COMPOSE) up --build
+	@$(COMPOSE) up -d --build
+	@echo "✅ PrintFarmHQ is running at http://localhost:3000"
+	@echo "   Run 'make logs' to view logs or 'make down' to stop"
 
-dev: check-env ## Start in development mode with hot reload
+dev: ## Start in development mode with hot reload
 	@echo "🔥 Starting development environment with hot reload..."
 	@$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up --build
 
@@ -144,9 +124,3 @@ push-images: ## Build and push multi-arch images to registry
 	PUSH=true ./scripts/docker-build-multiarch.sh && \
 	echo "✅ Images pushed successfully!"
 
-# Utility functions
-check-env:
-	@if [ ! -f "backend/.env" ]; then \
-		echo "❌ backend/.env not found. Run 'make install' first."; \
-		exit 1; \
-	fi

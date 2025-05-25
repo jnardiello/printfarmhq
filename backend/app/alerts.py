@@ -59,32 +59,9 @@ class Alert:
 
 def check_default_credentials(user: models.User) -> List[Alert]:
     """Check if user is using default credentials"""
-    alerts = []
-    
-    # Get current environment values
-    current_email = os.getenv("SUPERADMIN_EMAIL", "admin@example.com")
-    current_password = os.getenv("SUPERADMIN_PASSWORD", "changeme123")
-    
-    # Check if either email OR password matches defaults
-    using_default_email = current_email == "admin@example.com"
-    using_default_password = current_password == ALERT_THRESHOLDS["default_password"]
-    
-    if using_default_email or using_default_password:
-        alerts.append(Alert(
-            alert_type="security",
-            priority="critical",
-            title="Default Superadmin Credentials",
-            message="You're using default superadmin credentials. Change them via environment variables when starting the service for security.",
-            action_label="View Documentation",
-            action_link="https://github.com/jnardiello/printfarmhq/blob/master/README.md",
-            dismissible=False,
-            metadata={
-                "default_email": using_default_email,
-                "default_password": using_default_password
-            }
-        ))
-    
-    return alerts
+    # No longer applicable with database-based setup
+    # Users create their own credentials during setup
+    return []
 
 
 def check_filament_inventory(db: Session) -> List[Alert]:

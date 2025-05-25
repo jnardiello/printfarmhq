@@ -37,11 +37,12 @@ You'll need:
 ```bash
 git clone https://github.com/yourusername/printfarmhq.git
 cd printfarmhq
-make install
 make up
 ```
 
 **✅ That's it!** PrintFarmHQ is now running at http://localhost:3000
+
+On first visit, you'll be guided through creating your admin account.
 
 ---
 
@@ -90,10 +91,9 @@ make logs      # View application logs
 
 ## 🔧 Customize Your Setup
 
-### 🔐 Change Admin Credentials
-1. Edit `backend/.env` file
-2. Update `SUPERADMIN_EMAIL` and `SUPERADMIN_PASSWORD`
-3. Restart with `make down && make up`
+### 🔐 Admin Account
+On first run, you'll be prompted to create your admin account through the web interface.
+No environment variables or manual configuration required!
 
 ---
 

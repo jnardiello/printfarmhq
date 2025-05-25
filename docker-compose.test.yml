@@ -12,10 +12,6 @@ services:
         BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-api
     environment:
-      - JWT_SECRET_KEY=test-secret-key
-      - SUPERADMIN_EMAIL=admin@printfarmhq.com
-      - SUPERADMIN_PASSWORD=admin123
-      - SUPERADMIN_NAME=Test Admin
       - DATABASE_URL=sqlite:///./test.db
       - TESTING=true
     healthcheck:
