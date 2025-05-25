@@ -106,16 +106,16 @@ restore-db:
 
 # Testing commands
 test-backend:
-	@echo "🧪 Running backend tests..."
-	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py -v
-
-test-backend-all:
-	@echo "🧪 Running ALL backend tests (including failing ones)..."
+	@echo "🧪 Running ALL backend tests..."
 	@cd backend && python3 -m pytest -v
+
+test-backend-limited:
+	@echo "🧪 Running limited backend tests (basic validation only)..."
+	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py -v
 
 test-backend-cov:
 	@echo "📊 Running backend tests with coverage..."
-	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py --cov=app --cov-report=html --cov-report=term
+	@cd backend && python3 -m pytest --cov=app --cov-report=html --cov-report=term
 
 test-backend-watch:
 	@echo "👁️  Running backend tests in watch mode..."
