@@ -8,6 +8,10 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from . import models
 from .database import SessionLocal
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # JWT Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
