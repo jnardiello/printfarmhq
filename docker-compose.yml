@@ -1,8 +1,13 @@
-version: '3.8'
-
 services:
   backend:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-backend:${VERSION:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        REGISTRY: ${REGISTRY:-ghcr.io}
+        NAMESPACE: ${NAMESPACE:-$(whoami)}
+        BASE_TAG: ${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-$(whoami)}/printfarmhq-backend:${VERSION:-latest}
     container_name: printfarmhq-backend
     volumes:
       - ./backend:/app
@@ -19,16 +24,24 @@ services:
       - printfarmhq-network
 
   frontend:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-frontend:${VERSION:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REGISTRY: ${REGISTRY:-ghcr.io}
+        NAMESPACE: ${NAMESPACE:-$(whoami)}
+        BASE_TAG: ${VERSION:-latest}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        DOCKER_ENV: "true"
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-$(whoami)}/printfarmhq-frontend:${VERSION:-latest}
     container_name: printfarmhq-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - DOCKER_ENV=true
     ports:
       - "3000:3000"
     depends_on:
       - backend
-    env_file: 
-      - frontend/.env.local
     networks:
       - printfarmhq-network
 
