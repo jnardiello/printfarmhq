@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Backend service for testing
   backend-test:
@@ -13,7 +11,7 @@ services:
       - JWT_SECRET_KEY=test-secret-key-for-testing-only
       - SUPERADMIN_EMAIL=admin@test.com
       - SUPERADMIN_PASSWORD=testpass123
-      - SUPERADMIN_NAME=Test Admin
+      - SUPERADMIN_NAME="Test Admin"
     volumes:
       - ./backend/test-results:/app/test-results
       - ./backend/htmlcov:/app/htmlcov
@@ -42,7 +40,7 @@ services:
       - JWT_SECRET_KEY=test-secret-key-for-testing-only
       - SUPERADMIN_EMAIL=admin@test.com
       - SUPERADMIN_PASSWORD=testpass123
-      - SUPERADMIN_NAME=Test Admin
+      - SUPERADMIN_NAME="Test Admin"
     networks:
       - test-network
     healthcheck:

@@ -35,7 +35,7 @@ ENV DATABASE_URL=sqlite:///./test_data/test.db
 ENV JWT_SECRET_KEY=test-secret-key-for-testing-only
 ENV SUPERADMIN_EMAIL=admin@test.com
 ENV SUPERADMIN_PASSWORD=testpass123
-ENV SUPERADMIN_NAME=Test Admin
+ENV SUPERADMIN_NAME="Test Admin"
 
 # Run tests by default
 CMD ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
