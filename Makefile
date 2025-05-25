@@ -1,4 +1,4 @@
-.PHONY: install build up down clean logs dump-db restore-db
+.PHONY: install build up down clean logs dump-db restore-db test test-backend test-backend-all test-backend-cov test-frontend test-ci
 
 # Load environment variables from backend/.env if it exists
 ifneq (,$(wildcard backend/.env))
@@ -102,4 +102,39 @@ restore-db:
 	@echo "Database restored successfully from $(DUMP_FILE)"
 	@echo "Previous database backed up as $(DB_PATH).backup_$(TIMESTAMP)"
 	@echo "Starting services..."
-	@make up 
+	@make up
+
+# Testing commands
+test-backend:
+	@echo "🧪 Running backend tests..."
+	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py -v
+
+test-backend-all:
+	@echo "🧪 Running ALL backend tests (including failing ones)..."
+	@cd backend && python3 -m pytest -v
+
+test-backend-cov:
+	@echo "📊 Running backend tests with coverage..."
+	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py --cov=app --cov-report=html --cov-report=term
+
+test-backend-watch:
+	@echo "👁️  Running backend tests in watch mode..."
+	@cd backend && python3 -m pytest-watch
+
+test-frontend:
+	@echo "🎭 Running frontend E2E tests..."
+	@cd frontend && npm run test:e2e
+
+test-frontend-ui:
+	@echo "🖥️  Running frontend tests with UI..."
+	@cd frontend && npm run test:e2e:ui
+
+# Run all tests
+test: test-backend test-frontend
+	@echo "✅ All tests completed!"
+
+# Run tests in CI mode
+test-ci:
+	@echo "🤖 Running tests in CI mode..."
+	@cd backend && python3 -m pytest --cov=app --cov-report=xml
+	@cd frontend && npm run test:e2e:ci

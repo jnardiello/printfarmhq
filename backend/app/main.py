@@ -61,6 +61,14 @@ def get_db():
         db.close()
 
 
+# ---------- Health Check ---------- #
+
+@app.get("/")
+def health_check():
+    """Health check endpoint"""
+    return {"status": "healthy", "version": "1.0.0"}
+
+
 # ---------- Auth ---------- #
 
 @app.post("/auth/register", response_model=schemas.AuthResponse)
@@ -252,6 +260,14 @@ def create_filament(filament: schemas.FilamentCreate, db: Session = Depends(get_
 @app.get("/filaments", response_model=list[schemas.FilamentRead])
 def list_filaments(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     return db.query(models.Filament).all()
+
+
+@app.get("/filaments/{filament_id}", response_model=schemas.FilamentRead)
+def get_filament(filament_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    filament = db.get(models.Filament, filament_id)
+    if not filament:
+        raise HTTPException(status_code=404, detail="Filament not found")
+    return filament
 
 
 @app.delete("/filaments/{filament_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -837,7 +853,7 @@ def list_print_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_d
 
 @app.get("/print_jobs/{print_job_id}", response_model=schemas.PrintJobRead)
 def get_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    job = db.query(models.PrintJob).options(joinedload(models.PrintJob.product), joinedload(models.PrintJob.printer_profile)).filter(models.PrintJob.id == print_job_id).first()
+    job = db.query(models.PrintJob).options(joinedload(models.PrintJob.products), joinedload(models.PrintJob.printers)).filter(models.PrintJob.id == print_job_id).first()
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Print Job with ID {print_job_id} not found")
     return job

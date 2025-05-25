@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional, Literal, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class FilamentBase(BaseModel):
@@ -17,13 +17,12 @@ class FilamentCreate(FilamentBase):
 
 
 class FilamentRead(FilamentBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     price_per_kg: float
     total_qty_kg: float
     min_filaments_kg: Optional[float] = None
-
-    class Config:
-        from_attributes = True
 
 
 # FilamentUsage nested (depends on FilamentRead)
@@ -33,11 +32,10 @@ class FilamentUsageCreate(BaseModel):
 
 
 class FilamentUsageRead(FilamentUsageCreate):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     filament: FilamentRead # Depends on FilamentRead
-
-    class Config:
-        from_attributes = True
 
 
 class ProductBase(BaseModel):
@@ -61,18 +59,15 @@ class ProductRead(ProductBase):
     file_path: Optional[str] = None
     filament_usages: Optional[List[FilamentUsageRead]] = None
 
-    class Config:
-        from_attributes = True
-        protected_namespaces = ()
+    model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
 
 class ProductUpdate(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     name: Optional[str] = None
     print_time_hrs: Optional[float] = Field(None, ge=0)
     license_id: Optional[int] = None
-
-    class Config:
-        from_attributes = True
 
 
 class SubscriptionBase(BaseModel):
@@ -89,10 +84,9 @@ class SubscriptionCreate(SubscriptionBase):
 
 
 class SubscriptionRead(SubscriptionBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
-
-    class Config:
-        from_attributes = True
 
 
 class FilamentPurchaseCreate(BaseModel):
@@ -105,21 +99,20 @@ class FilamentPurchaseCreate(BaseModel):
 
 
 class FilamentMini(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     color: str
     brand: str
     material: str
 
-    class Config:
-        from_attributes = True
-
 
 class FilamentPurchaseRead(FilamentPurchaseCreate):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     filament: FilamentMini # Note: This was FilamentMini, if ProductRead needs full FilamentRead for usages, this might need alignment too.
                            # However, FilamentUsageRead uses FilamentRead, which is good.
-    class Config:
-        from_attributes = True
 
 
 class FilamentUpdate(BaseModel):
@@ -138,10 +131,9 @@ class PrinterProfileCreate(PrinterProfileBase):
 
 
 class PrinterProfileRead(PrinterProfileBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
-
-    class Config:
-        from_attributes = True
 
 
 class JobProductItem(BaseModel):
@@ -177,17 +169,18 @@ class PrintJobUpdate(BaseModel):
 
 
 class PrintJobRead(PrintJobBase):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: UUID
     calculated_cogs_eur: Optional[float] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
-
 
 # User and Auth schemas
 class UserRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
     id: int
     email: str
     name: str
@@ -195,9 +188,6 @@ class UserRead(BaseModel):
     is_admin: bool
     is_superadmin: bool
     created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 
 class UserCreate(BaseModel):
