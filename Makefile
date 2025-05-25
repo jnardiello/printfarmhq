@@ -1,4 +1,4 @@
-.PHONY: install up down clean logs dump-db restore-db test test-backend test-backend-all test-backend-cov test-frontend test-ci docker-build docker-build-multiarch docker-auth docker-push docker-push-multiarch docker-login docker-build-push
+.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci test-clean push-images up-local dev
 
 # Load environment variables from backend/.env if it exists
 ifneq (,$(wildcard backend/.env))
@@ -155,59 +155,22 @@ test-ci:
 	@docker compose -f docker-compose.test.yml down --volumes
 	@echo "🧹 Cleaned up test artifacts"
 
-# Docker Registry Commands
+# Docker Registry Commands (for maintainers)
 REGISTRY ?= ghcr.io
 NAMESPACE ?= $(shell whoami | tr '[:upper:]' '[:lower:]')
 VERSION ?= latest
 
-docker-build:
-	@echo "🔨 Building Docker images..."
-	@./scripts/docker-build.sh
-
-docker-build-multiarch:
-	@echo "🔨 Building multi-architecture Docker images..."
-	@./scripts/docker-build-multiarch.sh
-
-docker-auth:
-	@echo "🔐 Authenticating to Docker registry..."
-	@./scripts/docker-auth.sh
-
-docker-push: docker-auth docker-build
-	@echo "📤 Pushing Docker images to registry..."
-	@PUSH=true ./scripts/docker-build.sh
-
-docker-push-multiarch: docker-auth
+# For maintainers who need to push images to registry
+push-images:
 	@echo "📤 Building and pushing multi-architecture images to registry..."
+	@./scripts/docker-auth.sh
 	@PUSH=true ./scripts/docker-build-multiarch.sh
-
-docker-login:
-	@echo "🔐 Logging into GitHub Container Registry..."
-	@echo "Please create a Personal Access Token at: https://github.com/settings/tokens"
-	@echo "Required scopes: write:packages, read:packages, delete:packages"
-	@echo ""
-	@read -p "GitHub username [$(NAMESPACE)]: " username; \
-	username=$${username:-$(NAMESPACE)}; \
-	echo "$$GITHUB_TOKEN" | docker login ghcr.io -u $$username --password-stdin
-
-docker-build-push: docker-auth docker-push
 	@echo "✅ Images built and pushed successfully!"
 
-docker-pull:
-	@echo "📥 Pulling latest images from registry..."
-	@docker pull $(REGISTRY)/$(NAMESPACE)/printfarmhq-backend:$(VERSION)
-	@docker pull $(REGISTRY)/$(NAMESPACE)/printfarmhq-frontend:$(VERSION)
-	@docker pull $(REGISTRY)/$(NAMESPACE)/printfarmhq-backend-test:$(VERSION)
-	@docker pull $(REGISTRY)/$(NAMESPACE)/printfarmhq-frontend-test:$(VERSION)
-
-# Override for local development build
-build-local:
-	@echo "🏗️ Building images locally with docker-compose override..."
-	@docker compose -f docker-compose.yml -f docker-compose.override.yml build
-
+# Local development
 up-local:
 	@echo "🚀 Starting services with local builds..."
 	@docker compose -f docker-compose.yml -f docker-compose.override.yml up
 
 # Quick commands for development
 dev: up-local
-prod: docker-pull up
