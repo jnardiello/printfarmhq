@@ -1,6 +1,9 @@
+version: '3.8'
+
 services:
   backend:
-    build: ./backend
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-backend:${VERSION:-latest}
+    container_name: printfarmhq-backend
     volumes:
       - ./backend:/app
     ports:
@@ -12,12 +15,12 @@ services:
       - SUPERADMIN_NAME=${SUPERADMIN_NAME}
     env_file: 
       - backend/.env
+    networks:
+      - printfarmhq-network
 
   frontend:
-    build: 
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-frontend:${VERSION:-latest}
+    container_name: printfarmhq-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     ports:
@@ -25,4 +28,10 @@ services:
     depends_on:
       - backend
     env_file: 
-      - frontend/.env.local 
+      - frontend/.env.local
+    networks:
+      - printfarmhq-network
+
+networks:
+  printfarmhq-network:
+    driver: bridge

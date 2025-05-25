@@ -1,57 +1,52 @@
-# Dockerfile for Next.js frontend
+# Frontend Application Image
+ARG REGISTRY=ghcr.io
+ARG NAMESPACE=jnardiello
+ARG BASE_TAG=latest
 
-# ---- Builder Stage ----
-FROM node:20-alpine AS builder
+# Build stage
+FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-frontend-base:${BASE_TAG} AS builder
 
-# Set working directory
-WORKDIR /app
-
-# Disable Next.js telemetry during build
-ENV NEXT_TELEMETRY_DISABLED 1
-
-# Copy package.json and lockfile
+# Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies (including devDependencies for build tools like TailwindCSS, TypeScript)
-RUN npm ci --legacy-peer-deps
+# Install all dependencies including devDependencies for build
+RUN npm ci --legacy-peer-deps --include=dev
 
-# Copy the rest of the application code
+# Copy source code
 COPY . .
 
-# Accept build args
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+# Build arguments for API URL
+ARG NEXT_PUBLIC_API_URL
+ARG DOCKER_ENV=true
 
-# Build the Next.js application
-RUN NODE_ENV=production DOCKER_ENV=true npm run build
+# Pre-download Google Fonts to avoid network issues during build
+RUN mkdir -p .next/cache/google-fonts
 
-# ---- Runner Stage ----
-FROM node:20-alpine AS runner
+# Build the application
+RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} npm run build
 
-WORKDIR /app
+# Production stage
+FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-frontend-base:${BASE_TAG} AS runner
 
-# Set environment variables
-ENV NODE_ENV production
-ENV NEXT_TELEMETRY_DISABLED 1
-ENV DOCKER_ENV true
+# Copy built application from builder
+COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
-# Create a non-root user for security
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
-# Copy built assets from builder stage
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
-
-# Ensure the .next folder is writable by the Next.js app
-RUN chown -R nextjs:nodejs /app/.next
-
-# Switch to the non-root user
+# Switch to non-root user
 USER nextjs
 
+# Expose port
 EXPOSE 3000
 
-# Start the Next.js application
-CMD ["npm", "start"] 
+# Set environment variables
+ENV PORT=3000 \
+    HOSTNAME="0.0.0.0"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node -e "require('http').get('http://localhost:3000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
+
+# Start the application
+CMD ["npm", "start"]

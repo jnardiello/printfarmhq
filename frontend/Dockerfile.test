@@ -1,32 +1,55 @@
-# Frontend E2E Test Runner Dockerfile
-FROM mcr.microsoft.com/playwright:v1.48.0-noble
+# Frontend E2E Test Runner Image
+ARG REGISTRY=ghcr.io
+ARG NAMESPACE=jnardiello
+ARG BASE_TAG=latest
 
-# Set working directory
-WORKDIR /app
+# Use regular frontend base and install Playwright on top
+FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-frontend-base:${BASE_TAG} AS frontend-test
 
-# Copy package files
-COPY package*.json ./
+# Install system dependencies needed for Playwright
+USER root
+RUN apk add --no-cache \
+    chromium \
+    chromium-chromedriver \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
 
-# Install dependencies
-RUN npm ci --legacy-peer-deps
+# Set Playwright to use system Chromium
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
+    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
-# Copy application code
-COPY . .
+# Create app directory with correct ownership
+RUN chown -R nextjs:nodejs /app
+
+# Switch back to non-root user
+USER nextjs
+
+# Copy package files with correct ownership
+COPY --chown=nextjs:nodejs package*.json ./
+
+# Install all dependencies (including devDependencies for build)
+RUN npm ci --legacy-peer-deps --include=dev
+
+# Copy application code with correct ownership
+COPY --chown=nextjs:nodejs . .
+
+# Pre-create font cache directory
+RUN mkdir -p .next/cache/google-fonts
 
 # Build the application
-RUN npm run build
-
-# Install Playwright browsers with dependencies
-RUN npx playwright install --with-deps chromium
-RUN npx playwright install --with-deps webkit
+RUN DOCKER_ENV=true npm run build
 
 # Create directories for test artifacts
 RUN mkdir -p test-results playwright-report
 
 # Set environment variables
-ENV CI=true
-ENV PLAYWRIGHT_BASE_URL=http://frontend-app:3000
-ENV NEXT_PUBLIC_API_URL=http://backend-api:8000
+ENV CI=true \
+    PLAYWRIGHT_BASE_URL=http://frontend-app:3000 \
+    NEXT_PUBLIC_API_URL=http://backend-api:8000
 
 # Default command - tests are orchestrated by docker-compose
 CMD ["npx", "playwright", "test"]

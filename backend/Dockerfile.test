@@ -1,20 +1,24 @@
-# Backend Test Runner Dockerfile
-FROM python:3.11-slim
+# Backend Test Image
+ARG REGISTRY=ghcr.io
+ARG NAMESPACE=jnardiello
+ARG BASE_TAG=latest
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-backend-base:${BASE_TAG} AS backend-test
 
-# Set working directory
-WORKDIR /app
+# Switch to root to install packages
+USER root
 
-# Copy requirements first for better caching
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy requirements as root
+COPY --chown=appuser:appuser requirements.txt ./
+
+# Switch back to appuser
+USER appuser
+
+# Install base dependencies
+RUN pip install --user --no-cache-dir -r requirements.txt
 
 # Install test dependencies
-RUN pip install --no-cache-dir \
+RUN pip install --user --no-cache-dir \
     pytest==8.3.3 \
     pytest-asyncio==0.24.0 \
     pytest-cov==5.0.0 \
@@ -24,19 +28,16 @@ RUN pip install --no-cache-dir \
     httpx==0.28.1
 
 # Copy application code
-COPY . .
+COPY --chown=appuser:appuser . .
 
-# Create test database directory
-RUN mkdir -p /app/test_data
+# Create test data directory
+USER root
+RUN mkdir -p /app/test_data && chown -R appuser:appuser /app/test_data
+USER appuser
 
-# Set environment variables for testing
-ENV TESTING=true
-ENV DATABASE_URL=sqlite:///./test_data/test.db
-ENV JWT_SECRET_KEY=test-secret-key-for-testing-only
-ENV SUPERADMIN_EMAIL=admin@test.com
-ENV SUPERADMIN_PASSWORD=testpass123
-ENV SUPERADMIN_NAME="Test Admin"
-ENV PYTHONPATH=/app
+# Set environment variables
+ENV PYTHONPATH=/app \
+    PYTEST_CURRENT_TEST=true
 
-# Run tests by default
-CMD ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
+# Default test command
+CMD ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml"]

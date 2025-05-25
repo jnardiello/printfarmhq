@@ -147,9 +147,37 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
+## 🐳 Docker Images
+
+PrintFarmHQ uses pre-built Docker images that work on both **Intel/AMD (x86)** and **Apple Silicon (ARM)** processors:
+
+```bash
+# Pull latest images (automatic architecture detection)
+docker compose pull
+
+# Or use specific images directly
+docker pull ghcr.io/printfarmhq/printfarmhq-backend:latest
+docker pull ghcr.io/printfarmhq/printfarmhq-frontend:latest
+```
+
+### Building Custom Images
+
+```bash
+# Build for your current architecture
+make docker-build
+
+# Build with custom namespace (e.g., your GitHub username)
+NAMESPACE=yourusername make docker-build
+
+# Build and push for multiple architectures
+NAMESPACE=yourusername make docker-push-multiarch
+```
+
+All images are hosted on GitHub Container Registry for fast, reliable access.
+
 ## 🧪 Testing
 
-All tests run exclusively in Docker containers to ensure consistency:
+We have a comprehensive suite of automated tests, mainly focusing on functional and e2e tests, both for the backend and the frontend:
 
 ```bash
 # Run all tests (backend + frontend)
@@ -158,12 +186,9 @@ make test
 # Run specific test suites
 make test-backend    # Backend tests only
 make test-frontend   # Frontend E2E tests only
-
-# Clean up test artifacts
-make test-clean
 ```
 
-**Note**: Tests cannot be run locally. This is by design to ensure all developers and CI systems use identical test environments.
+All test commands automatically clean up artifacts after running. To see all available commands for testing, refer to README.
 
 ## 💬 Get Help
 

@@ -1,0 +1,22 @@
+# Frontend Base Image - Contains Node.js and system dependencies
+FROM node:20-alpine AS frontend-base
+
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
+
+# Label for versioning
+ARG VERSION=latest
+LABEL version=$VERSION \
+      description="PrintFarmHQ Frontend Base Image" \
+      maintainer="PrintFarmHQ"

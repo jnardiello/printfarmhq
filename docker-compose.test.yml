@@ -1,103 +1,106 @@
-services:
-  # Backend service for testing
-  backend-test:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.test
-    container_name: printfarmhq-backend-test
-    environment:
-      - TESTING=true
-      - DATABASE_URL=sqlite:///./test_data/test.db
-      - JWT_SECRET_KEY=test-secret-key-for-testing-only
-      - SUPERADMIN_EMAIL=admin@printfarmhq.com
-      - SUPERADMIN_PASSWORD=admin123
-      - SUPERADMIN_NAME="Test Admin"
-    volumes:
-      - ./backend/test-results:/app/test-results
-    networks:
-      - test-network
-    command: ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
+version: '3.8'
 
-  # Backend API server for frontend tests
+services:
   backend-api:
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-backend:${VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        REGISTRY: ${REGISTRY:-ghcr.io}
+        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-api
     environment:
-      - TESTING=true
-      - DATABASE_URL=sqlite:///./test_data/test.db
-      - JWT_SECRET_KEY=test-secret-key-for-testing-only
+      - JWT_SECRET_KEY=test-secret-key
       - SUPERADMIN_EMAIL=admin@printfarmhq.com
       - SUPERADMIN_PASSWORD=admin123
-      - SUPERADMIN_NAME="Test Admin"
-    networks:
-      - test-network
+      - SUPERADMIN_NAME=Test Admin
+      - DATABASE_URL=sqlite:///./test.db
+      - TESTING=true
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 8000)); s.close()"]
+      test: ["CMD", "python", "-c", "import socket; sock = socket.socket(); sock.connect(('localhost', 8000)); sock.close()"]
       interval: 5s
       timeout: 3s
-      retries: 5
-      start_period: 10s
+      retries: 10
+    networks:
+      - test-network
 
-  # Frontend E2E tests
+  frontend-app:
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-frontend:${VERSION:-latest}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        REGISTRY: ${REGISTRY:-ghcr.io}
+        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        BASE_TAG: ${VERSION:-latest}
+        NEXT_PUBLIC_API_URL: /api
+        DOCKER_ENV: "true"
+    container_name: printfarmhq-frontend-app
+    depends_on:
+      backend-api:
+        condition: service_healthy
+    environment:
+      - NEXT_PUBLIC_API_URL=/api
+      - DOCKER_ENV=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - test-network
+
+  backend-test:
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-backend-test:${VERSION:-latest}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.test
+      args:
+        REGISTRY: ${REGISTRY:-ghcr.io}
+        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        BASE_TAG: ${VERSION:-latest}
+    container_name: printfarmhq-backend-test
+    environment:
+      - JWT_SECRET_KEY=test-secret-key
+      - SUPERADMIN_EMAIL=admin@printfarmhq.com
+      - SUPERADMIN_PASSWORD=admin123
+      - SUPERADMIN_NAME=Test Admin
+      - DATABASE_URL=sqlite:///./test.db
+      - TESTING=true
+      - PYTHONPATH=/app
+    volumes:
+      - ./backend/test-results:/app/test-results
+    command: ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
+    networks:
+      - test-network
+
   frontend-test:
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-frontend-test:${VERSION:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile.test
+      args:
+        REGISTRY: ${REGISTRY:-ghcr.io}
+        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-frontend-test
-    environment:
-      - CI=true
-      - PLAYWRIGHT_BASE_URL=http://frontend-app:3000
-      - API_PROXY_URL=http://backend-api:8000
-    volumes:
-      - ./frontend/test-results:/app/test-results
-      - ./frontend/playwright-report:/app/playwright-report
-    networks:
-      - test-network
     depends_on:
       backend-api:
         condition: service_healthy
       frontend-app:
         condition: service_healthy
-    command: ["sh", "-c", "echo 'Waiting for services to be ready...' && sleep 10 && wget --spider -q http://frontend-app:3000 && echo 'Frontend is ready' && npx playwright test --config=playwright.docker.config.ts --project=chromium"]
-
-  # Next.js frontend server for E2E tests
-  frontend-app:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        - NEXT_PUBLIC_API_URL=/api
-    container_name: printfarmhq-frontend-app
     environment:
-      - DOCKER_ENV=true
+      - CI=true
+      - PLAYWRIGHT_BASE_URL=http://frontend-app:3000
+      - NEXT_PUBLIC_API_URL=http://backend-api:8000
+    volumes:
+      - ./frontend/test-results:/app/test-results
+      - ./frontend/playwright-report:/app/playwright-report
+    command: npx playwright test --config=playwright.docker.config.ts
     networks:
       - test-network
-    depends_on:
-      backend-api:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => { process.exit(1); })"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 20s
-
-  # Combined test runner (runs after individual tests)
-  test-runner:
-    image: alpine:latest
-    container_name: printfarmhq-test-aggregator
-    volumes:
-      - ./backend/test-results:/backend-results
-      - ./frontend/test-results:/frontend-results
-      - ./test-results:/test-results
-    depends_on:
-      backend-test:
-        condition: service_completed_successfully
-      frontend-test:
-        condition: service_completed_successfully
-    command: ["sh", "-c", "echo '📊 Aggregating test results...' && mkdir -p /test-results && cp -r /backend-results/* /test-results/ 2>/dev/null || true && cp -r /frontend-results/* /test-results/ 2>/dev/null || true && echo '✅ Test results aggregated in ./test-results/'"]
 
 networks:
   test-network:
