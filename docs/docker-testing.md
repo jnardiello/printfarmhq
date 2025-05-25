@@ -1,10 +1,10 @@
-# Docker-Based Testing for PrintFarmHQ
+# Docker Testing for PrintFarmHQ
 
-This document describes the Docker-based testing infrastructure for PrintFarmHQ, which ensures consistent, isolated, and reproducible test execution across all environments.
+This document describes the Docker-based testing infrastructure for PrintFarmHQ. **All tests MUST be run through Docker containers** to ensure consistency and reproducibility.
 
 ## 🎯 Overview
 
-All tests now run in Docker containers by default, eliminating the need for developers to install Python, Node.js, or any other dependencies on their local machines.
+Tests are exclusively run in Docker containers. There is no option to run tests locally on the host machine. This enforces consistent test environments across all developers and CI/CD systems.
 
 ## 🚀 Quick Start
 
@@ -19,7 +19,7 @@ make test-backend
 make test-frontend
 
 # Clean up test artifacts and containers
-make test-docker-clean
+make test-clean
 ```
 
 ## 🏗️ Architecture
@@ -61,25 +61,13 @@ printfarmhq/
 
 ## 🔧 Available Commands
 
-### Docker-Based Testing (Default)
-
 | Command | Description |
 |---------|-------------|
 | `make test` | Run all tests in Docker |
-| `make test-docker` | Same as `make test` |
-| `make test-docker-backend` | Run backend tests only |
-| `make test-docker-frontend` | Run frontend E2E tests only |
-| `make test-docker-clean` | Clean up all test artifacts |
+| `make test-backend` | Run backend tests only |
+| `make test-frontend` | Run frontend E2E tests only |
+| `make test-clean` | Clean up all test artifacts |
 | `make test-ci` | CI-optimized test run |
-
-### Local Testing (Requires Dependencies)
-
-| Command | Description |
-|---------|-------------|
-| `make test-local-backend` | Run backend tests locally |
-| `make test-local-frontend` | Run frontend tests locally |
-| `make test-local-backend-cov` | Backend tests with coverage |
-| `make test-local-frontend-ui` | Frontend tests with UI mode |
 
 ## 📊 Test Reports
 
@@ -125,20 +113,11 @@ The Docker-based tests integrate seamlessly with CI/CD pipelines:
 
 ## 🛡️ Benefits
 
-1. **No Local Dependencies**: Developers don't need Python, Node.js, or browsers installed
-2. **Consistent Environment**: Tests run identically on all machines
-3. **Isolated Testing**: No interference with local development environment
-4. **Parallel Execution**: Backend and frontend tests can run simultaneously
-5. **Easy Cleanup**: Single command removes all test artifacts and containers
-
-## 🔄 Migrating from Local Tests
-
-If you were previously running tests locally:
-
-1. **No changes to test code required** - all tests work as-is
-2. **Use `make test` instead of individual pytest/npm commands**
-3. **Test results appear in the same locations**
-4. **Coverage reports remain compatible**
+1. **Enforced Consistency**: No option for local testing means no environment discrepancies
+2. **Zero Dependencies**: No Python, Node.js, or browsers needed on host
+3. **Isolated Testing**: Complete separation from development environment
+4. **Reproducible Results**: Identical behavior across all machines
+5. **Simple Commands**: Just `make test` - nothing else to remember
 
 ## 📝 Environment Variables
 
@@ -169,9 +148,9 @@ NEXT_PUBLIC_API_URL=http://backend-api:8000
 - Check backend API logs: `docker compose -f docker-compose.test.yml logs backend-api`
 
 ### Permission errors with test results
-- Run `make test-docker-clean` to reset permissions
+- Run `make test-clean` to reset permissions
 - Ensure your user owns the project directory
 
 ### Out of disk space
 - Run `docker system prune` to clean up unused containers/images
-- Clear test artifacts: `make test-docker-clean`
+- Clear test artifacts: `make test-clean`

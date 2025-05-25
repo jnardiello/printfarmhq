@@ -147,6 +147,24 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
+## 🧪 Testing
+
+All tests run exclusively in Docker containers to ensure consistency:
+
+```bash
+# Run all tests (backend + frontend)
+make test
+
+# Run specific test suites
+make test-backend    # Backend tests only
+make test-frontend   # Frontend E2E tests only
+
+# Clean up test artifacts
+make test-clean
+```
+
+**Note**: Tests cannot be run locally. This is by design to ensure all developers and CI systems use identical test environments.
+
 ## 💬 Get Help
 
 - **📚 Documentation**: [/docs](docs/)

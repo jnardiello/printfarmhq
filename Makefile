@@ -104,62 +104,29 @@ restore-db:
 	@echo "Starting services..."
 	@make up
 
-# Docker-based testing (recommended)
-test-docker:
-	@echo "🐳 Running all tests in Docker containers..."
+# Testing - Docker only
+test:
+	@echo "🐳 Running all tests in Docker..."
 	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
 	@docker compose -f docker-compose.test.yml down
 
-test-docker-backend:
+test-backend:
 	@echo "🐳 Running backend tests in Docker..."
 	@docker compose -f docker-compose.test.yml up --build backend-test --abort-on-container-exit
 	@docker compose -f docker-compose.test.yml down
 
-test-docker-frontend:
+test-frontend:
 	@echo "🐳 Running frontend E2E tests in Docker..."
 	@docker compose -f docker-compose.test.yml up --build backend-api frontend-app frontend-test --abort-on-container-exit
 	@docker compose -f docker-compose.test.yml down
 
-test-docker-clean:
+test-clean:
 	@echo "🧹 Cleaning up test artifacts and containers..."
 	@docker compose -f docker-compose.test.yml down -v
 	@rm -rf backend/test-results frontend/test-results test-results
 	@rm -rf backend/htmlcov backend/.coverage frontend/playwright-report
 
-# Local testing (requires Python/Node.js installed)
-test-local-backend:
-	@echo "🧪 Running ALL backend tests locally..."
-	@cd backend && python3 -m pytest -v
-
-test-local-backend-limited:
-	@echo "🧪 Running limited backend tests locally..."
-	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py -v
-
-test-local-backend-cov:
-	@echo "📊 Running backend tests with coverage locally..."
-	@cd backend && python3 -m pytest --cov=app --cov-report=html --cov-report=term
-
-test-local-backend-watch:
-	@echo "👁️  Running backend tests in watch mode locally..."
-	@cd backend && python3 -m pytest-watch
-
-test-local-frontend:
-	@echo "🎭 Running frontend E2E tests locally..."
-	@cd frontend && npm run test:e2e
-
-test-local-frontend-ui:
-	@echo "🖥️  Running frontend tests with UI locally..."
-	@cd frontend && npm run test:e2e:ui
-
-# Default test commands now use Docker
-test: test-docker
-	@echo "✅ All Docker tests completed!"
-
-test-backend: test-docker-backend
-test-frontend: test-docker-frontend
-
-# CI/CD optimized testing
 test-ci:
-	@echo "🤖 Running tests in CI mode with Docker..."
+	@echo "🤖 Running tests in CI mode..."
 	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
 	@docker compose -f docker-compose.test.yml down --volumes
