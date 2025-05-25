@@ -23,7 +23,7 @@ ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 
 # Build the Next.js application
-RUN NODE_ENV=production npm run build
+RUN NODE_ENV=production DOCKER_ENV=true npm run build
 
 # ---- Runner Stage ----
 FROM node:20-alpine AS runner
@@ -33,6 +33,7 @@ WORKDIR /app
 # Set environment variables
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
+ENV DOCKER_ENV true
 
 # Create a non-root user for security
 RUN addgroup --system --gid 1001 nodejs && \

@@ -1,5 +1,5 @@
 # Frontend E2E Test Runner Dockerfile
-FROM mcr.microsoft.com/playwright:v1.52.0-focal
+FROM mcr.microsoft.com/playwright:v1.48.0-noble
 
 # Set working directory
 WORKDIR /app
@@ -8,7 +8,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Copy application code
 COPY . .
@@ -25,8 +25,8 @@ RUN mkdir -p test-results playwright-report
 
 # Set environment variables
 ENV CI=true
-ENV PLAYWRIGHT_BASE_URL=http://backend:8000
-ENV NEXT_PUBLIC_API_URL=http://backend:8000
+ENV PLAYWRIGHT_BASE_URL=http://frontend-app:3000
+ENV NEXT_PUBLIC_API_URL=http://backend-api:8000
 
 # Default command - tests are orchestrated by docker-compose
-CMD ["npx", "playwright", "test", "--reporter=junit,html", "--output=test-results"]
+CMD ["npx", "playwright", "test"]

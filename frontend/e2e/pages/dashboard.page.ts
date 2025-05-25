@@ -122,14 +122,14 @@ export class DashboardPage {
           break;
           
         case 'filaments':
-          await this.page.waitForSelector('button:has-text("Inventory")', { state: 'visible' });
-          await this.page.click('button:has-text("Inventory")');
+          await this.page.waitForSelector('button[aria-haspopup="menu"]:has-text("Inventory")', { state: 'visible' });
+          await this.page.click('button[aria-haspopup="menu"]:has-text("Inventory")');
           // Check if menu is already open or wait for it to open
           try {
             await this.page.waitForSelector('[role="menuitem"]:has-text("Filaments")', { state: 'visible', timeout: 2000 });
           } catch {
             // If not visible, try clicking Inventory again
-            await this.page.click('button:has-text("Inventory")');
+            await this.page.click('button[aria-haspopup="menu"]:has-text("Inventory")');
             await this.page.waitForSelector('[role="menuitem"]:has-text("Filaments")', { state: 'visible', timeout: 5000 });
           }
           await this.page.click('[role="menuitem"]:has-text("Filaments")');
@@ -137,32 +137,59 @@ export class DashboardPage {
           break;
           
         case 'products':
-          await this.page.waitForSelector('button:has-text("Inventory")', { state: 'visible' });
-          await this.page.click('button:has-text("Inventory")');
-          // Check if menu is already open or wait for it to open
-          try {
-            await this.page.waitForSelector('[role="menuitem"]:has-text("Products")', { state: 'visible', timeout: 2000 });
-          } catch {
-            // If not visible, try clicking Inventory again
-            await this.page.click('button:has-text("Inventory")');
-            await this.page.waitForSelector('[role="menuitem"]:has-text("Products")', { state: 'visible', timeout: 5000 });
+          // More robust approach: always close menu first if open, then open fresh
+          const menuVisible = await this.page.locator('[role="menu"]').isVisible().catch(() => false);
+          if (menuVisible) {
+            await this.page.keyboard.press('Escape');
+            await this.page.waitForTimeout(300);
           }
-          await this.page.click('[role="menuitem"]:has-text("Products")');
-          await this.page.waitForURL('**/?tab=products');
+          
+          // Now open the dropdown fresh
+          await this.page.waitForSelector('button[aria-haspopup="menu"]:has-text("Inventory")', { state: 'visible' });
+          await this.page.click('button[aria-haspopup="menu"]:has-text("Inventory")');
+          
+          // Wait for menu and click Products
+          await this.page.waitForSelector('[role="menu"]', { state: 'visible', timeout: 5000 });
+          await this.page.waitForTimeout(300); // Allow menu animation to complete
+          
+          // Click with retry logic
+          const productsItem = this.page.locator('[role="menuitem"]:has-text("Products")').first();
+          await productsItem.waitFor({ state: 'visible', timeout: 5000 });
+          await productsItem.click({ timeout: 5000 });
+          
+          await this.page.waitForURL('**/?tab=products', { timeout: 10000 });
           break;
           
         case 'printers':
-          await this.page.click('button:has-text("Inventory")');
-          await this.page.waitForSelector('[role="menuitem"]:has-text("Printers")', { state: 'visible' });
-          await this.page.click('[role="menuitem"]:has-text("Printers")');
-          await this.page.waitForURL('**/?tab=printers');
+          await this.page.waitForSelector('button[aria-haspopup="menu"]:has-text("Inventory")', { state: 'visible' });
+          await this.page.click('button[aria-haspopup="menu"]:has-text("Inventory")');
+          // Wait for menu to be fully open and stable
+          await this.page.waitForSelector('[role="menu"]', { state: 'visible' });
+          await this.page.waitForTimeout(300); // Small delay for menu animation
+          
+          // Use more specific selector and force click if needed
+          const printersMenuItem = this.page.locator('[role="menuitem"]:has-text("Printers")').first();
+          await printersMenuItem.waitFor({ state: 'visible', timeout: 5000 });
+          await printersMenuItem.click({ force: true });
+          
+          // Wait for navigation
+          await this.page.waitForURL('**/?tab=printers', { timeout: 10000 });
           break;
           
         case 'subscriptions':
-          await this.page.click('button:has-text("Inventory")');
-          await this.page.waitForSelector('[role="menuitem"]:has-text("Commercial Licenses")', { state: 'visible' });
-          await this.page.click('[role="menuitem"]:has-text("Commercial Licenses")');
-          await this.page.waitForURL('**/?tab=subscriptions');
+          await this.page.waitForSelector('button[aria-haspopup="menu"]:has-text("Inventory")', { state: 'visible' });
+          await this.page.click('button[aria-haspopup="menu"]:has-text("Inventory")');
+          // Wait for menu to be fully open and stable
+          await this.page.waitForSelector('[role="menu"]', { state: 'visible' });
+          await this.page.waitForTimeout(300); // Small delay for menu animation
+          
+          // Use more specific selector and force click if needed
+          const licensesMenuItem = this.page.locator('[role="menuitem"]:has-text("Commercial Licenses")').first();
+          await licensesMenuItem.waitFor({ state: 'visible', timeout: 5000 });
+          await licensesMenuItem.click({ force: true });
+          
+          // Wait for navigation
+          await this.page.waitForURL('**/?tab=subscriptions', { timeout: 10000 });
           break;
           
         case 'users':

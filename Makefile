@@ -107,7 +107,16 @@ restore-db:
 # Testing - Docker only
 test:
 	@echo "🐳 Running all tests in Docker..."
-	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+	@docker compose -f docker-compose.test.yml build
+	@echo "Starting services..."
+	@docker compose -f docker-compose.test.yml up -d backend-api frontend-app
+	@echo "Waiting for services to be ready..."
+	@sleep 15
+	@echo -e "\n📦 Running Backend Tests..."
+	@docker compose -f docker-compose.test.yml run --rm backend-test
+	@echo -e "\n🌐 Running Frontend E2E Tests (Chromium)..."
+	@docker compose -f docker-compose.test.yml run --rm frontend-test npx playwright test --config=playwright.docker.config.ts --project=chromium --reporter=list
+	@echo -e "\n✅ All tests completed!"
 	@docker compose -f docker-compose.test.yml down
 
 test-backend:

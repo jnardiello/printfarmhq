@@ -15,7 +15,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Install test dependencies
 RUN pip install --no-cache-dir \
-    pytest==8.3.2 \
+    pytest==8.3.3 \
     pytest-asyncio==0.24.0 \
     pytest-cov==5.0.0 \
     pytest-env==1.1.5 \
@@ -36,6 +36,7 @@ ENV JWT_SECRET_KEY=test-secret-key-for-testing-only
 ENV SUPERADMIN_EMAIL=admin@test.com
 ENV SUPERADMIN_PASSWORD=testpass123
 ENV SUPERADMIN_NAME="Test Admin"
+ENV PYTHONPATH=/app
 
 # Run tests by default
 CMD ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=xml", "--junitxml=test-results/junit.xml"]

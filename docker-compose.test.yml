@@ -9,24 +9,14 @@ services:
       - TESTING=true
       - DATABASE_URL=sqlite:///./test_data/test.db
       - JWT_SECRET_KEY=test-secret-key-for-testing-only
-      - SUPERADMIN_EMAIL=admin@test.com
-      - SUPERADMIN_PASSWORD=testpass123
+      - SUPERADMIN_EMAIL=admin@printfarmhq.com
+      - SUPERADMIN_PASSWORD=admin123
       - SUPERADMIN_NAME="Test Admin"
     volumes:
       - ./backend/test-results:/app/test-results
-      - ./backend/htmlcov:/app/htmlcov
-      - ./backend/.coverage:/app/.coverage
     networks:
       - test-network
-    command: >
-      sh -c "
-        python -m pytest -v 
-        --cov=app 
-        --cov-report=term-missing 
-        --cov-report=html 
-        --cov-report=xml 
-        --junitxml=test-results/junit.xml
-      "
+    command: ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
 
   # Backend API server for frontend tests
   backend-api:
@@ -38,13 +28,13 @@ services:
       - TESTING=true
       - DATABASE_URL=sqlite:///./test_data/test.db
       - JWT_SECRET_KEY=test-secret-key-for-testing-only
-      - SUPERADMIN_EMAIL=admin@test.com
-      - SUPERADMIN_PASSWORD=testpass123
+      - SUPERADMIN_EMAIL=admin@printfarmhq.com
+      - SUPERADMIN_PASSWORD=admin123
       - SUPERADMIN_NAME="Test Admin"
     networks:
       - test-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 8000)); s.close()"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -58,8 +48,8 @@ services:
     container_name: printfarmhq-frontend-test
     environment:
       - CI=true
-      - PLAYWRIGHT_BASE_URL=http://backend-api:8000
-      - NEXT_PUBLIC_API_URL=http://backend-api:8000
+      - PLAYWRIGHT_BASE_URL=http://frontend-app:3000
+      - API_PROXY_URL=http://backend-api:8000
     volumes:
       - ./frontend/test-results:/app/test-results
       - ./frontend/playwright-report:/app/playwright-report
@@ -68,28 +58,27 @@ services:
     depends_on:
       backend-api:
         condition: service_healthy
-    command: >
-      sh -c "
-        echo 'Waiting for backend to be ready...' &&
-        sleep 5 &&
-        npx playwright test --reporter=junit,html --output=test-results
-      "
+      frontend-app:
+        condition: service_healthy
+    command: ["sh", "-c", "echo 'Waiting for services to be ready...' && sleep 10 && wget --spider -q http://frontend-app:3000 && echo 'Frontend is ready' && npx playwright test --config=playwright.docker.config.ts --project=chromium"]
 
   # Next.js frontend server for E2E tests
   frontend-app:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=/api
     container_name: printfarmhq-frontend-app
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend-api:8000
+      - DOCKER_ENV=true
     networks:
       - test-network
     depends_on:
       backend-api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => { process.exit(1); })"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -104,16 +93,11 @@ services:
       - ./frontend/test-results:/frontend-results
       - ./test-results:/test-results
     depends_on:
-      - backend-test
-      - frontend-test
-    command: >
-      sh -c "
-        echo '📊 Aggregating test results...' &&
-        mkdir -p /test-results &&
-        cp -r /backend-results/* /test-results/ 2>/dev/null || true &&
-        cp -r /frontend-results/* /test-results/ 2>/dev/null || true &&
-        echo '✅ Test results aggregated in ./test-results/'
-      "
+      backend-test:
+        condition: service_completed_successfully
+      frontend-test:
+        condition: service_completed_successfully
+    command: ["sh", "-c", "echo '📊 Aggregating test results...' && mkdir -p /test-results && cp -r /backend-results/* /test-results/ 2>/dev/null || true && cp -r /frontend-results/* /test-results/ 2>/dev/null || true && echo '✅ Test results aggregated in ./test-results/'"]
 
 networks:
   test-network:
