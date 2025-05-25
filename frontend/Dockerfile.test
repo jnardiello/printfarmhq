@@ -1,0 +1,32 @@
+# Frontend E2E Test Runner Dockerfile
+FROM mcr.microsoft.com/playwright:v1.52.0-focal
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy application code
+COPY . .
+
+# Build the application
+RUN npm run build
+
+# Install Playwright browsers with dependencies
+RUN npx playwright install --with-deps chromium
+RUN npx playwright install --with-deps webkit
+
+# Create directories for test artifacts
+RUN mkdir -p test-results playwright-report
+
+# Set environment variables
+ENV CI=true
+ENV PLAYWRIGHT_BASE_URL=http://backend:8000
+ENV NEXT_PUBLIC_API_URL=http://backend:8000
+
+# Run E2E tests by default
+CMD ["npx", "playwright", "test", "--reporter=junit,html", "--output=test-results"]

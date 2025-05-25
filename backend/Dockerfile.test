@@ -1,0 +1,41 @@
+# Backend Test Runner Dockerfile
+FROM python:3.11-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install test dependencies
+RUN pip install --no-cache-dir \
+    pytest==8.3.2 \
+    pytest-asyncio==0.24.0 \
+    pytest-cov==5.0.0 \
+    pytest-env==1.1.5 \
+    pytest-mock==3.14.0 \
+    faker==37.3.0 \
+    httpx==0.28.1
+
+# Copy application code
+COPY . .
+
+# Create test database directory
+RUN mkdir -p /app/test_data
+
+# Set environment variables for testing
+ENV TESTING=true
+ENV DATABASE_URL=sqlite:///./test_data/test.db
+ENV JWT_SECRET_KEY=test-secret-key-for-testing-only
+ENV SUPERADMIN_EMAIL=admin@test.com
+ENV SUPERADMIN_PASSWORD=testpass123
+ENV SUPERADMIN_NAME=Test Admin
+
+# Run tests by default
+CMD ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=xml", "--junitxml=test-results/junit.xml"]

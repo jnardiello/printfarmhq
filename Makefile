@@ -104,37 +104,62 @@ restore-db:
 	@echo "Starting services..."
 	@make up
 
-# Testing commands
-test-backend:
-	@echo "🧪 Running ALL backend tests..."
+# Docker-based testing (recommended)
+test-docker:
+	@echo "🐳 Running all tests in Docker containers..."
+	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+	@docker compose -f docker-compose.test.yml down
+
+test-docker-backend:
+	@echo "🐳 Running backend tests in Docker..."
+	@docker compose -f docker-compose.test.yml up --build backend-test --abort-on-container-exit
+	@docker compose -f docker-compose.test.yml down
+
+test-docker-frontend:
+	@echo "🐳 Running frontend E2E tests in Docker..."
+	@docker compose -f docker-compose.test.yml up --build backend-api frontend-app frontend-test --abort-on-container-exit
+	@docker compose -f docker-compose.test.yml down
+
+test-docker-clean:
+	@echo "🧹 Cleaning up test artifacts and containers..."
+	@docker compose -f docker-compose.test.yml down -v
+	@rm -rf backend/test-results frontend/test-results test-results
+	@rm -rf backend/htmlcov backend/.coverage frontend/playwright-report
+
+# Local testing (requires Python/Node.js installed)
+test-local-backend:
+	@echo "🧪 Running ALL backend tests locally..."
 	@cd backend && python3 -m pytest -v
 
-test-backend-limited:
-	@echo "🧪 Running limited backend tests (basic validation only)..."
+test-local-backend-limited:
+	@echo "🧪 Running limited backend tests locally..."
 	@cd backend && python3 -m pytest tests/test_simple.py tests/test_health.py tests/test_auth_working.py -v
 
-test-backend-cov:
-	@echo "📊 Running backend tests with coverage..."
+test-local-backend-cov:
+	@echo "📊 Running backend tests with coverage locally..."
 	@cd backend && python3 -m pytest --cov=app --cov-report=html --cov-report=term
 
-test-backend-watch:
-	@echo "👁️  Running backend tests in watch mode..."
+test-local-backend-watch:
+	@echo "👁️  Running backend tests in watch mode locally..."
 	@cd backend && python3 -m pytest-watch
 
-test-frontend:
-	@echo "🎭 Running frontend E2E tests..."
+test-local-frontend:
+	@echo "🎭 Running frontend E2E tests locally..."
 	@cd frontend && npm run test:e2e
 
-test-frontend-ui:
-	@echo "🖥️  Running frontend tests with UI..."
+test-local-frontend-ui:
+	@echo "🖥️  Running frontend tests with UI locally..."
 	@cd frontend && npm run test:e2e:ui
 
-# Run all tests
-test: test-backend test-frontend
-	@echo "✅ All tests completed!"
+# Default test commands now use Docker
+test: test-docker
+	@echo "✅ All Docker tests completed!"
 
-# Run tests in CI mode
+test-backend: test-docker-backend
+test-frontend: test-docker-frontend
+
+# CI/CD optimized testing
 test-ci:
-	@echo "🤖 Running tests in CI mode..."
-	@cd backend && python3 -m pytest --cov=app --cov-report=xml
-	@cd frontend && npm run test:e2e:ci
+	@echo "🤖 Running tests in CI mode with Docker..."
+	@docker compose -f docker-compose.test.yml up --build --abort-on-container-exit
+	@docker compose -f docker-compose.test.yml down --volumes

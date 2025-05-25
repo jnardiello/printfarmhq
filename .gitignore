@@ -76,6 +76,7 @@ logs/
 
 # Testing
 test-results/
+*/test-results/
 playwright-report/
 coverage/
 htmlcov/
@@ -84,6 +85,7 @@ coverage.xml
 .pytest_cache/
 *.coverage
 junit.xml
+test_data/
 
 # Test screenshots and visual artifacts (should not be versioned)
 **/screenshots/
