@@ -1,4 +1,4 @@
-.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci test-clean push-images dev help check-env
+.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci push-images dev help check-env
 
 # Configuration
 COMPOSE := docker compose
@@ -112,9 +112,6 @@ test-frontend-safari-pro-max:
 
 clean-test-artifacts: ## Clean test artifacts
 	@rm -rf $(TEST_ARTIFACTS) 2>/dev/null || true
-
-test-clean: clean-test-artifacts ## Alias for clean-test-artifacts
-	@$(COMPOSE_TEST) down -v
 
 # Database operations
 BACKUP_DIR ?= ./backups
