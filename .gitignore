@@ -83,12 +83,19 @@ htmlcov/
 coverage.xml
 .pytest_cache/
 *.coverage
-e2e/screenshots/
 junit.xml
 
-# Screenshots and debug files
-safari-debug-*.png
+# Test screenshots and visual artifacts (should not be versioned)
+**/screenshots/
+**/e2e/screenshots/
 screenshot*.png
+test-screenshot*.png
+visual-regression/
+snapshots/
+
+# Debug and temporary files
+safari-debug-*.png
+debug*.png
 *.webm
 *.zip
 debug*.py
