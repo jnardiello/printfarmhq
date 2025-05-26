@@ -69,4 +69,69 @@ test.describe('Filaments Management', () => {
     await expect(page.locator('text=No filaments added yet.')).toBeVisible();
     await expect(page.locator('text=Add your first filament purchase below.')).toBeVisible();
   });
+
+  test('should export CSV with authentication', async ({ page }) => {
+    // First add some test data
+    await page.click('text=Filament Purchases');
+    
+    // Fill in purchase form
+    await page.locator('#purchaseColor').selectOption('Black');
+    await page.locator('#purchaseBrand').selectOption('Bambu Lab');
+    await page.locator('#purchaseMaterial').selectOption('PLA basic');
+    await page.fill('#purchaseQuantity', '2.5');
+    await page.fill('#purchasePrice', '25.99');
+    await page.fill('#purchaseDate', '2024-01-15');
+    await page.locator('#purchaseChannel').selectOption('Amazon');
+    await page.fill('#purchaseNotes', 'Test purchase for CSV export');
+    
+    // Submit the form
+    await page.click('button[type="submit"]:has-text("Add Purchase")');
+    
+    // Wait for success message
+    await expect(page.locator('text=Purchase added successfully').or(page.locator('text=Success'))).toBeVisible({ timeout: 10000 });
+    
+    // Wait for the purchase to appear in the table
+    await expect(page.locator('table').filter({ hasText: 'Black' })).toBeVisible({ timeout: 10000 });
+    
+    // Intercept the CSV download request to verify authentication
+    const downloadPromise = page.waitForEvent('download');
+    await page.on('response', response => {
+      if (response.url().includes('/filament_purchases/export')) {
+        // Verify the request includes authentication header
+        const headers = response.request().headers();
+        expect(headers['authorization']).toBeTruthy();
+        expect(headers['authorization']).toContain('Bearer ');
+      }
+    });
+    
+    // Click the Export CSV button
+    await page.click('button:has-text("Export CSV")');
+    
+    // Wait for download to complete
+    const download = await downloadPromise;
+    expect(download).toBeTruthy();
+    
+    // Verify the download filename contains 'filament_purchases'
+    expect(download.suggestedFilename()).toContain('filament_purchases');
+    expect(download.suggestedFilename()).toContain('.csv');
+    
+    // Read and verify CSV content
+    const path = await download.path();
+    if (path) {
+      const fs = require('fs');
+      const csvContent = fs.readFileSync(path, 'utf8');
+      
+      // Verify CSV headers
+      expect(csvContent).toContain('ID,Color,Brand,Material,Quantity_kg,Price_per_kg,Purchase_date,Channel,Notes');
+      
+      // Verify our test data is in the CSV
+      expect(csvContent).toContain('Black');
+      expect(csvContent).toContain('Bambu Lab');
+      expect(csvContent).toContain('PLA basic');
+      expect(csvContent).toContain('2.5');
+      expect(csvContent).toContain('25.99');
+      expect(csvContent).toContain('Amazon');
+      expect(csvContent).toContain('Test purchase for CSV export');
+    }
+  });
 });

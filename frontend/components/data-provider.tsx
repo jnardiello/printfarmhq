@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { toast } from "@/components/ui/use-toast"
 import type { Filament, FilamentPurchase, Product, Printer, Subscription, PrintJob } from "@/lib/types"
-import { api, apiUpload } from "@/lib/api"
+import { api, apiUpload, API_BASE_URL } from "@/lib/api"
 import { useAuth } from "@/components/auth/auth-context"
 
 interface DataContextType {
@@ -479,7 +479,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const exportPurchasesCSV = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/filament_purchases/export`)
+      // Get authentication token from localStorage
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      
+      const res = await fetch(`${API_BASE_URL}/filament_purchases/export`, {
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` }),
+        },
+      })
       if (!res.ok) {
         const errorText = await res.text()
         throw new Error(errorText || "Export failed")
@@ -554,5 +561,3 @@ export function useData() {
   }
   return context
 }
-
-import { API_BASE_URL } from "@/lib/api"

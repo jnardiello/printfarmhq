@@ -253,3 +253,74 @@ class TestFilamentInventoryWorkflow:
         assert response.status_code == 200
         purchases = response.json()
         assert len(purchases) == 0
+
+    def test_csv_export_with_authentication(self, client, auth_headers, db):
+        """Test that CSV export requires authentication and works correctly."""
+        # First test without authentication
+        response = client.get("/filament_purchases/export")
+        assert response.status_code == 403  # Forbidden
+        
+        # Create some test data
+        filament_data = {
+            "brand": "Test Brand",
+            "material": "PLA",
+            "color": "Green"
+        }
+        
+        response = client.post("/filaments", json=filament_data, headers=auth_headers)
+        assert response.status_code == 201
+        filament = response.json()
+        filament_id = filament["id"]
+        
+        # Add some purchases
+        purchases = [
+            {
+                "filament_id": filament_id,
+                "quantity_kg": 2.0,
+                "price_per_kg": 25.99,
+                "channel": "Amazon",
+                "purchase_date": "2024-01-15",
+                "notes": "Test purchase 1"
+            },
+            {
+                "filament_id": filament_id,
+                "quantity_kg": 3.5,
+                "price_per_kg": 22.50,
+                "channel": "eBay", 
+                "purchase_date": "2024-02-01",
+                "notes": "Test purchase 2"
+            }
+        ]
+        
+        for purchase_data in purchases:
+            response = client.post("/filament_purchases", json=purchase_data, headers=auth_headers)
+            assert response.status_code == 201
+        
+        # Test CSV export with authentication
+        response = client.get("/filament_purchases/export", headers=auth_headers)
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "text/csv; charset=utf-8"
+        assert "attachment; filename=" in response.headers["content-disposition"]
+        
+        # Verify CSV content
+        csv_content = response.text
+        lines = [line.strip() for line in csv_content.strip().split('\n')]
+        
+        # Check header
+        assert lines[0] == "ID,Color,Brand,Material,Quantity_kg,Price_per_kg,Purchase_date,Channel,Notes"
+        
+        # Check we have the right number of data rows (2 purchases)
+        assert len(lines) == 3  # header + 2 data rows
+        
+        # Verify content contains our test data
+        assert "Green" in csv_content
+        assert "Test Brand" in csv_content
+        assert "PLA" in csv_content
+        assert "2.0" in csv_content
+        assert "3.5" in csv_content
+        assert "25.99" in csv_content
+        assert "22.5" in csv_content
+        assert "Amazon" in csv_content
+        assert "eBay" in csv_content
+        assert "Test purchase 1" in csv_content
+        assert "Test purchase 2" in csv_content
