@@ -26,13 +26,13 @@ install: ## Set up PrintFarmHQ for first time
 # Development commands
 up: ## Start services in background (always rebuild)
 	@echo "🚀 Starting PrintFarmHQ (rebuilding for latest changes)..."
-	@$(COMPOSE) up -d --build
+	@NAMESPACE=$$(whoami | tr '[:upper:]' '[:lower:]') $(COMPOSE) up -d --build
 	@echo "✅ PrintFarmHQ is running at http://localhost:3000"
 	@echo "   Run 'make logs' to view logs or 'make down' to stop"
 
 dev: ## Start in development mode with hot reload
 	@echo "🔥 Starting development environment with hot reload..."
-	@$(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up --build
+	@NAMESPACE=$$(whoami | tr '[:upper:]' '[:lower:]') $(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 down: ## Stop all services
 	@$(COMPOSE) down
