@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-Migration script to update the User table from Google OAuth to local auth.
-This script will:
+HISTORICAL MIGRATION SCRIPT - DO NOT DELETE
+
+This script was used to migrate the User table from Google OAuth to local authentication.
+It is preserved for historical reference and documentation purposes.
+
+Migration performed:
 1. Drop the google_id and picture columns
 2. Add the hashed_password column
-3. Delete all existing users (they'll need to re-register)
+3. Delete all existing users (they needed to re-register)
+
+Date: Part of the transition from Google OAuth to local authentication
+Note: This migration has already been applied to production systems.
 """
 
 import os
