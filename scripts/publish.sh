@@ -124,16 +124,16 @@ select_version_increment() {
     
     while true; do
         read -p "Enter choice [1-3]: " choice
-        case $choice in
-            1|"patch")
+        case "$choice" in
+            1)
                 echo "patch"
                 return
                 ;;
-            2|"minor")
+            2)
                 echo "minor"
                 return
                 ;;
-            3|"major")
+            3)
                 echo "major"
                 return
                 ;;
@@ -166,7 +166,7 @@ update_changelog() {
     # Read existing changelog
     local found_first_version=false
     while IFS= read -r line; do
-        if [[ "$line" =~ ^##[[:space:]]*v[0-9] ]] && [[ "$found_first_version" == false ]]; then
+        if echo "$line" | grep -q "^## v[0-9]" && [[ "$found_first_version" == false ]]; then
             # Insert new version before the first existing version
             echo "## $new_version ($date)" >> "$temp_file"
             echo "" >> "$temp_file"
