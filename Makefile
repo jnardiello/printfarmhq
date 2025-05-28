@@ -1,4 +1,4 @@
-.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci push-images dev help
+.PHONY: install up down clean logs dump-db restore-db test test-backend test-frontend test-ci push-images dev help migrate migrate-list migrate-create migrate-revert migrate-revert-to migrate-dry-run publish
 
 # Configuration
 COMPOSE := docker compose
@@ -116,11 +116,11 @@ restore-db: ## Restore database from backup
 # Database migrations
 migrate: ## Run database migrations
 	@echo "🔄 Running database migrations..."
-	@cd backend && python app/migrate.py migrate
+	@cd backend && python3 app/migrate.py migrate
 
 migrate-list: ## List all migrations and their status
 	@echo "📋 Migration status:"
-	@cd backend && python app/migrate.py list
+	@cd backend && python3 app/migrate.py list
 
 migrate-create: ## Create a new migration (usage: make migrate-create DESC="description")
 	@if [ -z "$(DESC)" ]; then \
@@ -128,11 +128,11 @@ migrate-create: ## Create a new migration (usage: make migrate-create DESC="desc
 		exit 1; \
 	fi
 	@echo "📝 Creating new migration..."
-	@cd backend && python app/migrate.py create --description "$(DESC)"
+	@cd backend && python3 app/migrate.py create --description "$(DESC)"
 
 migrate-revert: ## Revert last migration (usage: make migrate-revert [COUNT=N])
 	@echo "🔄 Reverting migration(s)..."
-	@cd backend && python app/migrate.py revert --count $(or $(COUNT),1)
+	@cd backend && python3 app/migrate.py revert --count $(or $(COUNT),1)
 
 migrate-revert-to: ## Revert to specific version (usage: make migrate-revert-to VERSION=YYYYMMDD_HHMMSS)
 	@if [ -z "$(VERSION)" ]; then \
@@ -140,11 +140,11 @@ migrate-revert-to: ## Revert to specific version (usage: make migrate-revert-to 
 		exit 1; \
 	fi
 	@echo "🔄 Reverting to version $(VERSION)..."
-	@cd backend && python app/migrate.py revert-to --version "$(VERSION)"
+	@cd backend && python3 app/migrate.py revert-to --version "$(VERSION)"
 
 migrate-dry-run: ## Show pending migrations without applying them
 	@echo "🔍 Checking pending migrations (dry run)..."
-	@cd backend && python app/migrate.py migrate --dry-run
+	@cd backend && python3 app/migrate.py migrate --dry-run
 
 # Docker Registry (for maintainers)
 REGISTRY ?= ghcr.io

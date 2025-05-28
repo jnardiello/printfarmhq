@@ -252,9 +252,9 @@ run_migrations() {
     
     # First, do a dry run to show what would be applied
     print_status "Checking for pending migrations..."
-    if python app/migrate.py migrate --dry-run; then
+    if python3 app/migrate.py migrate --dry-run; then
         print_status "Running migrations..."
-        if python app/migrate.py migrate; then
+        if python3 app/migrate.py migrate; then
             print_success "Database migrations completed successfully"
         else
             print_error "Database migration failed"

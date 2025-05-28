@@ -17,13 +17,20 @@ from datetime import datetime
 # Add the parent directory to the path so we can import from app
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.database import get_database_path
+from app.database import SQLALCHEMY_DATABASE_URL
 
 
 class MigrationRunner:
     def __init__(self, db_path: Optional[str] = None):
         """Initialize the migration runner with database path."""
-        self.db_path = db_path or get_database_path()
+        if db_path:
+            self.db_path = db_path
+        else:
+            # Extract database path from SQLAlchemy URL
+            # SQLALCHEMY_DATABASE_URL = "sqlite:///./hq.db"
+            self.db_path = SQLALCHEMY_DATABASE_URL.replace("sqlite:///", "")
+            if self.db_path.startswith("./"):
+                self.db_path = str(Path(__file__).parent.parent / self.db_path[2:])
         self.migrations_dir = Path(__file__).parent.parent / "migrations"
         
     def ensure_migrations_table(self) -> None:
