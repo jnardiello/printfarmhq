@@ -12,10 +12,11 @@ const nextConfig = {
   async rewrites() {
     // In Docker environment, proxy API calls to backend service
     if (process.env.DOCKER_ENV === 'true') {
+      const backendUrl = process.env.BACKEND_URL || 'http://backend-api:8000'
       return [
         {
           source: '/api/:path*',
-          destination: 'http://backend:8000/:path*',
+          destination: `${backendUrl}/:path*`,
         },
       ]
     }
