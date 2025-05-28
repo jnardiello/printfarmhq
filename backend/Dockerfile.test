@@ -47,4 +47,4 @@ ENV PYTHONPATH=/app \
     PYTEST_CURRENT_TEST=true
 
 # Default test command
-CMD ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
+CMD ["python3", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml", "-p", "no:warnings"]

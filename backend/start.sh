@@ -10,7 +10,7 @@ if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
     # Check if migrate script exists
     if [[ -f "app/migrate.py" ]]; then
         # Run migrations
-        python app/migrate.py migrate
+        python3 app/migrate.py migrate
         if [[ $? -eq 0 ]]; then
             echo "✅ Database migrations completed successfully"
         else
@@ -24,7 +24,15 @@ else
     echo "⏭️  Skipping migrations (RUN_MIGRATIONS=false)"
 fi
 
+# Set up test data if in testing mode
+if [[ "${TESTING:-false}" == "true" ]]; then
+    echo "🧪 Setting up test data..."
+    if [[ -f "setup_test_data.py" ]]; then
+        python3 setup_test_data.py
+    fi
+fi
+
 echo "🌟 Starting application server..."
 
 # Start the application
-exec python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+exec python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

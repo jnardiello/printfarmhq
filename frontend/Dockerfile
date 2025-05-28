@@ -18,12 +18,13 @@ COPY . .
 # Build arguments for API URL
 ARG NEXT_PUBLIC_API_URL
 ARG DOCKER_ENV=true
+ARG BACKEND_URL
 
 # Pre-download Google Fonts to avoid network issues during build
 RUN mkdir -p .next/cache/google-fonts
 
 # Build the application
-RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} npm run build
+RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} BACKEND_URL=${BACKEND_URL} npm run build
 
 # Production stage
 FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-base-${BASE_TAG} AS runner

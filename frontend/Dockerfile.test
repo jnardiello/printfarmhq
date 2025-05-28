@@ -1,44 +1,26 @@
 # Frontend E2E Test Runner Image
-ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
-ARG BASE_TAG=latest
+# Use Playwright's official image which includes all necessary dependencies
+FROM mcr.microsoft.com/playwright:v1.52.0-noble AS frontend-test
 
-# Use regular frontend base and install Playwright on top
-FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-base-${BASE_TAG} AS frontend-test
-
-# Install system dependencies needed for Playwright
+# Install Node.js 22 (to match the frontend base image)
 USER root
-RUN apk add --no-cache \
-    chromium \
-    chromium-chromedriver \
-    nss \
-    freetype \
-    freetype-dev \
-    harfbuzz \
-    ca-certificates \
-    ttf-freefont
+RUN apt-get update && apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
-# Set Playwright to use system Chromium
-ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
-    PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium-browser
+# Set working directory
+WORKDIR /app
 
-# Create app directory with correct ownership
-RUN chown -R nextjs:nodejs /app
+# Copy package files
+COPY package*.json ./
 
-# Switch back to non-root user
-USER nextjs
-
-# Copy package files with correct ownership
-COPY --chown=nextjs:nodejs package*.json ./
-
-# Install all dependencies (including devDependencies for build)
+# Install dependencies
 RUN npm ci --legacy-peer-deps --include=dev
 
-# Copy application code with correct ownership
-COPY --chown=nextjs:nodejs . .
-
-# Pre-create font cache directory
-RUN mkdir -p .next/cache/google-fonts
+# Copy application code
+COPY . .
 
 # Build the application
 RUN DOCKER_ENV=true npm run build

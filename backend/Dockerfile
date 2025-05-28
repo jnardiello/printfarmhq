@@ -38,7 +38,7 @@ EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD python -c "import socket; sock = socket.socket(); sock.connect(('localhost', 8000)); sock.close()"
+    CMD python3 -c "import socket; sock = socket.socket(); sock.connect(('localhost', 8000)); sock.close()"
 
 # Run the application with migrations
 CMD ["./start.sh"]
