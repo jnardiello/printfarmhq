@@ -1,5 +1,7 @@
 "use client"
 
+// TODO: Implement proper error tracking service (e.g., Sentry) to replace console.error statements
+
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { toast } from "@/components/ui/use-toast"
 import type { Filament, FilamentPurchase, Product, Printer, Subscription, PrintJob } from "@/lib/types"
@@ -91,7 +93,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (user && currentTab && previousTab !== currentTab) {
       // Refresh filament data whenever we switch to the filaments tab, regardless of origin
       if (currentTab === "filaments") {
-        console.log("Tab changed to filaments, refreshing inventory data...")
         fetchFilaments()
         fetchPurchases()
       }
@@ -104,7 +105,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (user && document.visibilityState === 'visible' && currentTab === 'filaments') {
-        console.log("Browser tab visible again while on filaments tab, refreshing data...")
         fetchFilaments()
         fetchPurchases()
       }

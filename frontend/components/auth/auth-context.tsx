@@ -1,5 +1,7 @@
 "use client"
 
+// TODO: Implement proper error tracking service (e.g., Sentry) to replace console.error statements
+
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import type { User } from '@/lib/auth'
 

@@ -1,5 +1,7 @@
 'use client'
 
+// TODO: Implement proper error tracking service (e.g., Sentry) to replace console.error statements
+
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
