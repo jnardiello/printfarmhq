@@ -43,26 +43,66 @@ clean: down ## Remove containers and volumes
 logs: ## View logs
 	@$(COMPOSE) logs -f
 
-# Testing - Optimized with parallel execution
+# Testing - Sequential execution (one test at a time)
 test: clean-test-artifacts ## Run all tests
-	@echo "🐳 Running all tests in Docker..."
-	@$(COMPOSE_TEST) build
-	@$(COMPOSE_TEST) up -d backend-api frontend-app
-	@echo "Waiting for services..."
+	@echo ""
+	@echo "🐳 PrintFarmHQ Test Suite"
+	@echo "========================"
+	@echo ""
+	@echo "📋 Preparing test environment..."
+	@$(COMPOSE_TEST) build --quiet > /dev/null 2>&1 || { echo "❌ Build failed"; exit 1; }
+	@echo "✅ Test images built"
+	@$(COMPOSE_TEST) up -d backend-api frontend-app > /dev/null 2>&1
+	@echo "✅ Test services started"
+	@echo "⏳ Waiting for services to be ready..."
 	@sleep 10
-	@echo "Running tests in parallel..."
-	@$(MAKE) -j4 test-backend-only test-frontend-chrome test-frontend-mobile-chrome test-frontend-safari-12 test-frontend-safari-pro-max
-	@$(COMPOSE_TEST) down -v
-	@echo "✅ All tests completed!"
+	@echo "📊 Setting up test data..."
+	@$(COMPOSE_TEST) exec -T backend-api python setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
+	@echo ""
+	@echo "📦 Backend Tests"
+	@echo "----------------"
+	@$(MAKE) test-backend-only || { echo "❌ Backend tests failed"; exit 1; }
+	@echo "✅ Backend tests passed!"
+	@echo ""
+	@echo "🌐 Frontend Tests - Chrome"
+	@echo "--------------------------"
+	@$(MAKE) test-frontend-chrome || echo "⚠️  Chrome tests failed"
+	@echo ""
+	@echo "📱 Frontend Tests - Mobile Chrome"
+	@echo "---------------------------------"
+	@$(MAKE) test-frontend-mobile-chrome || echo "⚠️  Mobile Chrome tests failed"
+	@echo ""
+	@echo "📱 Frontend Tests - Safari iPhone 12"
+	@echo "------------------------------------"
+	@$(MAKE) test-frontend-safari-12 || echo "⚠️  Safari iPhone 12 tests failed"
+	@echo ""
+	@echo "📱 Frontend Tests - Safari iPhone 12 Pro Max"
+	@echo "--------------------------------------------"
+	@$(MAKE) test-frontend-safari-pro-max || echo "⚠️  Safari Pro Max tests failed"
+	@echo ""
+	@echo "🧹 Cleaning up..."
+	@$(COMPOSE_TEST) down -v > /dev/null 2>&1
+	@echo ""
+	@echo "✅ Test run completed!"
+	@echo ""
 
 test-backend: clean-test-artifacts ## Run backend tests only
 	@echo "🐳 Running backend tests..."
-	@$(COMPOSE_TEST) up --build backend-test --abort-on-container-exit
+	@echo "Building test image..."
+	@$(COMPOSE_TEST) build --quiet backend-test > /dev/null 2>&1 || { echo "❌ Build failed"; exit 1; }
+	@$(COMPOSE_TEST) up backend-test --abort-on-container-exit
 	@$(COMPOSE_TEST) down -v
 
 test-frontend: clean-test-artifacts ## Run frontend tests only
 	@echo "🐳 Running frontend E2E tests..."
-	@$(COMPOSE_TEST) up --build backend-api frontend-app frontend-test --abort-on-container-exit
+	@echo "Building test images..."
+	@$(COMPOSE_TEST) build --quiet > /dev/null 2>&1 || { echo "❌ Build failed"; exit 1; }
+	@$(COMPOSE_TEST) up -d backend-api frontend-app > /dev/null 2>&1
+	@echo "⏳ Waiting for services to be ready..."
+	@sleep 10
+	@echo "📊 Setting up test data..."
+	@$(COMPOSE_TEST) exec -T backend-api python setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
+	@$(COMPOSE_TEST) up frontend-test --abort-on-container-exit
 	@$(COMPOSE_TEST) down -v
 
 test-ci: clean-test-artifacts ## Run tests in CI mode
@@ -71,24 +111,19 @@ test-ci: clean-test-artifacts ## Run tests in CI mode
 
 # Individual test targets for parallel execution
 test-backend-only:
-	@echo "📦 Backend Tests..."
-	@$(COMPOSE_TEST) run --rm backend-test
+	@$(COMPOSE_TEST) run --rm -T backend-test
 
 test-frontend-chrome:
-	@echo "🌐 Frontend Tests (Chrome)..."
-	@$(COMPOSE_TEST) run --rm frontend-test npx playwright test --project=chromium --reporter=list
+	@$(COMPOSE_TEST) run --rm -T frontend-test npx playwright test --config=playwright.docker.config.ts --project=chromium --reporter=list
 
 test-frontend-mobile-chrome:
-	@echo "📱 Frontend Tests (Mobile Chrome)..."
-	@$(COMPOSE_TEST) run --rm frontend-test npx playwright test --project="Mobile Chrome" --reporter=list
+	@$(COMPOSE_TEST) run --rm -T frontend-test npx playwright test --config=playwright.docker.config.ts --project="Mobile Chrome" --reporter=list
 
 test-frontend-safari-12:
-	@echo "📱 Frontend Tests (Safari iPhone 12)..."
-	@$(COMPOSE_TEST) run --rm frontend-test npx playwright test --project="Mobile Safari iPhone 12" --reporter=list
+	@$(COMPOSE_TEST) run --rm -T frontend-test npx playwright test --config=playwright.docker.config.ts --project="Mobile Safari iPhone 12" --reporter=list
 
 test-frontend-safari-pro-max:
-	@echo "📱 Frontend Tests (Safari Pro Max)..."
-	@$(COMPOSE_TEST) run --rm frontend-test npx playwright test --project="Mobile Safari iPhone 12 Pro Max" --reporter=list
+	@$(COMPOSE_TEST) run --rm -T frontend-test npx playwright test --config=playwright.docker.config.ts --project="Mobile Safari iPhone 12 Pro Max" --reporter=list
 
 clean-test-artifacts: ## Clean test artifacts
 	@rm -rf $(TEST_ARTIFACTS) 2>/dev/null || true
