@@ -181,18 +181,30 @@ update_changelog() {
         echo "" >> "$temp_file"
     fi
     
+    # Add release notes
+    if [[ -n "$AUTOMATED_RELEASE" ]]; then
+        # For automated releases, add content from stdin or default
+        echo "- Complete 3D printing management platform" >> "$temp_file"
+        echo "- User authentication and management" >> "$temp_file" 
+        echo "- Printer, filament, and print job tracking" >> "$temp_file"
+        echo "- Cost calculation and analytics" >> "$temp_file"
+        echo "" >> "$temp_file"
+    fi
+    
     # Replace original file
     mv "$temp_file" "$changelog_file"
     
-    # Open changelog for editing
-    echo ""
-    print_status "Please add release notes for $new_version"
-    echo "The CHANGELOG.md file will open in your default editor."
-    echo "Add your release notes under the $new_version section, then save and close."
-    echo ""
-    read -p "Press Enter to open CHANGELOG.md..."
-    
-    ${EDITOR:-nano} "$changelog_file"
+    # Open changelog for editing (if not automated)
+    if [[ -z "$AUTOMATED_RELEASE" ]]; then
+        echo ""
+        print_status "Please add release notes for $new_version"
+        echo "The CHANGELOG.md file will open in your default editor."
+        echo "Add your release notes under the $new_version section, then save and close."
+        echo ""
+        read -p "Press Enter to open CHANGELOG.md..."
+        
+        ${EDITOR:-nano} "$changelog_file"
+    fi
     
     # Commit the changelog
     git add "$changelog_file"
