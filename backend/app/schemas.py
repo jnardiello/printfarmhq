@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional, Literal, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 
 
 class FilamentBase(BaseModel):
@@ -191,9 +191,9 @@ class UserRead(BaseModel):
 
 
 class UserCreate(BaseModel):
-    email: str
-    name: str
-    password: str
+    email: EmailStr
+    name: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8)
     is_admin: bool = False
     is_superadmin: bool = False
 
@@ -207,7 +207,7 @@ class UserUpdate(BaseModel):
 
 
 class UserLogin(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 
@@ -218,9 +218,9 @@ class AuthResponse(BaseModel):
 
 
 class SetupRequest(BaseModel):
-    email: str
-    name: str
-    password: str
+    email: EmailStr
+    name: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8)
 
 
 class SetupStatusResponse(BaseModel):

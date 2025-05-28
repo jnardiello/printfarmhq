@@ -287,33 +287,37 @@ def update_current_user(
     """Allow users to update their own profile"""
     from .auth import get_password_hash
     
+    # Re-query the user in the same session to ensure we can update it
+    user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
     update_data = user_data.model_dump(exclude_unset=True)
     
     if "email" in update_data:
         # Check if new email is already in use by another user
         existing_user = db.query(models.User).filter(
             models.User.email == update_data["email"],
-            models.User.id != current_user.id
+            models.User.id != user.id
         ).first()
         if existing_user:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
-        current_user.email = update_data["email"]
+        user.email = update_data["email"]
     
     if "name" in update_data:
-        current_user.name = update_data["name"]
+        user.name = update_data["name"]
     
     if "password" in update_data:
-        current_user.hashed_password = get_password_hash(update_data["password"])
+        user.hashed_password = get_password_hash(update_data["password"])
         # Increment token version to invalidate existing tokens
-        current_user.token_version += 1
+        user.token_version += 1
     
     db.commit()
-    # Query the user fresh from database to avoid session issues
-    updated_user = db.query(models.User).filter(models.User.id == current_user.id).first()
-    return schemas.UserRead.model_validate(updated_user)
+    db.refresh(user)
+    return schemas.UserRead.model_validate(user)
 
 
 # ---------- Filaments ---------- #
