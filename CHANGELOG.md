@@ -2,9 +2,22 @@
 
 ## v1.1.2 (2025-05-29)
 
-[0;34m[INFO][0m Generating changelog...
 - fix: Add CHANGELOG.md update to publish process
+- feat: Keep released version in docker-compose.yml for stable deployments
+- fix: Resolve all failing tests for plates architecture
+- fix: Resolve test import errors preventing publish
+- fix: Standardize button styles across tabs for consistency
+- feat: Enhance plate UI with distinct blue theme and improved visual hierarchy
+- feat: Implement comprehensive product plates architecture with G-code support
 
+## v1.1.1 (2025-05-28)
+
+- feat: Add interactive mode to publish command
+- feat: Implement enhanced publish workflow with complete automation
+
+## v1.1.0 (2025-05-28)
+
+- Major release with product plates architecture
 
 ## v1.0.12 (2025-05-28)
 
@@ -34,10 +47,4 @@
 
 ## v1.0.0 (2025-05-28)
 
-## v0.1.0 (2025-05-28)
-
-- Complete 3D printing management platform
-- User authentication and management
-- Printer, filament, and print job tracking
-- Cost calculation and analytics
-
+- Initial release

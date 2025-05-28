@@ -193,15 +193,16 @@ update_compose_files() {
     local version=$1
     print_status "Updating docker-compose files to use version $version..."
     
-    # Update docker-compose.yml
+    # Update docker-compose.yml - replace any existing version with new one
     if [[ -f "docker-compose.yml" ]]; then
-        sed -i.bak "s/VERSION:-latest/VERSION:-${version}/g" docker-compose.yml
+        # This regex matches VERSION:-anything and replaces with VERSION:-newversion
+        sed -i.bak "s/VERSION:-[^}]*/VERSION:-${version}/g" docker-compose.yml
         rm docker-compose.yml.bak
     fi
     
     # Update docker-compose.dev.yml
     if [[ -f "docker-compose.dev.yml" ]]; then
-        sed -i.bak "s/VERSION:-latest/VERSION:-${version}/g" docker-compose.dev.yml
+        sed -i.bak "s/VERSION:-[^}]*/VERSION:-${version}/g" docker-compose.dev.yml
         rm docker-compose.dev.yml.bak
     fi
     
@@ -220,7 +221,7 @@ update_compose_files_post_release() {
     # Revert docker-compose.dev.yml to latest for development
     if [[ -f "docker-compose.dev.yml" ]]; then
         print_status "Reverting docker-compose.dev.yml to use latest for development..."
-        sed -i.bak "s/VERSION:-${version}/VERSION:-latest/g" docker-compose.dev.yml
+        sed -i.bak "s/VERSION:-[^}]*/VERSION:-latest/g" docker-compose.dev.yml
         rm docker-compose.dev.yml.bak
     fi
 }
@@ -230,7 +231,8 @@ generate_changelog() {
     local from_version=$1
     local to_version=$2
     
-    print_status "Generating changelog..."
+    # Note: Don't use print_status here as it adds color codes that end up in the changelog
+    echo "Generating changelog..." >&2
     
     if [[ "$from_version" == "v0.0.0" ]]; then
         # First release, get all commits
