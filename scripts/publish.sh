@@ -125,15 +125,15 @@ select_version_increment() {
     while true; do
         read -p "Enter choice [1-3]: " choice
         case $choice in
-            1|patch)
+            1|"patch")
                 echo "patch"
                 return
                 ;;
-            2|minor)
+            2|"minor")
                 echo "minor"
                 return
                 ;;
-            3|major)
+            3|"major")
                 echo "major"
                 return
                 ;;
