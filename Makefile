@@ -118,12 +118,6 @@ REGISTRY ?= ghcr.io
 NAMESPACE ?= jnardiello/printfarmhq
 VERSION ?= latest
 
-push-images: ## Build and push multi-arch images to registry
-	@echo "📤 Building and pushing multi-architecture images..."
-	@./scripts/docker-auth.sh && \
-	PUSH=true ./scripts/docker-build-multiarch.sh && \
-	echo "✅ Images pushed successfully!"
-
 publish: ## Create new release with version tag and push to registry
 	@./scripts/publish.sh
 
