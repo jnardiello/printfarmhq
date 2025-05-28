@@ -15,12 +15,13 @@ The enhanced publish process automates the complete release workflow:
 
 ## Usage
 
-### Basic Release (Patch Version)
+### Interactive Release (Recommended)
 ```bash
 make publish
 # or
-./scripts/publish.sh patch
+./scripts/publish.sh
 ```
+This will prompt you to select the version bump type (patch/minor/major).
 
 ### Major/Minor Releases
 ```bash

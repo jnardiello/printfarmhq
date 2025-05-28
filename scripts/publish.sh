@@ -296,6 +296,39 @@ create_github_release() {
     print_success "GitHub release created: $version"
 }
 
+# Prompt user for version type
+prompt_for_version_type() {
+    echo "Select version bump type:"
+    echo "  1) Patch (x.y.Z) - Bug fixes, backwards compatible"
+    echo "  2) Minor (x.Y.0) - New features, backwards compatible" 
+    echo "  3) Major (X.0.0) - Breaking changes"
+    echo ""
+    
+    while true; do
+        read -p "Enter choice [1-3]: " -n 1 -r
+        echo
+        case $REPLY in
+            1)
+                BUMP_TYPE="patch"
+                break
+                ;;
+            2)
+                BUMP_TYPE="minor"
+                break
+                ;;
+            3)
+                BUMP_TYPE="major"
+                break
+                ;;
+            *)
+                print_error "Invalid selection. Please choose 1, 2, or 3."
+                ;;
+        esac
+    done
+    
+    print_status "Selected: $BUMP_TYPE version bump"
+}
+
 # Main release process
 main() {
     if [[ "$DRY_RUN" == "true" ]]; then
@@ -317,14 +350,17 @@ main() {
             BUMP_TYPE="${2:-patch}"
             ;;
         --help|-h)
-            echo "Usage: $0 [major|minor|patch] [--dry-run]"
-            echo "       $0 --dry-run [major|minor|patch]"
+            echo "Usage: $0                              # Interactive mode"
+            echo "       $0 [major|minor|patch]          # Direct version type"
+            echo "       $0 --dry-run [major|minor|patch] # Dry run mode"
             echo ""
             echo "Arguments:"
             echo "  major      Increment major version (X.0.0)"
             echo "  minor      Increment minor version (x.Y.0)"
-            echo "  patch      Increment patch version (x.y.Z) [default]"
+            echo "  patch      Increment patch version (x.y.Z)"
             echo "  --dry-run  Show what would happen without making changes"
+            echo ""
+            echo "Interactive mode (no arguments) will prompt for version type."
             echo ""
             echo "Environment variables:"
             echo "  REGISTRY       Docker registry (default: ghcr.io)"
@@ -334,7 +370,8 @@ main() {
             exit 0
             ;;
         "")
-            # Use default patch
+            # Prompt for version type
+            prompt_for_version_type
             ;;
         *)
             print_error "Invalid argument: $1"
