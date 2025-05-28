@@ -22,19 +22,37 @@ export interface FilamentPurchase {
 export interface FilamentUsage {
   filament_id: number
   grams_used: number
+  filament?: Filament
+}
+
+export interface PlateFilamentUsage {
+  id?: number
+  filament_id: number
+  grams_used: number
+  filament: Filament
+}
+
+export interface Plate {
+  id: number
+  name: string
+  quantity: number
+  print_time_hrs: number
+  cost: number
+  file_path?: string | null
+  gcode_path?: string | null
+  filament_usages: PlateFilamentUsage[]
 }
 
 export interface Product {
   id: number
   sku: string
   name: string
-  packaging_cost: number
   print_time_hrs: number
-  printer_profile_id: number
-  cogs: number
-  filament_usages: FilamentUsage[]
+  cop: number // Cost of Product (updated naming to match backend)
+  filament_usages?: FilamentUsage[] // Legacy - will be deprecated
+  plates?: Plate[] // New plate-based structure
   license_id?: number | null
-  model_file?: string | null
+  file_path?: string | null // Legacy - moved to plates
 }
 
 export interface Printer {
@@ -72,13 +90,25 @@ export interface FilamentRowData {
   grams_used: number | string
 }
 
+export interface PlateFilamentRowData {
+  filament_id: number | string
+  grams_used: number | string
+}
+
+export interface PlateFormData {
+  name: string
+  quantity: number | string
+  print_time_hrs: number | string
+  filament_usages: PlateFilamentRowData[]
+  gcode_file?: File | null
+}
+
 export interface ProductFormData {
   name: string
-  packaging_cost: string | number
-  print_time_hrs: string | number
-  printer_profile_id: string | number
-  license_id?: string
-  model_file_url?: string
+  license_id?: string | number
+  plates?: PlateFormData[] // New plate-based structure
+  // Legacy fields (will be deprecated)
+  filament_usages?: FilamentRowData[]
 }
 
 export interface JobProductItem {

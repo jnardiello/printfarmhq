@@ -57,7 +57,8 @@ class ProductRead(ProductBase):
     sku: str
     license_id: Optional[int] = None
     file_path: Optional[str] = None
-    filament_usages: Optional[List[FilamentUsageRead]] = None
+    filament_usages: Optional[List[FilamentUsageRead]] = None  # Legacy - will be deprecated
+    plates: Optional[List["PlateRead"]] = None  # New plate-based structure
 
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
 
@@ -68,6 +69,48 @@ class ProductUpdate(BaseModel):
     name: Optional[str] = None
     print_time_hrs: Optional[float] = Field(None, ge=0)
     license_id: Optional[int] = None
+
+
+# Plate schemas
+class PlateFilamentUsageCreate(BaseModel):
+    filament_id: int
+    grams_used: float = Field(..., gt=0)
+
+
+class PlateFilamentUsageRead(PlateFilamentUsageCreate):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    filament: FilamentRead
+
+
+class PlateBase(BaseModel):
+    name: str
+    quantity: int = Field(..., ge=1)
+    print_time_hrs: float = Field(..., ge=0)
+    file_path: Optional[str] = None
+    gcode_path: Optional[str] = None
+
+
+class PlateCreate(PlateBase):
+    filament_usages: List[PlateFilamentUsageCreate] = Field(..., min_length=1)
+
+
+class PlateRead(PlateBase):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    cost: float
+    filament_usages: List[PlateFilamentUsageRead] = []
+
+
+class PlateUpdate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[int] = Field(None, ge=1)
+    print_time_hrs: Optional[float] = Field(None, ge=0)
+    file_path: Optional[str] = None
+    gcode_path: Optional[str] = None
+    filament_usages: Optional[List[PlateFilamentUsageCreate]] = None
 
 
 class SubscriptionBase(BaseModel):

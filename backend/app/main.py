@@ -548,7 +548,10 @@ async def create_product(
 
 @app.get("/products", response_model=list[schemas.ProductRead])
 def list_products(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    products_db = db.query(models.Product).options(joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament)).all()
+    products_db = db.query(models.Product).options(
+        joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament),
+        joinedload(models.Product.plates).joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
+    ).all()
     return [schemas.ProductRead.model_validate(p) for p in products_db]
 
 
@@ -635,6 +638,292 @@ async def update_product_endpoint(
     return schemas.ProductRead.model_validate(product)
 
 
+# ---------- Plates ---------- #
+
+@app.post("/products/{product_id}/plates", response_model=schemas.PlateRead)
+async def create_plate(
+    product_id: int,
+    name: str = Form(...),
+    quantity: int = Form(...),
+    print_time_hrs: float = Form(...),
+    filament_usages_str: str = Form(..., alias="filament_usages"),
+    file: Optional[UploadFile] = File(None),
+    gcode_file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    # Verify product exists
+    product = db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Handle file upload
+    saved_file_path: Optional[str] = None
+    if file and file.filename:
+        original_filename = file.filename
+        safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
+        file_extension = os.path.splitext(original_filename)[1].lower()
+        if file_extension not in ['.stl', '.3mf']:
+            raise HTTPException(status_code=400, detail="Invalid model file type. Only STL and 3MF are allowed.")
+        unique_filename = f"plate_{safe_filename_base}_{uuid.uuid4().hex[:8]}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+        try:
+            with open(file_path, "wb") as buffer:
+                await file.seek(0)
+                shutil.copyfileobj(file.file, buffer)
+            saved_file_path = unique_filename
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not save model file: {str(e)}")
+        finally:
+            if file: await file.close()
+
+    # Handle G-code file upload
+    saved_gcode_path: Optional[str] = None
+    if gcode_file and gcode_file.filename:
+        original_gcode_filename = gcode_file.filename
+        safe_gcode_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_gcode_filename)[0])
+        gcode_extension = os.path.splitext(original_gcode_filename)[1].lower()
+        if gcode_extension not in ['.gcode', '.g', '.gc']:
+            raise HTTPException(status_code=400, detail="Invalid G-code file type. Only .gcode, .g, and .gc are allowed.")
+        unique_gcode_filename = f"gcode_{safe_gcode_base}_{uuid.uuid4().hex[:8]}{gcode_extension}"
+        gcode_file_path = os.path.join(UPLOAD_DIRECTORY, unique_gcode_filename)
+        try:
+            with open(gcode_file_path, "wb") as buffer:
+                await gcode_file.seek(0)
+                shutil.copyfileobj(gcode_file.file, buffer)
+            saved_gcode_path = unique_gcode_filename
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not save G-code file: {str(e)}")
+        finally:
+            if gcode_file: await gcode_file.close()
+
+    # Parse filament usages
+    try:
+        filament_usages_data = json.loads(filament_usages_str)
+        if not isinstance(filament_usages_data, list):
+            raise ValueError("filament_usages should be a list")
+        for usage_item in filament_usages_data:
+            if not all(k in usage_item for k in ["filament_id", "grams_used"]):
+                raise ValueError("Each filament usage must have filament_id and grams_used")
+    except (json.JSONDecodeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid filament_usages format: {str(e)}")
+
+    # Create plate
+    db_plate = models.Plate(
+        product_id=product_id,
+        name=name,
+        quantity=quantity,
+        print_time_hrs=print_time_hrs,
+        file_path=saved_file_path,
+        gcode_path=saved_gcode_path
+    )
+    db.add(db_plate)
+    db.flush()
+
+    # Create filament usages for the plate
+    usages_to_add = []
+    for fu_data in filament_usages_data:
+        filament = db.get(models.Filament, fu_data["filament_id"])
+        if not filament:
+            raise HTTPException(status_code=400, detail=f"Filament with id {fu_data['filament_id']} not found")
+        usages_to_add.append(models.PlateFilamentUsage(
+            plate_id=db_plate.id,
+            filament_id=filament.id,
+            grams_used=fu_data["grams_used"]
+        ))
+    
+    db.add_all(usages_to_add)
+    db.commit()
+    db.refresh(db_plate)
+    
+    return schemas.PlateRead.model_validate(db_plate)
+
+
+@app.get("/products/{product_id}/plates", response_model=list[schemas.PlateRead])
+def list_plates(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    product = db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    plates = db.query(models.Plate).filter(models.Plate.product_id == product_id)\
+               .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
+               .all()
+    
+    return [schemas.PlateRead.model_validate(plate) for plate in plates]
+
+
+@app.get("/plates/{plate_id}", response_model=schemas.PlateRead)
+def get_plate(
+    plate_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    plate = db.query(models.Plate).filter(models.Plate.id == plate_id)\
+              .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
+              .first()
+    
+    if not plate:
+        raise HTTPException(status_code=404, detail="Plate not found")
+    
+    return schemas.PlateRead.model_validate(plate)
+
+
+@app.patch("/plates/{plate_id}", response_model=schemas.PlateRead)
+async def update_plate(
+    plate_id: int,
+    name: Optional[str] = Form(None),
+    quantity: Optional[int] = Form(None),
+    print_time_hrs: Optional[float] = Form(None),
+    filament_usages_str: Optional[str] = Form(None, alias="filament_usages"),
+    file: Optional[UploadFile] = File(None),
+    gcode_file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    plate = db.get(models.Plate, plate_id)
+    if not plate:
+        raise HTTPException(status_code=404, detail="Plate not found")
+
+    # Update basic fields
+    if name is not None:
+        plate.name = name
+    if quantity is not None:
+        plate.quantity = quantity
+    if print_time_hrs is not None:
+        plate.print_time_hrs = print_time_hrs
+
+    # Handle file update
+    if file and file.filename:
+        # Remove old file if exists
+        if plate.file_path:
+            old_file_path = os.path.join(UPLOAD_DIRECTORY, plate.file_path)
+            if os.path.exists(old_file_path):
+                try:
+                    os.remove(old_file_path)
+                except OSError as e:
+                    logger.error(f"Error deleting old plate file {old_file_path}: {e}")
+        
+        # Save new file
+        original_filename = file.filename
+        safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
+        file_extension = os.path.splitext(original_filename)[1].lower()
+        if file_extension not in ['.stl', '.3mf']:
+            raise HTTPException(status_code=400, detail="Invalid model file type.")
+        unique_filename = f"plate_{safe_filename_base}_{uuid.uuid4().hex[:8]}{file_extension}"
+        new_file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+        try:
+            with open(new_file_path, "wb") as buffer:
+                await file.seek(0)
+                shutil.copyfileobj(file.file, buffer)
+            plate.file_path = unique_filename
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not save new model file: {str(e)}")
+        finally:
+            await file.close()
+
+    # Handle G-code file update
+    if gcode_file and gcode_file.filename:
+        # Remove old G-code file if exists
+        if plate.gcode_path:
+            old_gcode_path = os.path.join(UPLOAD_DIRECTORY, plate.gcode_path)
+            if os.path.exists(old_gcode_path):
+                try:
+                    os.remove(old_gcode_path)
+                except OSError as e:
+                    logger.error(f"Error deleting old G-code file {old_gcode_path}: {e}")
+        
+        # Save new G-code file
+        original_gcode_filename = gcode_file.filename
+        safe_gcode_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_gcode_filename)[0])
+        gcode_extension = os.path.splitext(original_gcode_filename)[1].lower()
+        if gcode_extension not in ['.gcode', '.g', '.gc']:
+            raise HTTPException(status_code=400, detail="Invalid G-code file type. Only .gcode, .g, and .gc are allowed.")
+        unique_gcode_filename = f"gcode_{safe_gcode_base}_{uuid.uuid4().hex[:8]}{gcode_extension}"
+        new_gcode_path = os.path.join(UPLOAD_DIRECTORY, unique_gcode_filename)
+        try:
+            with open(new_gcode_path, "wb") as buffer:
+                await gcode_file.seek(0)
+                shutil.copyfileobj(gcode_file.file, buffer)
+            plate.gcode_path = unique_gcode_filename
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Could not save new G-code file: {str(e)}")
+        finally:
+            await gcode_file.close()
+
+    # Update filament usages if provided
+    if filament_usages_str is not None:
+        try:
+            filament_usages_data = json.loads(filament_usages_str)
+            if not isinstance(filament_usages_data, list):
+                raise ValueError("filament_usages should be a list")
+            for usage_item in filament_usages_data:
+                if not all(k in usage_item for k in ["filament_id", "grams_used"]):
+                    raise ValueError("Each filament usage needs filament_id and grams_used")
+            
+            # Delete existing usages and create new ones
+            db.query(models.PlateFilamentUsage).filter(models.PlateFilamentUsage.plate_id == plate_id).delete()
+            new_usages = []
+            for fu_data in filament_usages_data:
+                filament = db.get(models.Filament, fu_data["filament_id"])
+                if not filament:
+                    raise HTTPException(status_code=400, detail=f"Filament id {fu_data['filament_id']} not found.")
+                new_usages.append(models.PlateFilamentUsage(
+                    plate_id=plate.id,
+                    filament_id=filament.id,
+                    grams_used=fu_data["grams_used"]
+                ))
+            db.add_all(new_usages)
+        except (json.JSONDecodeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=f"Invalid filament_usages: {str(e)}")
+
+    db.commit()
+    db.refresh(plate)
+    return schemas.PlateRead.model_validate(plate)
+
+
+@app.delete("/plates/{plate_id}")
+def delete_plate(
+    plate_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    plate = db.get(models.Plate, plate_id)
+    if not plate:
+        raise HTTPException(status_code=404, detail="Plate not found")
+    
+    # Check if this is the last plate for the product
+    plate_count = db.query(models.Plate).filter(models.Plate.product_id == plate.product_id).count()
+    if plate_count <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last plate. Products must have at least one plate.")
+    
+    # Remove model file if exists
+    if plate.file_path:
+        file_path = os.path.join(UPLOAD_DIRECTORY, plate.file_path)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError as e:
+                logger.error(f"Error deleting plate file {file_path}: {e}")
+    
+    # Remove G-code file if exists
+    if plate.gcode_path:
+        gcode_path = os.path.join(UPLOAD_DIRECTORY, plate.gcode_path)
+        if os.path.exists(gcode_path):
+            try:
+                os.remove(gcode_path)
+            except OSError as e:
+                logger.error(f"Error deleting G-code file {gcode_path}: {e}")
+    
+    db.delete(plate)
+    db.commit()
+    
+    return {"message": "Plate deleted successfully"}
+
+
 # ---------- Subscriptions ---------- #
 
 @app.post("/subscriptions", response_model=schemas.SubscriptionRead)
@@ -709,14 +998,31 @@ def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
             continue
 
         cost_of_filaments_for_one_product_unit = 0.0
-        if not product_model.filament_usages:
-             logger.debug(f"Product {product_model.name} has no filament usages defined.")
-        for filament_usage in product_model.filament_usages:
-            if filament_usage.filament:
-                individual_filament_cost = (filament_usage.grams_used / 1000.0) * filament_usage.filament.price_per_kg
-                cost_of_filaments_for_one_product_unit += individual_filament_cost
-            else:
-                logger.warning(f"Filament details not found for filament_usage id {filament_usage.id} in product {product_model.name}")
+        
+        # Use plate-based calculation if plates exist, otherwise fall back to legacy
+        if product_model.plates:
+            # New plate-based calculation
+            for plate in product_model.plates:
+                plate_cost = 0.0
+                for plate_filament_usage in plate.filament_usages:
+                    if plate_filament_usage.filament:
+                        individual_filament_cost = (plate_filament_usage.grams_used / 1000.0) * plate_filament_usage.filament.price_per_kg
+                        plate_cost += individual_filament_cost
+                    else:
+                        logger.warning(f"Filament details not found for plate filament usage id {plate_filament_usage.id} in plate {plate.name}")
+                
+                # Multiply by plate quantity
+                cost_of_filaments_for_one_product_unit += plate_cost * plate.quantity
+        else:
+            # Legacy calculation for backward compatibility
+            if not product_model.filament_usages:
+                logger.debug(f"Product {product_model.name} has no filament usages or plates defined.")
+            for filament_usage in product_model.filament_usages:
+                if filament_usage.filament:
+                    individual_filament_cost = (filament_usage.grams_used / 1000.0) * filament_usage.filament.price_per_kg
+                    cost_of_filaments_for_one_product_unit += individual_filament_cost
+                else:
+                    logger.warning(f"Filament details not found for filament_usage id {filament_usage.id} in product {product_model.name}")
             
         line_filament_cost = cost_of_filaments_for_one_product_unit * job_product_item.items_qty
         current_filament_cost_total += line_filament_cost

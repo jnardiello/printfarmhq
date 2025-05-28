@@ -560,3 +560,122 @@ class TestPricingCalculations:
         # Test markup calculation (profit/cost)
         markup_percentage = (profit / cost_of_goods) * 100  # 61.29%
         assert abs(markup_percentage - 61.29) < 0.1
+
+    def test_print_job_cogs_with_plates(self):
+        """Test COGS calculation for products with plate-based structure."""
+        db = Mock(spec=Session)
+        
+        # Create mock filaments
+        class MockFilament:
+            def __init__(self, id, price_per_kg):
+                self.id = id
+                self.price_per_kg = price_per_kg
+                self.color = "Test"
+                self.material = "PLA"
+        
+        filament1 = MockFilament(1, 25.00)
+        filament2 = MockFilament(2, 30.00)
+        
+        # Create mock plate filament usages
+        plate_usage1 = Mock()
+        plate_usage1.grams_used = 50.0
+        plate_usage1.filament = filament1
+        
+        plate_usage2 = Mock()
+        plate_usage2.grams_used = 30.0
+        plate_usage2.filament = filament2
+        
+        # Create mock plates
+        plate1 = Mock()
+        plate1.quantity = 1
+        plate1.filament_usages = [plate_usage1]  # 50g * €25/kg = €1.25
+        
+        plate2 = Mock()
+        plate2.quantity = 2
+        plate2.filament_usages = [plate_usage2]  # 30g * €30/kg * 2 = €1.80
+        
+        # Create mock product with plates
+        product = Mock()
+        product.id = 1
+        product.name = "Plate-based Product"
+        product.plates = [plate1, plate2]
+        product.filament_usages = []  # No legacy usages
+        
+        # Mock job product
+        job_product = Mock()
+        job_product.product_id = 1
+        job_product.items_qty = 3  # 3 units
+        
+        # Mock db.get to return the product
+        db.get.return_value = product
+        
+        # Mock print job (no printers for simplicity)
+        print_job = Mock()
+        print_job.products = [job_product]
+        print_job.printers = []
+        
+        total_cogs = _calculate_print_job_cogs(print_job, db)
+        
+        # Expected calculations:
+        # Plate 1: 50g/1000 * €25 * 1 = €1.25 per product
+        # Plate 2: 30g/1000 * €30 * 2 = €1.80 per product
+        # Total per product: €3.05
+        # 3 products: €3.05 * 3 = €9.15
+        
+        expected_plate1_cost = (50.0 / 1000) * 25.00 * 1
+        expected_plate2_cost = (30.0 / 1000) * 30.00 * 2
+        expected_per_product = expected_plate1_cost + expected_plate2_cost
+        expected_total = expected_per_product * 3
+        
+        assert abs(total_cogs - expected_total) < 0.01
+        assert abs(total_cogs - 9.15) < 0.01
+
+    def test_print_job_cogs_fallback_to_legacy(self):
+        """Test COGS calculation falls back to legacy when no plates exist."""
+        db = Mock(spec=Session)
+        
+        # Create mock filament
+        class MockFilament:
+            def __init__(self):
+                self.id = 1
+                self.price_per_kg = 25.00
+                self.color = "Red"
+                self.material = "PLA"
+        
+        filament = MockFilament()
+        
+        # Create mock legacy filament usage
+        usage = Mock()
+        usage.grams_used = 50.0
+        usage.filament = filament
+        
+        # Create mock product with NO plates (legacy mode)
+        product = Mock()
+        product.id = 1
+        product.name = "Legacy Product"
+        product.plates = []  # No plates
+        product.filament_usages = [usage]  # Legacy usages
+        
+        # Mock job product
+        job_product = Mock()
+        job_product.product_id = 1
+        job_product.items_qty = 2
+        
+        # Mock db.get to return the product
+        db.get.return_value = product
+        
+        # Mock print job
+        print_job = Mock()
+        print_job.products = [job_product]
+        print_job.printers = []
+        
+        total_cogs = _calculate_print_job_cogs(print_job, db)
+        
+        # Expected calculations (legacy):
+        # 50g/1000 * €25 = €1.25 per product
+        # 2 products: €1.25 * 2 = €2.50
+        
+        expected_legacy_cost = (50.0 / 1000) * 25.00 * 2
+        
+        assert abs(total_cogs - expected_legacy_cost) < 0.01
+        assert abs(total_cogs - 2.50) < 0.01

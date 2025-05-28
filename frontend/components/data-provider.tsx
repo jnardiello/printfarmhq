@@ -4,7 +4,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { toast } from "@/components/ui/use-toast"
-import type { Filament, FilamentPurchase, Product, Printer, Subscription, PrintJob } from "@/lib/types"
+import type { Filament, FilamentPurchase, Product, Printer, Subscription, PrintJob, Plate } from "@/lib/types"
 import { api, apiUpload, API_BASE_URL } from "@/lib/api"
 import { useAuth } from "@/components/auth/auth-context"
 
@@ -27,9 +27,14 @@ interface DataContextType {
   deleteFilament: (id: number) => Promise<void>
   addPurchase: (purchase: Partial<FilamentPurchase>) => Promise<void>
   deletePurchase: (id: number) => Promise<void>
-  addProduct: (productData: FormData) => Promise<void>
+  addProduct: (productData: FormData) => Promise<Product>
   updateProduct: (productId: number, productData: FormData) => Promise<Product | void>
   deleteProduct: (id: number) => Promise<void>
+  // Plate management functions
+  fetchPlates: (productId: number) => Promise<Plate[]>
+  addPlate: (productId: number, plateData: FormData) => Promise<void>
+  updatePlate: (plateId: number, plateData: FormData) => Promise<void>
+  deletePlate: (plateId: number) => Promise<void>
   addPrinter: (printer: Partial<Printer>) => Promise<void>
   deletePrinter: (id: number) => Promise<void>
   addSubscription: (subscription: Partial<Subscription>) => Promise<void>
@@ -310,14 +315,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  const addProduct = async (productData: FormData) => {
+  const addProduct = async (productData: FormData): Promise<Product> => {
     try {
-      await apiUpload<Product>("/products", productData)
+      const newProduct = await apiUpload<Product>("/products", productData)
       await fetchProducts()
       toast({
         title: "Success",
         description: "Product added successfully (including file if provided and backend supports it)",
       })
+      return newProduct
     } catch (error) {
       console.error("Error adding product:", error)
       toast({
@@ -325,6 +331,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+      throw error
     }
   }
 
@@ -372,6 +379,80 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.error("Error deleting product:", error)
       toast({
         title: "Error Deleting Product",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Plate management functions
+  const fetchPlates = async (productId: number): Promise<Plate[]> => {
+    try {
+      const plates = await api<Plate[]>(`/products/${productId}/plates`)
+      return plates
+    } catch (error) {
+      console.error("Error fetching plates:", error)
+      toast({
+        title: "Error Fetching Plates",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+      return []
+    }
+  }
+
+  const addPlate = async (productId: number, plateData: FormData) => {
+    try {
+      await apiUpload<Plate>(`/products/${productId}/plates`, plateData)
+      await fetchProducts() // Refresh products to get updated plates
+      toast({
+        title: "Success",
+        description: "Plate added successfully",
+      })
+    } catch (error) {
+      console.error("Error adding plate:", error)
+      toast({
+        title: "Error Adding Plate",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  const updatePlate = async (plateId: number, plateData: FormData) => {
+    try {
+      await apiUpload<Plate>(`/plates/${plateId}`, plateData, {
+        method: "PATCH",
+      })
+      await fetchProducts() // Refresh products to get updated plates
+      toast({
+        title: "Success",
+        description: "Plate updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating plate:", error)
+      toast({
+        title: "Error Updating Plate",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  const deletePlate = async (plateId: number) => {
+    try {
+      await api(`/plates/${plateId}`, {
+        method: "DELETE",
+      })
+      await fetchProducts() // Refresh products to get updated plates
+      toast({
+        title: "Success",
+        description: "Plate deleted successfully",
+      })
+    } catch (error) {
+      console.error("Error deleting plate:", error)
+      toast({
+        title: "Error Deleting Plate",
         description: (error as Error).message,
         variant: "destructive",
       })
@@ -540,6 +621,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         addProduct,
         updateProduct,
         deleteProduct,
+        fetchPlates,
+        addPlate,
+        updatePlate,
+        deletePlate,
         addPrinter,
         deletePrinter,
         addSubscription,
