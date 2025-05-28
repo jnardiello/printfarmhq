@@ -241,6 +241,32 @@ generate_changelog() {
     fi
 }
 
+# Update CHANGELOG.md file
+update_changelog_file() {
+    local version=$1
+    local changelog="$2"
+    local date=$(date +%Y-%m-%d)
+    
+    print_status "Updating CHANGELOG.md..."
+    
+    # Create a temporary file with the new entry
+    {
+        echo "# Changelog"
+        echo ""
+        echo "## $version ($date)"
+        echo ""
+        echo "$changelog"
+        echo ""
+        # Append the rest of the existing changelog, skipping the first line
+        tail -n +2 CHANGELOG.md 2>/dev/null || true
+    } > CHANGELOG.md.tmp
+    
+    # Replace the original file
+    mv CHANGELOG.md.tmp CHANGELOG.md
+    
+    print_success "Updated CHANGELOG.md"
+}
+
 # Build and push Docker images
 build_and_push_images() {
     local version=$1
@@ -413,9 +439,15 @@ main() {
     # Update docker-compose files
     update_compose_files "$NEW_VERSION"
     
-    # Commit version bump
-    git add docker-compose*.yml
-    git commit -m "chore: bump version to $NEW_VERSION"
+    # Generate changelog early for CHANGELOG.md
+    CHANGELOG=$(generate_changelog "$LAST_VERSION" "$NEW_VERSION")
+    
+    # Update CHANGELOG.md file
+    update_changelog_file "$NEW_VERSION" "$CHANGELOG"
+    
+    # Commit version bump and changelog
+    git add docker-compose*.yml CHANGELOG.md
+    git commit -m "chore: bump version to $NEW_VERSION and update changelog"
     
     # Create and push tag
     print_status "Creating git tag $NEW_VERSION..."
@@ -428,10 +460,7 @@ main() {
     # Build and push Docker images
     build_and_push_images "$NEW_VERSION"
     
-    # Generate changelog
-    CHANGELOG=$(generate_changelog "$LAST_VERSION" "$NEW_VERSION")
-    
-    # Create GitHub release
+    # Create GitHub release (changelog was already generated)
     create_github_release "$NEW_VERSION" "$CHANGELOG"
     
     # Update compose files for post-release
