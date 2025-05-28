@@ -1,6 +1,6 @@
 # Frontend E2E Test Runner Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
+ARG NAMESPACE=jnardiello/printfarmhq
 ARG BASE_TAG=latest
 
 # Use regular frontend base and install Playwright on top
@@ -45,6 +45,13 @@ RUN DOCKER_ENV=true npm run build
 
 # Create directories for test artifacts
 RUN mkdir -p test-results playwright-report
+
+# Add labels for GitHub Container Registry
+LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.description="PrintFarmHQ Frontend Test - E2E testing environment"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.title="PrintFarmHQ Frontend Test"
+LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 
 # Set environment variables
 ENV CI=true \

@@ -1,6 +1,6 @@
 # Backend Application Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
+ARG NAMESPACE=jnardiello/printfarmhq
 ARG BASE_TAG=latest
 
 FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-backend-base:${BASE_TAG} AS backend-app
@@ -22,6 +22,13 @@ COPY --chown=appuser:appuser . .
 
 # Set environment variables
 ENV PYTHONPATH=/app
+
+# Add labels for GitHub Container Registry
+LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.description="PrintFarmHQ Backend - Complete 3D printing management platform"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.title="PrintFarmHQ Backend"
+LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 
 # Expose port
 EXPOSE 8000

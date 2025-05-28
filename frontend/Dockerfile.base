@@ -15,8 +15,13 @@ RUN addgroup -g 1001 -S nodejs && \
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
 
+# Add labels for GitHub Container Registry
+LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.description="PrintFarmHQ Frontend Base - Node.js runtime and dependencies"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.title="PrintFarmHQ Frontend Base"
+LABEL org.opencontainers.image.vendor="PrintFarmHQ"
+
 # Label for versioning
 ARG VERSION=latest
-LABEL version=$VERSION \
-      description="PrintFarmHQ Frontend Base Image" \
-      maintainer="PrintFarmHQ"
+LABEL version=$VERSION

@@ -115,7 +115,7 @@ restore-db: ## Restore database from backup
 
 # Docker Registry (for maintainers)
 REGISTRY ?= ghcr.io
-NAMESPACE ?= $(shell whoami | tr '[:upper:]' '[:lower:]')
+NAMESPACE ?= jnardiello/printfarmhq
 VERSION ?= latest
 
 push-images: ## Build and push multi-arch images to registry

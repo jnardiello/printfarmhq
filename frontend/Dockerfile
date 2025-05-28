@@ -1,6 +1,6 @@
 # Frontend Application Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
+ARG NAMESPACE=jnardiello/printfarmhq
 ARG BASE_TAG=latest
 
 # Build stage
@@ -39,6 +39,13 @@ USER nextjs
 
 # Expose port
 EXPOSE 3000
+
+# Add labels for GitHub Container Registry
+LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.description="PrintFarmHQ Frontend - Complete 3D printing management platform"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.title="PrintFarmHQ Frontend"
+LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 
 # Set environment variables
 ENV PORT=3000 \

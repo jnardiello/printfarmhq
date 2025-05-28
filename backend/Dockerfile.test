@@ -1,6 +1,6 @@
 # Backend Test Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
+ARG NAMESPACE=jnardiello/printfarmhq
 ARG BASE_TAG=latest
 
 FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-backend-base:${BASE_TAG} AS backend-test
@@ -34,6 +34,13 @@ COPY --chown=appuser:appuser . .
 USER root
 RUN mkdir -p /app/test_data && chown -R appuser:appuser /app/test_data
 USER appuser
+
+# Add labels for GitHub Container Registry
+LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.description="PrintFarmHQ Backend Test - Testing environment for backend"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.title="PrintFarmHQ Backend Test"
+LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 
 # Set environment variables
 ENV PYTHONPATH=/app \

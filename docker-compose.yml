@@ -5,9 +5,9 @@ services:
       dockerfile: Dockerfile
       args:
         REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-jnardiello}
+        NAMESPACE: ${NAMESPACE:-jnardiello/printfarmhq}
         BASE_TAG: ${VERSION:-latest}
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-backend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello/printfarmhq}/printfarmhq-backend:${VERSION:-latest}
     container_name: printfarmhq-backend
     volumes:
       - ./backend:/app
@@ -23,11 +23,11 @@ services:
       dockerfile: Dockerfile
       args:
         REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-jnardiello}
+        NAMESPACE: ${NAMESPACE:-jnardiello/printfarmhq}
         BASE_TAG: ${VERSION:-latest}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
         DOCKER_ENV: "true"
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-frontend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello/printfarmhq}/printfarmhq-frontend:${VERSION:-latest}
     container_name: printfarmhq-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
