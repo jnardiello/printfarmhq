@@ -229,46 +229,6 @@ create_tag_and_push() {
     print_success "Git tag $new_version created and pushed"
 }
 
-# Run database migrations
-run_migrations() {
-    local new_version=$1
-    
-    print_status "Running database migrations for $new_version..."
-    
-    # Check if backend directory exists
-    if [[ ! -d "backend" ]]; then
-        print_warning "Backend directory not found, skipping migrations"
-        return 0
-    fi
-    
-    # Check if migration script exists
-    if [[ ! -f "backend/app/migrate.py" ]]; then
-        print_warning "Migration script not found, skipping migrations"
-        return 0
-    fi
-    
-    # Run migrations
-    cd backend
-    
-    # First, do a dry run to show what would be applied
-    print_status "Checking for pending migrations..."
-    if python3 app/migrate.py migrate --dry-run; then
-        print_status "Running migrations..."
-        if python3 app/migrate.py migrate; then
-            print_success "Database migrations completed successfully"
-        else
-            print_error "Database migration failed"
-            cd ..
-            exit 1
-        fi
-    else
-        print_error "Migration dry run failed"
-        cd ..
-        exit 1
-    fi
-    
-    cd ..
-}
 
 # Build and push Docker images
 build_and_push_images() {
@@ -323,7 +283,6 @@ main() {
     
     # Execute release steps
     update_changelog "$new_version"
-    run_migrations "$new_version"
     create_tag_and_push "$new_version"
     build_and_push_images "$new_version"
     
@@ -333,7 +292,6 @@ main() {
     print_status "Release summary:"
     echo "  • Version: $new_version"
     echo "  • Git tag: $new_version"
-    echo "  • Database migrations: Applied"
     echo "  • Docker images: ghcr.io/jnardiello/printfarmhq:backend-$new_version, frontend-$new_version, etc."
     echo "  • CHANGELOG: Updated with release notes"
     echo ""
