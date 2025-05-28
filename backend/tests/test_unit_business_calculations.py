@@ -35,11 +35,21 @@ class TestCOGSCalculations:
         mock_filament_usage.grams_used = 50.0  # 50g
         mock_filament_usage.filament = mock_filament
         
+        # Create mock plate with filament usage
+        mock_plate = Mock()
+        mock_plate.id = 1
+        mock_plate.name = "Main Plate"
+        mock_plate.quantity = 1
+        mock_plate.filament_usages = [mock_filament_usage]
+        mock_plate.cost = (50.0 * 25.00 / 1000)  # Pre-calculate plate cost
+        
         # Create mock product
         mock_product = Mock()
         mock_product.id = 1
         mock_product.name = "Test Widget"
-        mock_product.filament_usages = [mock_filament_usage]
+        mock_product.plates = [mock_plate]
+        mock_product.filament_usages = []  # Empty for new structure
+        mock_product.cop = mock_plate.cost  # Set COP to match plate cost
         
         # Create mock print job product
         mock_job_product = Mock()
@@ -131,11 +141,20 @@ class TestCOGSCalculations:
         usage2.grams_used = 25.0
         usage2.filament = filament2
         
-        # Mock product with multiple filament usages
+        # Mock product with plates structure
+        plate = Mock()
+        plate.id = 1
+        plate.name = "Main Plate"
+        plate.quantity = 1
+        plate.filament_usages = [usage1, usage2]
+        plate.cost = (75.0 * 24.00 / 1000) + (25.0 * 35.00 / 1000)  # Pre-calculate plate cost
+        
         product = Mock()
         product.id = 1
         product.name = "Multi-Material Part"
-        product.filament_usages = [usage1, usage2]
+        product.plates = [plate]
+        product.filament_usages = []  # Empty for new structure
+        product.cop = plate.cost  # Set COP to match plate cost
         
         # Mock job product
         job_product = Mock()
@@ -209,10 +228,20 @@ class TestCOGSCalculations:
         usage.grams_used = 100.0
         usage.filament = filament
         
+        # Create mock plate
+        plate = Mock()
+        plate.id = 1
+        plate.name = "Main Plate"
+        plate.quantity = 1
+        plate.filament_usages = [usage]
+        plate.cost = (100.0 * 30.00 / 1000)  # Pre-calculate plate cost
+        
         product = Mock()
         product.id = 1
         product.name = "Multi-Printer Part"
-        product.filament_usages = [usage]
+        product.plates = [plate]
+        product.filament_usages = []  # Empty for new structure
+        product.cop = plate.cost  # Set COP to match plate cost
         
         job_product = Mock()
         job_product.product_id = 1
@@ -301,10 +330,20 @@ class TestCOGSCalculations:
         usage.grams_used = 30.0
         usage.filament = filament
         
+        # Create mock plate
+        plate = Mock()
+        plate.id = 1
+        plate.name = "Main Plate"
+        plate.quantity = 1
+        plate.filament_usages = [usage]
+        plate.cost = (30.0 * 20.00 / 1000)  # Pre-calculate plate cost
+        
         product = Mock()
         product.id = 1
         product.name = "Zero Package Part"
-        product.filament_usages = [usage]
+        product.plates = [plate]
+        product.filament_usages = []  # Empty for new structure
+        product.cop = plate.cost  # Set COP to match plate cost
         
         job_product = Mock()
         job_product.product_id = 1
@@ -589,10 +628,12 @@ class TestPricingCalculations:
         plate1 = Mock()
         plate1.quantity = 1
         plate1.filament_usages = [plate_usage1]  # 50g * €25/kg = €1.25
+        plate1.cost = (50.0 * 25.00 / 1000) * 1  # €1.25
         
         plate2 = Mock()
         plate2.quantity = 2
         plate2.filament_usages = [plate_usage2]  # 30g * €30/kg * 2 = €1.80
+        plate2.cost = (30.0 * 30.00 / 1000) * 2  # €1.80
         
         # Create mock product with plates
         product = Mock()
@@ -600,6 +641,7 @@ class TestPricingCalculations:
         product.name = "Plate-based Product"
         product.plates = [plate1, plate2]
         product.filament_usages = []  # No legacy usages
+        product.cop = plate1.cost + plate2.cost  # Total cost of all plates
         
         # Mock job product
         job_product = Mock()
@@ -613,6 +655,7 @@ class TestPricingCalculations:
         print_job = Mock()
         print_job.products = [job_product]
         print_job.printers = []
+        print_job.packaging_cost_eur = 0.0
         
         total_cogs = _calculate_print_job_cogs(print_job, db)
         
@@ -655,6 +698,7 @@ class TestPricingCalculations:
         product.name = "Legacy Product"
         product.plates = []  # No plates
         product.filament_usages = [usage]  # Legacy usages
+        product.cop = (50.0 * 25.00 / 1000)  # Legacy COP calculation
         
         # Mock job product
         job_product = Mock()
@@ -668,6 +712,7 @@ class TestPricingCalculations:
         print_job = Mock()
         print_job.products = [job_product]
         print_job.printers = []
+        print_job.packaging_cost_eur = 0.0
         
         total_cogs = _calculate_print_job_cogs(print_job, db)
         

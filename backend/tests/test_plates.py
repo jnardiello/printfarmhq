@@ -105,17 +105,20 @@ class TestPlateAPI:
                 plate_data = {
                     "name": "Base",
                     "quantity": "1",
+                    "print_time_hrs": "1.5",
                     "filament_usages": json.dumps([
                         {"filament_id": filament.id, "grams_used": 50.0}
                     ])
                 }
                 files = {"file": ("test.stl", file, "application/octet-stream")}
                 
+                # For multipart requests, we need to pass the auth token differently
+                headers = {"Authorization": auth_headers["Authorization"]}
                 response = client.post(
                     f"/products/{product.id}/plates", 
                     data=plate_data,
                     files=files,
-                    headers=auth_headers
+                    headers=headers
                 )
                 assert response.status_code == 200
                 
@@ -327,6 +330,7 @@ class TestValidation:
         plate_data = {
             "name": "Base",
             "quantity": "1",
+            "print_time_hrs": "1.5",
             "filament_usages": json.dumps([
                 {"filament_id": 99999, "grams_used": 50.0}  # Non-existent filament
             ])
@@ -345,6 +349,7 @@ class TestValidation:
         plate_data = {
             "name": "Base",
             "quantity": "1",
+            "print_time_hrs": "1.5",
             "filament_usages": json.dumps([
                 {"filament_id": filament.id, "grams_used": 50.0}
             ])
@@ -374,17 +379,20 @@ class TestValidation:
                 plate_data = {
                     "name": "Base",
                     "quantity": "1",
+                    "print_time_hrs": "1.5",
                     "filament_usages": json.dumps([
                         {"filament_id": filament.id, "grams_used": 50.0}
                     ])
                 }
                 files = {"file": ("test.txt", file, "text/plain")}
                 
+                # For multipart requests, we need to pass the auth token differently
+                headers = {"Authorization": auth_headers["Authorization"]}
                 response = client.post(
                     f"/products/{product.id}/plates", 
                     data=plate_data,
                     files=files,
-                    headers=auth_headers
+                    headers=headers
                 )
                 assert response.status_code == 400
                 assert "Invalid model file type" in response.json()["detail"]
