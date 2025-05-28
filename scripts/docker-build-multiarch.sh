@@ -64,13 +64,8 @@ build_multiarch_image() {
     local build_cmd="docker buildx build"
     build_cmd="$build_cmd --platform=${PLATFORMS}"
     build_cmd="$build_cmd -f ${dockerfile}"
-    build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
+    build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
     build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
-    
-    # Add version tag if not latest
-    if [ "$VERSION" != "latest" ]; then
-        build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
-    fi
     
     # Add build args if provided
     if [ -n "$build_args" ]; then
@@ -122,14 +117,14 @@ main() {
         "backend/Dockerfile" \
         "backend" \
         "backend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     # Build backend test image
     build_multiarch_image \
         "backend/Dockerfile.test" \
         "backend" \
         "backend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     # Build frontend base image
     build_multiarch_image \
@@ -143,14 +138,14 @@ main() {
         "frontend/Dockerfile" \
         "frontend" \
         "frontend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     # Build frontend test image
     build_multiarch_image \
         "frontend/Dockerfile.test" \
         "frontend" \
         "frontend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     print_status "Multi-architecture build process completed successfully!"
 }

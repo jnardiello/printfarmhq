@@ -3,7 +3,7 @@ ARG REGISTRY=ghcr.io
 ARG NAMESPACE=jnardiello
 ARG BASE_TAG=latest
 
-FROM printfarmhq:backend-base-latest AS backend-app
+FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:backend-base-${BASE_TAG} AS backend-app
 
 # Switch to root to install packages
 USER root

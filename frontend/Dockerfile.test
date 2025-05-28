@@ -4,7 +4,7 @@ ARG NAMESPACE=jnardiello
 ARG BASE_TAG=latest
 
 # Use regular frontend base and install Playwright on top
-FROM printfarmhq:frontend-base-latest AS frontend-test
+FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-base-${BASE_TAG} AS frontend-test
 
 # Install system dependencies needed for Playwright
 USER root

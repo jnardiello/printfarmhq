@@ -291,7 +291,7 @@ main() {
     print_status "Release summary:"
     echo "  • Version: $new_version"
     echo "  • Git tag: $new_version"
-    echo "  • Docker images: ghcr.io/jnardiello/printfarmhq:*-$new_version"
+    echo "  • Docker images: ghcr.io/jnardiello/printfarmhq:backend-$new_version, frontend-$new_version, etc."
     echo "  • CHANGELOG: Updated with release notes"
     echo ""
 }

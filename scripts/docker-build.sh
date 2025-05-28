@@ -35,33 +35,18 @@ build_image() {
 
     print_status "Building printfarmhq:${component_name}..."
     
-    # Build the image with local name first
+    # Build the image directly with registry format
     docker build \
         -f "${dockerfile}" \
-        -t "printfarmhq:${component_name}" \
-        -t "printfarmhq:${component_name}-latest" \
+        -t "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}" \
+        -t "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest" \
         ${build_args} \
         "${context}"
     
-    # Tag for registry - single repo with component as tag
-    docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
-    docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
-    
-    # Always tag with version (even if it's 'latest')
-    if [ "$VERSION" != "latest" ]; then
-        docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
-        # Also create a local version tag
-        docker tag "printfarmhq:${component_name}" "printfarmhq:${component_name}-${VERSION}"
-    fi
-    
     if [ "$PUSH" == "true" ]; then
         print_status "Pushing printfarmhq:${component_name}..."
-        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
         docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
-        
-        if [ "$VERSION" != "latest" ]; then
-            docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
-        fi
     fi
 }
 
@@ -85,14 +70,14 @@ main() {
         "backend/Dockerfile" \
         "backend" \
         "backend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     # Build backend test image
     build_image \
         "backend/Dockerfile.test" \
         "backend" \
         "backend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     # Build frontend base image
     build_image \
@@ -106,14 +91,14 @@ main() {
         "frontend/Dockerfile" \
         "frontend" \
         "frontend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     # Build frontend test image
     build_image \
         "frontend/Dockerfile.test" \
         "frontend" \
         "frontend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
+        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
     
     print_status "Build process completed successfully!"
 }
