@@ -113,6 +113,23 @@ restore-db: ## Restore database from backup
 	@sqlite3 $(DB_PATH) ".read $(DUMP_FILE)"
 	@echo "✅ Database restored from $(DUMP_FILE)"
 
+# Database migrations
+migrate: ## Run database migrations
+	@echo "🔄 Running database migrations..."
+	@cd backend && python app/migrate.py migrate
+
+migrate-list: ## List all migrations and their status
+	@echo "📋 Migration status:"
+	@cd backend && python app/migrate.py list
+
+migrate-create: ## Create a new migration (usage: make migrate-create DESC="description")
+	@if [ -z "$(DESC)" ]; then \
+		echo "Usage: make migrate-create DESC=\"your migration description\""; \
+		exit 1; \
+	fi
+	@echo "📝 Creating new migration..."
+	@cd backend && python app/migrate.py create --description "$(DESC)"
+
 # Docker Registry (for maintainers)
 REGISTRY ?= ghcr.io
 NAMESPACE ?= jnardiello

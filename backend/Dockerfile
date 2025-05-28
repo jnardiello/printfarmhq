@@ -20,6 +20,9 @@ RUN pip install --user --no-cache-dir -r requirements.txt
 # Copy application code
 COPY --chown=appuser:appuser . .
 
+# Make startup script executable
+RUN chmod +x start.sh
+
 # Set environment variables
 ENV PYTHONPATH=/app
 
@@ -37,5 +40,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD python -c "import socket; sock = socket.socket(); sock.connect(('localhost', 8000)); sock.close()"
 
-# Run the application
-CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# Run the application with migrations
+CMD ["./start.sh"]
