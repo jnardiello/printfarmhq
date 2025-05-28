@@ -7,7 +7,7 @@ services:
         REGISTRY: ${REGISTRY:-ghcr.io}
         NAMESPACE: ${NAMESPACE:-jnardiello}
         BASE_TAG: ${VERSION:-latest}
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-backend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend
     container_name: printfarmhq-backend
     volumes:
       - ./backend:/app
@@ -27,7 +27,7 @@ services:
         BASE_TAG: ${VERSION:-latest}
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
         DOCKER_ENV: "true"
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-frontend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:frontend
     container_name: printfarmhq-frontend
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000

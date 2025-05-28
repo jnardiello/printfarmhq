@@ -30,27 +30,36 @@ print_warning() {
 build_image() {
     local dockerfile=$1
     local context=$2
-    local image_name=$3
+    local component_name=$3
     local build_args=$4
 
-    print_status "Building ${image_name}:${VERSION}..."
+    print_status "Building printfarmhq:${component_name}..."
     
     # Build the image with local name first
     docker build \
         -f "${dockerfile}" \
-        -t "${image_name}:${VERSION}" \
-        -t "${image_name}:latest" \
+        -t "printfarmhq:${component_name}" \
+        -t "printfarmhq:${component_name}-latest" \
         ${build_args} \
         "${context}"
     
-    # Tag for registry
-    docker tag "${image_name}:${VERSION}" "${REGISTRY}/${NAMESPACE}/${image_name}:${VERSION}"
-    docker tag "${image_name}:latest" "${REGISTRY}/${NAMESPACE}/${image_name}:latest"
+    # Tag for registry - single repo with component as tag
+    docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
+    docker tag "printfarmhq:${component_name}-latest" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
+    
+    # Also tag with version if not latest
+    if [ "$VERSION" != "latest" ]; then
+        docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
+    fi
     
     if [ "$PUSH" == "true" ]; then
-        print_status "Pushing ${image_name}:${VERSION}..."
-        docker push "${REGISTRY}/${NAMESPACE}/${image_name}:${VERSION}"
-        docker push "${REGISTRY}/${NAMESPACE}/${image_name}:latest"
+        print_status "Pushing printfarmhq:${component_name}..."
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
+        
+        if [ "$VERSION" != "latest" ]; then
+            docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
+        fi
     fi
 }
 
@@ -66,42 +75,42 @@ main() {
     build_image \
         "backend/Dockerfile.base" \
         "backend" \
-        "printfarmhq-backend-base" \
+        "backend-base" \
         ""
     
     # Build backend app image
     build_image \
         "backend/Dockerfile" \
         "backend" \
-        "printfarmhq-backend" \
+        "backend" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     # Build backend test image
     build_image \
         "backend/Dockerfile.test" \
         "backend" \
-        "printfarmhq-backend-test" \
+        "backend-test" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     # Build frontend base image
     build_image \
         "frontend/Dockerfile.base" \
         "frontend" \
-        "printfarmhq-frontend-base" \
+        "frontend-base" \
         ""
     
     # Build frontend app image
     build_image \
         "frontend/Dockerfile" \
         "frontend" \
-        "printfarmhq-frontend" \
+        "frontend" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     # Build frontend test image
     build_image \
         "frontend/Dockerfile.test" \
         "frontend" \
-        "printfarmhq-frontend-test" \
+        "frontend-test" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     print_status "Build process completed successfully!"

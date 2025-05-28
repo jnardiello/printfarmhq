@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   backend-api:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-backend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -23,7 +23,7 @@ services:
       - test-network
 
   frontend-app:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-frontend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:frontend
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -49,7 +49,7 @@ services:
       - test-network
 
   backend-test:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-backend-test:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend-test
     build:
       context: ./backend
       dockerfile: Dockerfile.test
@@ -73,7 +73,7 @@ services:
       - test-network
 
   frontend-test:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-frontend-test:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:frontend-test
     build:
       context: ./frontend
       dockerfile: Dockerfile.test

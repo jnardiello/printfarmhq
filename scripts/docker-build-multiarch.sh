@@ -55,17 +55,22 @@ setup_builder() {
 build_multiarch_image() {
     local dockerfile=$1
     local context=$2
-    local image_name=$3
+    local component_name=$3
     local build_args=$4
     
-    print_status "Building ${image_name}:${VERSION} for platforms: ${PLATFORMS}..."
+    print_status "Building printfarmhq:${component_name} for platforms: ${PLATFORMS}..."
     
     # Prepare build command
     local build_cmd="docker buildx build"
     build_cmd="$build_cmd --platform=${PLATFORMS}"
     build_cmd="$build_cmd -f ${dockerfile}"
-    build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/${image_name}:${VERSION}"
-    build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/${image_name}:latest"
+    build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
+    build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
+    
+    # Add version tag if not latest
+    if [ "$VERSION" != "latest" ]; then
+        build_cmd="$build_cmd -t ${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
+    fi
     
     # Add build args if provided
     if [ -n "$build_args" ]; then
@@ -109,42 +114,42 @@ main() {
     build_multiarch_image \
         "backend/Dockerfile.base" \
         "backend" \
-        "printfarmhq-backend-base" \
+        "backend-base" \
         ""
     
     # Build backend app image
     build_multiarch_image \
         "backend/Dockerfile" \
         "backend" \
-        "printfarmhq-backend" \
+        "backend" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     # Build backend test image
     build_multiarch_image \
         "backend/Dockerfile.test" \
         "backend" \
-        "printfarmhq-backend-test" \
+        "backend-test" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     # Build frontend base image
     build_multiarch_image \
         "frontend/Dockerfile.base" \
         "frontend" \
-        "printfarmhq-frontend-base" \
+        "frontend-base" \
         ""
     
     # Build frontend app image
     build_multiarch_image \
         "frontend/Dockerfile" \
         "frontend" \
-        "printfarmhq-frontend" \
+        "frontend" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     # Build frontend test image
     build_multiarch_image \
         "frontend/Dockerfile.test" \
         "frontend" \
-        "printfarmhq-frontend-test" \
+        "frontend-test" \
         "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=${VERSION}"
     
     print_status "Multi-architecture build process completed successfully!"

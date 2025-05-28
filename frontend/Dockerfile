@@ -4,7 +4,7 @@ ARG NAMESPACE=jnardiello
 ARG BASE_TAG=latest
 
 # Build stage
-FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-frontend-base:${BASE_TAG} AS builder
+FROM printfarmhq:frontend-base AS builder
 
 # Copy package files
 COPY package.json package-lock.json* ./
@@ -26,7 +26,7 @@ RUN mkdir -p .next/cache/google-fonts
 RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} npm run build
 
 # Production stage
-FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-frontend-base:${BASE_TAG} AS runner
+FROM printfarmhq:frontend-base AS runner
 
 # Copy built application from builder
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
