@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import uuid
+import logging
 
 from . import models, schemas
 from .database import Base, engine, SessionLocal
@@ -32,6 +33,9 @@ from .database import _ensure_columns
 _ensure_columns()
 
 # Remove environment-based superadmin creation - now handled via setup endpoint
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 UPLOAD_DIRECTORY = os.path.join(os.getcwd(), "uploads/product_models")
 # Ensure upload directory exists
@@ -589,7 +593,7 @@ async def update_product_endpoint(
             old_file_path = os.path.join(UPLOAD_DIRECTORY, product.file_path)
             if os.path.exists(old_file_path):
                 try: os.remove(old_file_path)
-                except OSError as e: print(f"Error deleting old model file {old_file_path}: {e}")
+                except OSError as e: logger.error(f"Error deleting old model file {old_file_path}: {e}")
         
         original_filename = file.filename
         safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
@@ -695,71 +699,55 @@ def _generate_sku(name: str, db: Session) -> str:
 # Helper function to calculate COGS for a Print Job
 def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
     total_cogs_for_job = 0.0
-    print(f"--- Calculating COGS for Job ID: {job.id} (Name: {job.name}) ---")
 
     # 1. Filament Cost Component
     current_filament_cost_total = 0.0
-    print(f"Job has {len(job.products)} product line(s).")
     for job_product_item in job.products:
         product_model = db.get(models.Product, job_product_item.product_id)
         if not product_model:
-            print(f"  WARNING: Product ID {job_product_item.product_id} not found for job product item ID {job_product_item.id}")
+            logger.warning(f"Product ID {job_product_item.product_id} not found for job product item ID {job_product_item.id}")
             continue
-        print(f"  Processing Product Line: {product_model.name} (ID: {product_model.id}), Items Qty: {job_product_item.items_qty}")
 
         cost_of_filaments_for_one_product_unit = 0.0
         if not product_model.filament_usages:
-             print(f"    Product {product_model.name} has no filament usages defined.")
+             logger.debug(f"Product {product_model.name} has no filament usages defined.")
         for filament_usage in product_model.filament_usages:
             if filament_usage.filament:
                 individual_filament_cost = (filament_usage.grams_used / 1000.0) * filament_usage.filament.price_per_kg
                 cost_of_filaments_for_one_product_unit += individual_filament_cost
-                print(f"    Filament Type ID {filament_usage.filament.id} ({filament_usage.filament.color} {filament_usage.filament.material}): {filament_usage.grams_used}g @ €{filament_usage.filament.price_per_kg:.2f}/kg = €{individual_filament_cost:.4f}")
             else:
-                print(f"    WARNING: Filament details not found for filament_usage id {filament_usage.id} in product {product_model.name}")
+                logger.warning(f"Filament details not found for filament_usage id {filament_usage.id} in product {product_model.name}")
             
-        print(f"    Total filament cost per unit for {product_model.name} = €{cost_of_filaments_for_one_product_unit:.4f}")
         line_filament_cost = cost_of_filaments_for_one_product_unit * job_product_item.items_qty
         current_filament_cost_total += line_filament_cost
-        print(f"    Subtotal Filament Cost for this product line ({job_product_item.items_qty} items): €{line_filament_cost:.4f}")
     
     total_cogs_for_job += current_filament_cost_total
-    print(f"Running Total after Filaments: €{total_cogs_for_job:.4f}")
 
     # 2. Printer Cost Component
     current_printer_cost_total = 0.0
-    print(f"Job has {len(job.printers)} printer line(s).")
     for job_printer_item in job.printers:
         printer_profile_model = db.get(models.PrinterProfile, job_printer_item.printer_profile_id)
         if not printer_profile_model:
-            print(f"  WARNING: Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
+            logger.warning(f"Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
             continue
-        print(f"  Processing Printer Line: {printer_profile_model.name} (ID: {printer_profile_model.id}), Printers Qty: {job_printer_item.printers_qty}, Hours Each: {job_printer_item.hours_each}")
         
         if printer_profile_model.expected_life_hours == 0:
-            print(f"    WARNING: Printer Profile {printer_profile_model.name} has 0 expected life hours. Cannot calculate cost.")
+            logger.warning(f"Printer Profile {printer_profile_model.name} has 0 expected life hours. Cannot calculate cost.")
             continue
         
         cost_per_hour_for_this_printer_type = printer_profile_model.price_eur / printer_profile_model.expected_life_hours
-        print(f"    Printer {printer_profile_model.name}: Cost per hour = €{cost_per_hour_for_this_printer_type:.4f} (Price: €{printer_profile_model.price_eur:.2f} / Life: {printer_profile_model.expected_life_hours}hrs)")
         cost_for_this_printer_line = cost_per_hour_for_this_printer_type * \
                                      job_printer_item.hours_each * \
                                      job_printer_item.printers_qty
         current_printer_cost_total += cost_for_this_printer_line
-        print(f"    Subtotal Printer Cost for this printer line: €{cost_for_this_printer_line:.4f}")
 
     total_cogs_for_job += current_printer_cost_total
-    print(f"Running Total after Printers: €{total_cogs_for_job:.4f}")
 
     # 3. Packaging Cost Component
     packaging_c = job.packaging_cost_eur or 0.0
     total_cogs_for_job += packaging_c
-    print(f"Packaging Cost for Job: €{packaging_c:.2f}")
-    print(f"Total COGS before final rounding: €{total_cogs_for_job:.4f}")
     
     final_cogs = round(total_cogs_for_job, 2)
-    print(f"Final Calculated COGS (rounded): €{final_cogs:.2f}")
-    print(f"--- End COGS Calculation for Job ID: {job.id} ---")
     return final_cogs
 
 

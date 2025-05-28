@@ -100,8 +100,6 @@ def _ensure_columns():
             # Recreate indexes
             conn.execute(text("CREATE INDEX ix_products_id ON products (id)"))
             conn.execute(text("CREATE UNIQUE INDEX ix_products_sku ON products (sku)"))
-            
-            print("Migrated products table: removed model_file column, kept file_path")
 
 # _ensure_columns will be called after tables are created 
 
