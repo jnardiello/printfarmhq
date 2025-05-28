@@ -113,7 +113,7 @@ test.describe('Dashboard Navigation', () => {
     expect(await dashboardPage.isUserMenuOpen()).toBe(true);
 
     // Verify menu contains expected items (matching actual implementation)
-    await expect(page.locator('text=Test Admin')).toBeVisible(); // User name
+    await expect(page.locator('text=Admin User')).toBeVisible(); // User name
     await expect(page.locator('text=admin@printfarmhq.com')).toBeVisible(); // User email
     await expect(page.locator('text=Log out')).toBeVisible(); // Logout option
   });
