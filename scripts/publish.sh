@@ -96,7 +96,7 @@ pre_flight_checks() {
     fi
     
     # Check if we're on the main branch
-    local current_branch=$(git branch --show-current)
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
     if [[ "$current_branch" != "main" && "$current_branch" != "master" ]]; then
         print_error "Not on main/master branch. Current branch: $current_branch"
         exit 1
@@ -211,7 +211,7 @@ create_tag_and_push() {
     git tag -a "$new_version" -m "Release $new_version"
     
     # Push commits and tags
-    git push origin "$(git branch --show-current)"
+    git push origin "$(git rev-parse --abbrev-ref HEAD)"
     git push origin "$new_version"
     
     print_success "Git tag $new_version created and pushed"
