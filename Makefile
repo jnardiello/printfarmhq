@@ -130,6 +130,22 @@ migrate-create: ## Create a new migration (usage: make migrate-create DESC="desc
 	@echo "📝 Creating new migration..."
 	@cd backend && python app/migrate.py create --description "$(DESC)"
 
+migrate-revert: ## Revert last migration (usage: make migrate-revert [COUNT=N])
+	@echo "🔄 Reverting migration(s)..."
+	@cd backend && python app/migrate.py revert --count $(or $(COUNT),1)
+
+migrate-revert-to: ## Revert to specific version (usage: make migrate-revert-to VERSION=YYYYMMDD_HHMMSS)
+	@if [ -z "$(VERSION)" ]; then \
+		echo "Usage: make migrate-revert-to VERSION=YYYYMMDD_HHMMSS"; \
+		exit 1; \
+	fi
+	@echo "🔄 Reverting to version $(VERSION)..."
+	@cd backend && python app/migrate.py revert-to --version "$(VERSION)"
+
+migrate-dry-run: ## Show pending migrations without applying them
+	@echo "🔍 Checking pending migrations (dry run)..."
+	@cd backend && python app/migrate.py migrate --dry-run
+
 # Docker Registry (for maintainers)
 REGISTRY ?= ghcr.io
 NAMESPACE ?= jnardiello
