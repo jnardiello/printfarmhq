@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.1.3 (2025-05-29)
+
+- fix: Update publish script to handle existing versions in docker-compose.yml
+
+
 ## v1.1.2 (2025-05-29)
 
 - fix: Add CHANGELOG.md update to publish process
