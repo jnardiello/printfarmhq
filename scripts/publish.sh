@@ -9,6 +9,18 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
+# Configuration
+REGISTRY="${REGISTRY:-ghcr.io}"
+NAMESPACE="${NAMESPACE:-jnardiello}"
+DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
+BUMP_TYPE="${BUMP_TYPE:-patch}"
+DRY_RUN="${DRY_RUN:-false}"
+
+# Global variables
+ROLLBACK_COMMIT=""
+NEW_VERSION=""
+LAST_VERSION=""
+
 # Print colored status messages
 print_status() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -25,6 +37,47 @@ print_warning() {
 print_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
+
+print_dry_run() {
+    echo -e "${YELLOW}[DRY RUN]${NC} $1"
+}
+
+# Execute command with dry-run support
+execute() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        print_dry_run "Would execute: $*"
+    else
+        "$@"
+    fi
+}
+
+# Rollback function
+rollback() {
+    print_error "Release failed. Rolling back changes..."
+    
+    if [[ -n "$NEW_VERSION" ]]; then
+        # Delete local tag
+        git tag -d "$NEW_VERSION" 2>/dev/null || true
+        
+        # Delete remote tag
+        git push origin ":refs/tags/$NEW_VERSION" 2>/dev/null || true
+        
+        # Reset to rollback point
+        if [[ -n "$ROLLBACK_COMMIT" ]]; then
+            git reset --hard "$ROLLBACK_COMMIT"
+            git push --force-with-lease origin $(git branch --show-current) 2>/dev/null || true
+        fi
+        
+        # Delete GitHub release if created
+        gh release delete "$NEW_VERSION" --yes 2>/dev/null || true
+    fi
+    
+    print_error "Rollback complete"
+    exit 1
+}
+
+# Set trap for rollback on error
+trap rollback ERR
 
 # Get current version from git tags
 get_current_version() {
@@ -88,6 +141,21 @@ pre_flight_checks() {
         exit 1
     fi
     
+    # Check current branch
+    local current_branch=$(git rev-parse --abbrev-ref HEAD)
+    if [[ "$current_branch" != "$DEFAULT_BRANCH" ]]; then
+        print_warning "Currently on branch '$current_branch', not '$DEFAULT_BRANCH'"
+        print_warning "This is typically only safe for testing purposes"
+        read -p "Do you want to proceed anyway? (y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            print_error "Release cancelled. Switch to $DEFAULT_BRANCH branch first."
+            exit 1
+        fi
+        # Update DEFAULT_BRANCH to current for this run
+        DEFAULT_BRANCH="$current_branch"
+    fi
+    
     # Check if working directory is clean
     if [[ -n $(git status --porcelain) ]]; then
         print_error "Working directory is not clean. Please commit or stash your changes."
@@ -95,206 +163,262 @@ pre_flight_checks() {
         exit 1
     fi
     
-    # Check if we're on the main branch
-    local current_branch=$(git rev-parse --abbrev-ref HEAD)
-    if [[ "$current_branch" != "main" && "$current_branch" != "master" ]]; then
-        print_error "Not on main/master branch. Current branch: $current_branch"
+    # Pull latest changes
+    print_status "Pulling latest changes..."
+    git pull origin "$current_branch"
+    
+    # Check for required tools
+    if ! command -v gh &> /dev/null; then
+        print_error "GitHub CLI (gh) is required but not installed"
         exit 1
     fi
     
-    # Pull latest changes
-    print_status "Pulling latest changes from origin..."
-    git pull origin "$current_branch"
+    # Check GitHub authentication
+    if ! gh auth status &> /dev/null; then
+        print_error "GitHub CLI not authenticated. Run 'gh auth login'"
+        exit 1
+    fi
+    
+    # Check Docker
+    if ! command -v docker &> /dev/null; then
+        print_error "Docker is required but not installed"
+        exit 1
+    fi
     
     print_success "Pre-flight checks passed"
 }
 
-# Interactive version selection
-select_version_increment() {
-    local current_version=$(get_current_version)
+# Update docker-compose files with new version
+update_compose_files() {
+    local version=$1
+    print_status "Updating docker-compose files to use version $version..."
     
-    echo ""
-    print_status "Current version: $current_version"
-    echo ""
-    echo "Select release type:"
-    echo "  1) patch - Bug fixes and small improvements"
-    echo "  2) minor - New features, backwards compatible"
-    echo "  3) major - Breaking changes"
-    echo ""
+    # Update docker-compose.yml
+    if [[ -f "docker-compose.yml" ]]; then
+        sed -i.bak "s/VERSION:-latest/VERSION:-${version}/g" docker-compose.yml
+        rm docker-compose.yml.bak
+    fi
     
-    while true; do
-        read -p "Enter choice [1-3]: " choice
-        case "$choice" in
-            1)
-                SELECTED_INCREMENT="patch"
-                return
-                ;;
-            2)
-                SELECTED_INCREMENT="minor"
-                return
-                ;;
-            3)
-                SELECTED_INCREMENT="major"
-                return
-                ;;
-            *)
-                print_warning "Invalid choice. Please enter 1, 2, or 3."
-                ;;
-        esac
-    done
+    # Update docker-compose.dev.yml
+    if [[ -f "docker-compose.dev.yml" ]]; then
+        sed -i.bak "s/VERSION:-latest/VERSION:-${version}/g" docker-compose.dev.yml
+        rm docker-compose.dev.yml.bak
+    fi
+    
+    print_success "Updated docker-compose files"
 }
 
-# Update CHANGELOG
-update_changelog() {
-    local new_version=$1
-    local changelog_file="CHANGELOG.md"
-    local date=$(date +%Y-%m-%d)
+# Revert docker-compose files back to latest
+revert_compose_files() {
+    local version=$1
+    print_status "Reverting docker-compose files back to latest..."
     
-    print_status "Updating CHANGELOG.md..."
-    
-    # Create CHANGELOG.md if it doesn't exist
-    if [[ ! -f "$changelog_file" ]]; then
-        echo "# Changelog" > "$changelog_file"
-        echo "" >> "$changelog_file"
-        echo "All notable changes to this project will be documented in this file." >> "$changelog_file"
-        echo "" >> "$changelog_file"
+    # Revert docker-compose.yml
+    if [[ -f "docker-compose.yml" ]]; then
+        sed -i.bak "s/VERSION:-${version}/VERSION:-latest/g" docker-compose.yml
+        rm docker-compose.yml.bak
     fi
     
-    # Create temporary file for new changelog content
-    local temp_file=$(mktemp)
-    
-    # Read existing changelog
-    local found_first_version=false
-    while IFS= read -r line; do
-        if echo "$line" | grep -q "^## v[0-9]" && [[ "$found_first_version" == false ]]; then
-            # Insert new version before the first existing version
-            echo "## $new_version ($date)" >> "$temp_file"
-            echo "" >> "$temp_file"
-            found_first_version=true
-        fi
-        echo "$line" >> "$temp_file"
-    done < "$changelog_file"
-    
-    # If no existing versions found, add the new version at the end
-    if [[ "$found_first_version" == false ]]; then
-        echo "## $new_version ($date)" >> "$temp_file"
-        echo "" >> "$temp_file"
+    # Revert docker-compose.dev.yml
+    if [[ -f "docker-compose.dev.yml" ]]; then
+        sed -i.bak "s/VERSION:-${version}/VERSION:-latest/g" docker-compose.dev.yml
+        rm docker-compose.dev.yml.bak
     fi
-    
-    # Add release notes
-    if [[ -n "$AUTOMATED_RELEASE" ]]; then
-        # For automated releases, add content from stdin or default
-        echo "- Complete 3D printing management platform" >> "$temp_file"
-        echo "- User authentication and management" >> "$temp_file" 
-        echo "- Printer, filament, and print job tracking" >> "$temp_file"
-        echo "- Cost calculation and analytics" >> "$temp_file"
-        echo "" >> "$temp_file"
-    fi
-    
-    # Replace original file
-    mv "$temp_file" "$changelog_file"
-    
-    # Open changelog for editing (if not automated)
-    if [[ -z "$AUTOMATED_RELEASE" ]]; then
-        echo ""
-        print_status "Please add release notes for $new_version"
-        echo "The CHANGELOG.md file will open in your default editor."
-        echo "Add your release notes under the $new_version section, then save and close."
-        echo ""
-        read -p "Press Enter to open CHANGELOG.md..."
-        
-        ${EDITOR:-nano} "$changelog_file"
-    fi
-    
-    # Commit the changelog
-    git add "$changelog_file"
-    git commit -m "Update CHANGELOG for $new_version"
-    
-    print_success "CHANGELOG.md updated and committed"
 }
 
-# Create git tag and push
-create_tag_and_push() {
-    local new_version=$1
+# Generate changelog from commits
+generate_changelog() {
+    local from_version=$1
+    local to_version=$2
     
-    print_status "Creating git tag and pushing..."
+    print_status "Generating changelog..."
     
-    # Create annotated tag
-    git tag -a "$new_version" -m "Release $new_version"
-    
-    # Push commits and tags
-    git push origin "$(git rev-parse --abbrev-ref HEAD)"
-    git push origin "$new_version"
-    
-    print_success "Git tag $new_version created and pushed"
+    if [[ "$from_version" == "v0.0.0" ]]; then
+        # First release, get all commits
+        git log --pretty=format:"- %s" --no-merges --reverse
+    else
+        # Get commits since last version
+        git log "${from_version}..HEAD" --pretty=format:"- %s" --no-merges --reverse
+    fi
 }
-
 
 # Build and push Docker images
 build_and_push_images() {
-    local new_version=$1
+    local version=$1
+    print_status "Building and pushing Docker images for version $version..."
     
-    print_status "Building and pushing Docker images..."
+    # Build backend image
+    print_status "Building backend image..."
+    docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" \
+        --build-arg REGISTRY="${REGISTRY}" \
+        --build-arg NAMESPACE="${NAMESPACE}" \
+        --build-arg BASE_TAG="latest" \
+        ./backend
     
-    # Set version for Docker builds
-    export VERSION="$new_version"
+    # Build frontend image
+    print_status "Building frontend image..."
+    docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" \
+        --build-arg REGISTRY="${REGISTRY}" \
+        --build-arg NAMESPACE="${NAMESPACE}" \
+        --build-arg BASE_TAG="latest" \
+        ./frontend
     
-    # Authenticate to registry
-    ./scripts/docker-auth.sh
+    # Push images
+    print_status "Pushing images to registry..."
+    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}"
+    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}"
     
-    # Build and push multi-architecture images
-    PUSH=true ./scripts/docker-build-multiarch.sh
+    # Tag and push as latest
+    docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" \
+        "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-latest"
+    docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" \
+        "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-latest"
     
-    print_success "Docker images built and pushed with tag $new_version"
+    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-latest"
+    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-latest"
+    
+    print_success "Docker images built and pushed successfully"
 }
 
-# Main function
+# Create GitHub release
+create_github_release() {
+    local version=$1
+    local changelog="$2"
+    
+    print_status "Creating GitHub release for $version..."
+    
+    # Create release
+    gh release create "$version" \
+        --title "Release $version" \
+        --notes "$changelog" \
+        --latest
+    
+    print_success "GitHub release created: $version"
+}
+
+# Main release process
 main() {
-    echo "🚀 PrintFarmHQ Release Publisher"
-    echo "================================="
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "🧪 PrintFarmHQ Release Publisher (DRY RUN)"
+        echo "==========================================="
+    else
+        echo "🚀 PrintFarmHQ Release Publisher"
+        echo "================================"
+    fi
     echo ""
+    
+    # Parse arguments
+    case "${1:-}" in
+        major|minor|patch)
+            BUMP_TYPE="$1"
+            ;;
+        --dry-run)
+            DRY_RUN="true"
+            BUMP_TYPE="${2:-patch}"
+            ;;
+        --help|-h)
+            echo "Usage: $0 [major|minor|patch] [--dry-run]"
+            echo "       $0 --dry-run [major|minor|patch]"
+            echo ""
+            echo "Arguments:"
+            echo "  major      Increment major version (X.0.0)"
+            echo "  minor      Increment minor version (x.Y.0)"
+            echo "  patch      Increment patch version (x.y.Z) [default]"
+            echo "  --dry-run  Show what would happen without making changes"
+            echo ""
+            echo "Environment variables:"
+            echo "  REGISTRY       Docker registry (default: ghcr.io)"
+            echo "  NAMESPACE      Registry namespace (default: jnardiello)"
+            echo "  DEFAULT_BRANCH Default branch name (default: main)"
+            echo "  DRY_RUN        Set to 'true' for dry run mode"
+            exit 0
+            ;;
+        "")
+            # Use default patch
+            ;;
+        *)
+            print_error "Invalid argument: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+    
+    # Store current commit for rollback
+    ROLLBACK_COMMIT=$(git rev-parse HEAD)
     
     # Run pre-flight checks
     pre_flight_checks
     
-    # Get current version and select increment
-    local current_version=$(get_current_version)
-    select_version_increment
-    local increment_type="$SELECTED_INCREMENT"
-    local new_version
-    new_version=$(calculate_new_version "$increment_type" "$current_version")
+    # Get current version and calculate new version
+    LAST_VERSION=$(get_current_version)
+    NEW_VERSION=$(calculate_new_version "$BUMP_TYPE" "$LAST_VERSION")
     
     echo ""
-    print_status "Releasing: $current_version → $new_version"
+    print_status "Current version: $LAST_VERSION"
+    print_status "New version: $NEW_VERSION ($BUMP_TYPE bump)"
     echo ""
     
-    # Confirm before proceeding
-    read -p "Continue with release? [y/N]: " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        print_warning "Release cancelled"
+    # Confirm with user
+    read -p "Do you want to proceed with release $NEW_VERSION? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_warning "Release cancelled by user"
         exit 0
     fi
     
-    # Check if tag already exists
-    if git tag -l | grep -q "^$new_version$"; then
-        print_error "Tag $new_version already exists"
-        exit 1
+    # Run tests before proceeding
+    print_status "Running tests..."
+    if command -v make >/dev/null 2>&1 && grep -q "test-ci" Makefile; then
+        make test-ci
+    else
+        print_warning "No test-ci target found, skipping tests"
     fi
     
-    # Execute release steps
-    update_changelog "$new_version"
-    create_tag_and_push "$new_version"
-    build_and_push_images "$new_version"
+    # Update docker-compose files
+    update_compose_files "$NEW_VERSION"
     
+    # Commit version bump
+    git add docker-compose*.yml
+    git commit -m "chore: bump version to $NEW_VERSION"
+    
+    # Create and push tag
+    print_status "Creating git tag $NEW_VERSION..."
+    git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+    
+    print_status "Pushing commits and tag to origin..."
+    git push origin "$DEFAULT_BRANCH"
+    git push origin "$NEW_VERSION"
+    
+    # Build and push Docker images
+    build_and_push_images "$NEW_VERSION"
+    
+    # Generate changelog
+    CHANGELOG=$(generate_changelog "$LAST_VERSION" "$NEW_VERSION")
+    
+    # Create GitHub release
+    create_github_release "$NEW_VERSION" "$CHANGELOG"
+    
+    # Revert compose files back to latest for development
+    revert_compose_files "$NEW_VERSION"
+    git add docker-compose*.yml
+    git commit -m "chore: revert docker-compose files to use latest for development"
+    git push origin "$DEFAULT_BRANCH"
+    
+    # Success message
     echo ""
-    print_success "🎉 Release $new_version completed successfully!"
+    print_success "Release $NEW_VERSION published successfully! 🎉"
     echo ""
-    print_status "Release summary:"
-    echo "  • Version: $new_version"
-    echo "  • Git tag: $new_version"
-    echo "  • Docker images: ghcr.io/jnardiello/printfarmhq:backend-$new_version, frontend-$new_version, etc."
-    echo "  • CHANGELOG: Updated with release notes"
+    echo "Summary:"
+    echo "  • Version: $NEW_VERSION"
+    echo "  • Docker Images: ${REGISTRY}/${NAMESPACE}/printfarmhq:*-${NEW_VERSION}"
+    echo "  • GitHub Release: https://github.com/${NAMESPACE}/printfarmhq/releases/tag/${NEW_VERSION}"
     echo ""
+    echo "Users can now run:"
+    echo "  VERSION=${NEW_VERSION} make up"
+    echo ""
+    
+    # Disable trap on successful completion
+    trap - ERR
 }
 
 # Run main function

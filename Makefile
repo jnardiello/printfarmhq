@@ -186,6 +186,21 @@ REGISTRY ?= ghcr.io
 NAMESPACE ?= jnardiello
 VERSION ?= latest
 
-publish: ## Create new release with version tag and push to registry
-	@./scripts/publish.sh
+publish: ## Create new release with version tag and push to registry (patch version)
+	@./scripts/publish.sh patch
+
+publish-major: ## Create major release (X.0.0)
+	@./scripts/publish.sh major
+
+publish-minor: ## Create minor release (x.Y.0)
+	@./scripts/publish.sh minor
+
+publish-patch: ## Create patch release (x.y.Z) [same as publish]
+	@./scripts/publish.sh patch
+
+publish-help: ## Show publish script help
+	@./scripts/publish.sh --help
+
+publish-dry-run: ## Test publish process without making changes
+	@./scripts/publish.sh --dry-run
 
