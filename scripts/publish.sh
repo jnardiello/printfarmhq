@@ -126,15 +126,15 @@ select_version_increment() {
         read -p "Enter choice [1-3]: " choice
         case "$choice" in
             1)
-                echo "patch"
+                SELECTED_INCREMENT="patch"
                 return
                 ;;
             2)
-                echo "minor"
+                SELECTED_INCREMENT="minor"
                 return
                 ;;
             3)
-                echo "major"
+                SELECTED_INCREMENT="major"
                 return
                 ;;
             *)
@@ -258,8 +258,10 @@ main() {
     
     # Get current version and select increment
     local current_version=$(get_current_version)
-    local increment_type=$(select_version_increment)
-    local new_version=$(calculate_new_version "$increment_type" "$current_version")
+    select_version_increment
+    local increment_type="$SELECTED_INCREMENT"
+    local new_version
+    new_version=$(calculate_new_version "$increment_type" "$current_version")
     
     echo ""
     print_status "Releasing: $current_version → $new_version"
