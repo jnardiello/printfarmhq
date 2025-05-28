@@ -45,11 +45,13 @@ build_image() {
     
     # Tag for registry - single repo with component as tag
     docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}"
-    docker tag "printfarmhq:${component_name}-latest" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
+    docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-latest"
     
-    # Also tag with version if not latest
+    # Always tag with version (even if it's 'latest')
     if [ "$VERSION" != "latest" ]; then
         docker tag "printfarmhq:${component_name}" "${REGISTRY}/${NAMESPACE}/printfarmhq:${component_name}-${VERSION}"
+        # Also create a local version tag
+        docker tag "printfarmhq:${component_name}" "printfarmhq:${component_name}-${VERSION}"
     fi
     
     if [ "$PUSH" == "true" ]; then
