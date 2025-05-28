@@ -218,7 +218,6 @@ export function PlateManager({ productId, plates, filaments, onPlatesChange }: P
             <Button 
               onClick={() => setIsAddingPlate(true)} 
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-md"
             >
               <Plus className="h-4 w-4 mr-1" /> Add Plate
             </Button>

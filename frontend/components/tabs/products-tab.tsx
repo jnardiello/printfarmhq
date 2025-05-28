@@ -492,7 +492,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                           <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                           Product Plates
                         </h3>
-                        <Button type="button" variant="outline" onClick={addPlateRow} size="sm" className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-950/50">
+                        <Button type="button" variant="outline" onClick={addPlateRow} size="sm" className="gap-1">
                           <Plus className="h-4 w-4" /> Add Plate
                         </Button>
                       </div>
@@ -561,7 +561,6 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                   variant="outline"
                                   size="sm"
                                   onClick={() => addFilamentToPlate(plateIndex)}
-                                  className="border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-950/50"
                                 >
                                   <Plus className="h-3 w-3 mr-1" /> Add Filament
                                 </Button>
@@ -706,9 +705,9 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                     <div className="pt-6 text-right">
                       <Button
                         type="submit"
-                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-2 font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
+                        className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white px-6"
                       >
-                        🚀 Save Product with Plates
+                        Save Product
                       </Button>
                     </div>
                   </form>
