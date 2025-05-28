@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.2 (2025-05-29)
+
+[0;34m[INFO][0m Generating changelog...
+- fix: Add CHANGELOG.md update to publish process
+
+
 ## v1.0.12 (2025-05-28)
 
 ## v1.0.11 (2025-05-28)
