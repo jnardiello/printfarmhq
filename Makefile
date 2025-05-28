@@ -57,7 +57,7 @@ test: clean-test-artifacts ## Run all tests
 	@echo "⏳ Waiting for services to be ready..."
 	@sleep 10
 	@echo "📊 Setting up test data..."
-	@$(COMPOSE_TEST) exec -T backend-api python setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
+	@$(COMPOSE_TEST) exec -T backend-api python tests/fixtures/setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
 	@echo ""
 	@echo "📦 Backend Tests"
 	@echo "----------------"
@@ -101,7 +101,7 @@ test-frontend: clean-test-artifacts ## Run frontend tests only
 	@echo "⏳ Waiting for services to be ready..."
 	@sleep 10
 	@echo "📊 Setting up test data..."
-	@$(COMPOSE_TEST) exec -T backend-api python setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
+	@$(COMPOSE_TEST) exec -T backend-api python tests/fixtures/setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
 	@$(COMPOSE_TEST) up frontend-test --abort-on-container-exit
 	@$(COMPOSE_TEST) down -v
 

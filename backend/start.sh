@@ -27,8 +27,8 @@ fi
 # Set up test data if in testing mode
 if [[ "${TESTING:-false}" == "true" ]]; then
     echo "🧪 Setting up test data..."
-    if [[ -f "setup_test_data.py" ]]; then
-        python3 setup_test_data.py
+    if [[ -f "tests/fixtures/setup_test_data.py" ]]; then
+        python3 tests/fixtures/setup_test_data.py
     fi
 fi
 
