@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 REGISTRY="${REGISTRY:-ghcr.io}"
-NAMESPACE="${NAMESPACE:-jnardiello/printfarmhq}"
+NAMESPACE="${NAMESPACE:-jnardiello}"
 VERSION="${VERSION:-latest}"
 PUSH="${PUSH:-false}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"

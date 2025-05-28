@@ -1,6 +1,6 @@
 # Frontend E2E Test Runner Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello/printfarmhq
+ARG NAMESPACE=jnardiello
 ARG BASE_TAG=latest
 
 # Use regular frontend base and install Playwright on top

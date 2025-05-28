@@ -3,7 +3,7 @@ set -e
 
 # Configuration
 REGISTRY="${REGISTRY:-ghcr.io}"
-NAMESPACE="${NAMESPACE:-jnardiello/printfarmhq}"
+NAMESPACE="${NAMESPACE:-jnardiello}"
 VERSION="${VERSION:-latest}"
 PUSH="${PUSH:-false}"
 
@@ -35,13 +35,17 @@ build_image() {
 
     print_status "Building ${image_name}:${VERSION}..."
     
-    # Build the image
+    # Build the image with local name first
     docker build \
         -f "${dockerfile}" \
-        -t "${REGISTRY}/${NAMESPACE}/${image_name}:${VERSION}" \
-        -t "${REGISTRY}/${NAMESPACE}/${image_name}:latest" \
+        -t "${image_name}:${VERSION}" \
+        -t "${image_name}:latest" \
         ${build_args} \
         "${context}"
+    
+    # Tag for registry
+    docker tag "${image_name}:${VERSION}" "${REGISTRY}/${NAMESPACE}/${image_name}:${VERSION}"
+    docker tag "${image_name}:latest" "${REGISTRY}/${NAMESPACE}/${image_name}:latest"
     
     if [ "$PUSH" == "true" ]; then
         print_status "Pushing ${image_name}:${VERSION}..."

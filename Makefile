@@ -115,7 +115,7 @@ restore-db: ## Restore database from backup
 
 # Docker Registry (for maintainers)
 REGISTRY ?= ghcr.io
-NAMESPACE ?= jnardiello/printfarmhq
+NAMESPACE ?= jnardiello
 VERSION ?= latest
 
 publish: ## Create new release with version tag and push to registry

@@ -1,6 +1,6 @@
 # Frontend Application Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello/printfarmhq
+ARG NAMESPACE=jnardiello
 ARG BASE_TAG=latest
 
 # Build stage

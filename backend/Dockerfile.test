@@ -1,6 +1,6 @@
 # Backend Test Image
 ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello/printfarmhq
+ARG NAMESPACE=jnardiello
 ARG BASE_TAG=latest
 
 FROM ${REGISTRY}/${NAMESPACE}/printfarmhq-backend-base:${BASE_TAG} AS backend-test
