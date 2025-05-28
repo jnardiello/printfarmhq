@@ -23,7 +23,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Add labels for GitHub Container Registry
 LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
 LABEL org.opencontainers.image.description="PrintFarmHQ Backend Base - Python runtime and dependencies"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="AGPL"
 LABEL org.opencontainers.image.title="PrintFarmHQ Backend Base"
 LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 

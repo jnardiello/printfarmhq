@@ -24,9 +24,9 @@ COPY --chown=appuser:appuser . .
 ENV PYTHONPATH=/app
 
 # Add labels for GitHub Container Registry
-LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.source="ghcr.io/jnardiello/printfarmhq"
 LABEL org.opencontainers.image.description="PrintFarmHQ Backend - Complete 3D printing management platform"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="AGPL"
 LABEL org.opencontainers.image.title="PrintFarmHQ Backend"
 LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 

@@ -49,7 +49,7 @@ RUN mkdir -p test-results playwright-report
 # Add labels for GitHub Container Registry
 LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
 LABEL org.opencontainers.image.description="PrintFarmHQ Frontend Test - E2E testing environment"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="AGPL"
 LABEL org.opencontainers.image.title="PrintFarmHQ Frontend Test"
 LABEL org.opencontainers.image.vendor="PrintFarmHQ"
 
