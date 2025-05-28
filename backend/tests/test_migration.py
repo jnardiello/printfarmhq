@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Product, FilamentUsage, Filament, Plate, PlateFilamentUsage, Base
-from app.database import get_database_url
+from app.database import SQLALCHEMY_DATABASE_URL
 
 
 class TestPlateMigration:
