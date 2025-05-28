@@ -96,9 +96,9 @@ class TestSetupFunctionality:
             assert response.status_code == 422
             
         # Test with completely missing content-type
-        import requests
         # Note: This test might not work in all environments, so make it optional
         try:
+            # Don't import requests, just test with the client
             response = client.post("/auth/setup")  # No JSON at all
             assert response.status_code in [422, 400]
         except Exception:

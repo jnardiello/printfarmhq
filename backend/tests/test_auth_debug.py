@@ -8,11 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# Set environment variables for testing
-os.environ["JWT_SECRET_KEY"] = "test_secret_key_for_testing_only"
-os.environ["SUPERADMIN_EMAIL"] = "test@admin.com"
-os.environ["SUPERADMIN_PASSWORD"] = "testpass"
-os.environ["SUPERADMIN_NAME"] = "Test Admin"
+# Environment variables no longer needed - using database-based configuration
 
 # Create test database engine
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"

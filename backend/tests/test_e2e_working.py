@@ -9,11 +9,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Set test environment
-os.environ["JWT_SECRET_KEY"] = "test_secret_key_for_testing_only"
-os.environ["SUPERADMIN_EMAIL"] = "test@admin.com"
-os.environ["SUPERADMIN_PASSWORD"] = "testpass"
-os.environ["SUPERADMIN_NAME"] = "Test Admin"
+# No longer need to set environment variables - configuration is now database-based
 
 from app.database import Base
 from app.main import app, get_db
@@ -162,27 +158,73 @@ class TestWorkingE2E:
 
     def test_filament_creation_with_auth(self):
         """Test that filament creation works when properly authenticated."""
-        # For now, let's just test that the endpoint accepts the correct schema
-        # and that authentication is working conceptually
-        with TestClient(app) as client:
-            # Test without authentication - should fail
-            filament_data = {
-                "material": "PLA",
-                "color": "Red",
-                "brand": "ESUN"
-            }
-            
-            no_auth_response = client.post("/filaments", json=filament_data)
-            assert no_auth_response.status_code == 403
-            assert "Not authenticated" in no_auth_response.json()["detail"]
-            
-            # Test with invalid token - should fail
-            bad_headers = {"Authorization": "Bearer invalid_token"}
-            bad_auth_response = client.post("/filaments", json=filament_data, headers=bad_headers)
-            assert bad_auth_response.status_code == 401
-            
-            # The full authentication flow is tested in other test files
-            # This demonstrates the API accepts the correct schema structure
+        # Create temporary database
+        db_fd, db_path = tempfile.mkstemp()
+        os.close(db_fd)
+        
+        engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+        TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+        
+        def override_get_db():
+            try:
+                db = TestingSessionLocal()
+                yield db
+            finally:
+                db.close()
+        
+        Base.metadata.create_all(bind=engine)
+        
+        # Override both get_db functions to ensure proper database session handling
+        app.dependency_overrides[get_db] = override_get_db
+        from app.auth import get_db as auth_get_db
+        app.dependency_overrides[auth_get_db] = override_get_db
+        
+        try:
+            with TestClient(app) as client:
+                # Test without authentication - should fail
+                filament_data = {
+                    "material": "PLA",
+                    "color": "Red",
+                    "brand": "ESUN"
+                }
+                
+                no_auth_response = client.post("/filaments", json=filament_data)
+                assert no_auth_response.status_code == 403
+                assert "Not authenticated" in no_auth_response.json()["detail"]
+                
+                # Test with invalid token - should fail
+                bad_headers = {"Authorization": "Bearer invalid_token"}
+                bad_auth_response = client.post("/filaments", json=filament_data, headers=bad_headers)
+                assert bad_auth_response.status_code == 401
+                
+                # Test with valid authentication
+                # First register a user
+                reg_data = {
+                    "email": "filament@test.com",
+                    "password": "testpass123",
+                    "name": "Filament User"
+                }
+                reg_response = client.post("/auth/register", json=reg_data)
+                assert reg_response.status_code == 200
+                
+                # Use the token to create a filament
+                token = reg_response.json()["access_token"]
+                auth_headers = {"Authorization": f"Bearer {token}"}
+                
+                create_response = client.post("/filaments", json=filament_data, headers=auth_headers)
+                assert create_response.status_code == 201
+                
+                # Verify the response
+                created_filament = create_response.json()
+                assert created_filament["material"] == "PLA"
+                assert created_filament["color"] == "Red"
+                assert created_filament["brand"] == "ESUN"
+                assert "id" in created_filament
+                
+        finally:
+            app.dependency_overrides.clear()
+            Base.metadata.drop_all(bind=engine)
+            os.unlink(db_path)
 
     def test_business_logic_functions_work(self):
         """Test that core business logic functions work independently."""
