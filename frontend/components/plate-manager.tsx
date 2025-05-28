@@ -208,14 +208,18 @@ export function PlateManager({ productId, plates, filaments, onPlatesChange }: P
   return (
     <div className="space-y-6">
       {/* Plates List */}
-      <Card>
-        <CardHeader>
+      <Card className="border-blue-200 dark:border-blue-800 shadow-lg">
+        <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-b border-blue-200 dark:border-blue-800">
           <CardTitle className="flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <Package className="h-5 w-5" />
-              Plates ({plates.length})
+            <span className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+              <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+              Product Plates ({plates.length})
             </span>
-            <Button onClick={() => setIsAddingPlate(true)} size="sm">
+            <Button 
+              onClick={() => setIsAddingPlate(true)} 
+              size="sm"
+              className="bg-blue-600 hover:bg-blue-700 text-white border-0 shadow-md"
+            >
               <Plus className="h-4 w-4 mr-1" /> Add Plate
             </Button>
           </CardTitle>
@@ -291,9 +295,12 @@ export function PlateManager({ productId, plates, filaments, onPlatesChange }: P
 
       {/* Add Plate Dialog */}
       <Dialog open={isAddingPlate} onOpenChange={setIsAddingPlate}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add New Plate</DialogTitle>
+        <DialogContent className="max-w-2xl border-blue-200 dark:border-blue-800">
+          <DialogHeader className="border-b border-blue-200 dark:border-blue-800 pb-4">
+            <DialogTitle className="text-blue-700 dark:text-blue-300 flex items-center gap-2">
+              <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              Add New Plate
+            </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddPlate} className="space-y-4">
             <div className="grid grid-cols-3 gap-4">
@@ -511,9 +518,12 @@ export function PlateManager({ productId, plates, filaments, onPlatesChange }: P
       {/* Edit Plate Dialog */}
       {editingPlate && (
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Edit Plate: {editingPlate.name}</DialogTitle>
+          <DialogContent className="max-w-2xl border-blue-200 dark:border-blue-800">
+            <DialogHeader className="border-b border-blue-200 dark:border-blue-800 pb-4">
+              <DialogTitle className="text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                Edit Plate: {editingPlate.name}
+              </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleUpdatePlate} className="space-y-4">
               <div className="grid grid-cols-3 gap-4">

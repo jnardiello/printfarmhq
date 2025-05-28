@@ -477,46 +477,57 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                       </div>
                     </div>
 
-                    <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-muted">
+                    {/* Visual separator */}
+                    <div className="flex items-center gap-4 py-4">
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                      <div className="text-sm font-medium text-gray-500 dark:text-gray-400 px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full">
+                        Product Components
+                      </div>
+                      <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
+                    </div>
+
+                    <div className="space-y-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-xl border-2 border-blue-200 dark:border-blue-800 shadow-sm">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-md font-medium flex items-center gap-2">
-                          <Package className="h-5 w-5 text-primary" />
+                        <h3 className="text-lg font-semibold flex items-center gap-2 text-blue-700 dark:text-blue-300">
+                          <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
                           Product Plates
                         </h3>
-                        <Button type="button" variant="outline" onClick={addPlateRow} size="sm" className="gap-1">
+                        <Button type="button" variant="outline" onClick={addPlateRow} size="sm" className="gap-1 border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-950/50">
                           <Plus className="h-4 w-4" /> Add Plate
                         </Button>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        Create plates for your product. Each plate can have multiple filaments and its own quantity.
+                      <p className="text-sm text-blue-600 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
+                        💡 Create plates for your product. Each plate can have multiple filaments and its own quantity.
                       </p>
                       <div className="space-y-4">
                         {plateRows.map((plate, plateIndex) => (
-                          <div key={plateIndex} className="border rounded-lg p-4 bg-white dark:bg-gray-800">
-                            <div className="flex items-center gap-4 mb-4">
+                          <div key={plateIndex} className="border-2 border-blue-300 dark:border-blue-600 rounded-xl p-5 bg-white dark:bg-blue-950/20 shadow-md hover:shadow-lg transition-shadow">
+                            <div className="flex items-center gap-4 mb-6">
                               <div className="flex-1">
-                                <Label htmlFor={`plate-name-${plateIndex}`}>Plate Name</Label>
+                                <Label htmlFor={`plate-name-${plateIndex}`} className="text-blue-700 dark:text-blue-300 font-medium">Plate Name</Label>
                                 <Input
                                   id={`plate-name-${plateIndex}`}
                                   value={plate.name}
                                   onChange={(e) => handlePlateChange(plateIndex, 'name', e.target.value)}
                                   placeholder="e.g., Base, Top, Handle"
+                                  className="border-blue-300 focus:border-blue-500 focus:ring-blue-500 dark:border-blue-600"
                                   required
                                 />
                               </div>
                               <div className="w-24">
-                                <Label htmlFor={`plate-quantity-${plateIndex}`}>Quantity</Label>
+                                <Label htmlFor={`plate-quantity-${plateIndex}`} className="text-blue-700 dark:text-blue-300 font-medium">Quantity</Label>
                                 <Input
                                   id={`plate-quantity-${plateIndex}`}
                                   type="number"
                                   min="1"
                                   value={plate.quantity}
                                   onChange={(e) => handlePlateChange(plateIndex, 'quantity', Number(e.target.value))}
+                                  className="border-blue-300 focus:border-blue-500 focus:ring-blue-500 dark:border-blue-600"
                                   required
                                 />
                               </div>
                               <div className="w-28">
-                                <Label htmlFor={`plate-print-time-${plateIndex}`}>Print Time (hrs)</Label>
+                                <Label htmlFor={`plate-print-time-${plateIndex}`} className="text-blue-700 dark:text-blue-300 font-medium">Print Time (hrs)</Label>
                                 <Input
                                   id={`plate-print-time-${plateIndex}`}
                                   type="number"
@@ -525,6 +536,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                   value={plate.print_time_hrs}
                                   onChange={(e) => handlePlateChange(plateIndex, 'print_time_hrs', e.target.value)}
                                   placeholder="e.g., 1.5"
+                                  className="border-blue-300 focus:border-blue-500 focus:ring-blue-500 dark:border-blue-600"
                                   required
                                 />
                               </div>
@@ -533,7 +545,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="mt-6 text-red-600 hover:text-red-700"
+                                  className="mt-6 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                                   onClick={() => removePlateRow(plateIndex)}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -541,25 +553,26 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                               )}
                             </div>
                             
-                            <div className="space-y-2">
+                            <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <Label className="text-sm font-medium">Filament Usage</Label>
+                                <Label className="text-sm font-semibold text-blue-700 dark:text-blue-300">Filament Usage</Label>
                                 <Button
                                   type="button"
                                   variant="outline"
                                   size="sm"
                                   onClick={() => addFilamentToPlate(plateIndex)}
+                                  className="border-blue-300 text-blue-600 hover:bg-blue-50 dark:border-blue-600 dark:text-blue-400 dark:hover:bg-blue-950/50"
                                 >
                                   <Plus className="h-3 w-3 mr-1" /> Add Filament
                                 </Button>
                               </div>
                               
-                              <div className="overflow-x-auto rounded border">
+                              <div className="overflow-x-auto rounded-lg border-2 border-blue-200 dark:border-blue-700">
                                 <Table>
                                   <TableHeader>
-                                    <TableRow className="bg-muted/30">
-                                      <TableHead className="text-xs">Filament</TableHead>
-                                      <TableHead className="text-xs">Grams</TableHead>
+                                    <TableRow className="bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-700">
+                                      <TableHead className="text-xs font-semibold text-blue-700 dark:text-blue-300">Filament</TableHead>
+                                      <TableHead className="text-xs font-semibold text-blue-700 dark:text-blue-300">Grams</TableHead>
                                       <TableHead className="w-12"></TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -629,11 +642,11 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                             </div>
 
                             {/* G-code File Upload for Plate */}
-                            <div className="mt-4">
-                              <Label className="text-sm font-medium">G-code File (.gcode, .g, .gc) (Optional)</Label>
+                            <div className="mt-6 p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 rounded-lg border border-teal-200 dark:border-teal-700">
+                              <Label className="text-sm font-semibold text-teal-700 dark:text-teal-300 mb-3 block">📄 G-code File (.gcode, .g, .gc) (Optional)</Label>
                               <div 
-                                className={`flex items-center justify-center w-full p-4 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-200 ease-in-out
-                                            ${plateGcodeDragStates[plateIndex] ? 'border-primary bg-primary/10' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'}`}
+                                className={`flex items-center justify-center w-full p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ease-in-out
+                                            ${plateGcodeDragStates[plateIndex] ? 'border-teal-500 bg-teal-100 dark:bg-teal-900/50 shadow-lg' : 'border-teal-300 dark:border-teal-600 hover:border-teal-400 dark:hover:border-teal-500 bg-white dark:bg-teal-950/20'}`}
                                 onClick={() => {
                                   const input = document.querySelector(`#gcode-file-${plateIndex}`) as HTMLInputElement
                                   input?.click()
@@ -668,16 +681,19 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                   onChange={(e) => handlePlateGcodeFileChange(plateIndex, e.target.files?.[0] || null)}
                                 />
                                 <div className="text-center">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className={`mx-auto h-8 w-8 mb-2 ${plateGcodeDragStates[plateIndex] ? 'text-primary' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className={`mx-auto h-10 w-10 mb-3 ${plateGcodeDragStates[plateIndex] ? 'text-teal-600 dark:text-teal-400' : 'text-teal-400 dark:text-teal-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
-                                  <p className={`text-xs ${plateGcodeDragStates[plateIndex] ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}`}>
-                                    <span className="font-semibold">Click</span> or drag G-code file
+                                  <p className={`text-sm font-medium ${plateGcodeDragStates[plateIndex] ? 'text-teal-700 dark:text-teal-300' : 'text-teal-600 dark:text-teal-400'}`}>
+                                    <span className="font-bold">Click</span> or drag G-code file
                                   </p>
+                                  <p className="text-xs text-teal-500 dark:text-teal-400 mt-1">Supports .gcode, .g, .gc files</p>
                                   {plateGcodeFileNames[plateIndex] && (
-                                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                                      {plateGcodeFileNames[plateIndex]}
-                                    </p>
+                                    <div className="mt-3 p-2 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-200 dark:border-green-700">
+                                      <p className="text-sm font-medium text-green-700 dark:text-green-300">
+                                        ✅ {plateGcodeFileNames[plateIndex]}
+                                      </p>
+                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -687,12 +703,12 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                       </div>
                     </div>
 
-                    <div className="pt-3 text-right">
+                    <div className="pt-6 text-right">
                       <Button
                         type="submit"
-                        className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white px-6"
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-8 py-2 font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
                       >
-                        Save Product
+                        🚀 Save Product with Plates
                       </Button>
                     </div>
                   </form>
