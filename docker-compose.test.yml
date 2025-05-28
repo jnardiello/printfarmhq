@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   backend-api:
     image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend-${VERSION:-latest}
@@ -15,7 +13,7 @@ services:
       - DATABASE_URL=sqlite:///./test.db
       - TESTING=true
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket; sock = socket.socket(); sock.connect(('localhost', 8000)); sock.close()"]
+      test: ["CMD", "python3", "-c", "import socket; sock = socket.socket(); sock.connect(('localhost', 8000)); sock.close()"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -33,6 +31,7 @@ services:
         BASE_TAG: ${VERSION:-latest}
         NEXT_PUBLIC_API_URL: /api
         DOCKER_ENV: "true"
+        BACKEND_URL: http://backend-api:8000
     container_name: printfarmhq-frontend-app
     depends_on:
       backend-api:
@@ -40,6 +39,7 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=/api
       - DOCKER_ENV=true
+      - BACKEND_URL=http://backend-api:8000
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 5s
@@ -59,16 +59,12 @@ services:
         BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-test
     environment:
-      - JWT_SECRET_KEY=test-secret-key
-      - SUPERADMIN_EMAIL=admin@printfarmhq.com
-      - SUPERADMIN_PASSWORD=admin123
-      - SUPERADMIN_NAME=Test Admin
       - DATABASE_URL=sqlite:///./test.db
       - TESTING=true
       - PYTHONPATH=/app
     volumes:
       - ./backend/test-results:/app/test-results
-    command: ["python", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml"]
+    command: ["python3", "-m", "pytest", "-v", "--cov=app", "--cov-report=term-missing", "--cov-report=html", "--cov-report=xml", "--junitxml=test-results/junit.xml", "-p", "no:warnings", "-W", "ignore::coverage.CoverageWarning"]
     networks:
       - test-network
 
