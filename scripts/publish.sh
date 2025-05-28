@@ -208,19 +208,18 @@ update_compose_files() {
     print_success "Updated docker-compose files"
 }
 
-# Revert docker-compose files back to latest
-revert_compose_files() {
+# Update docker-compose files after release
+update_compose_files_post_release() {
     local version=$1
-    print_status "Reverting docker-compose files back to latest..."
+    print_status "Updating docker-compose files for post-release..."
     
-    # Revert docker-compose.yml
-    if [[ -f "docker-compose.yml" ]]; then
-        sed -i.bak "s/VERSION:-${version}/VERSION:-latest/g" docker-compose.yml
-        rm docker-compose.yml.bak
-    fi
+    # Keep version in docker-compose.yml for production use
+    # Users can run 'make up' and get the stable release
+    print_status "Keeping version $version in docker-compose.yml for production use"
     
-    # Revert docker-compose.dev.yml
+    # Revert docker-compose.dev.yml to latest for development
     if [[ -f "docker-compose.dev.yml" ]]; then
+        print_status "Reverting docker-compose.dev.yml to use latest for development..."
         sed -i.bak "s/VERSION:-${version}/VERSION:-latest/g" docker-compose.dev.yml
         rm docker-compose.dev.yml.bak
     fi
@@ -435,11 +434,15 @@ main() {
     # Create GitHub release
     create_github_release "$NEW_VERSION" "$CHANGELOG"
     
-    # Revert compose files back to latest for development
-    revert_compose_files "$NEW_VERSION"
-    git add docker-compose*.yml
-    git commit -m "chore: revert docker-compose files to use latest for development"
-    git push origin "$DEFAULT_BRANCH"
+    # Update compose files for post-release
+    update_compose_files_post_release "$NEW_VERSION"
+    
+    # Only commit if there are changes (docker-compose.dev.yml)
+    if [[ -n $(git status --porcelain docker-compose*.yml) ]]; then
+        git add docker-compose*.yml
+        git commit -m "chore: update docker-compose.dev.yml to use latest for development"
+        git push origin "$DEFAULT_BRANCH"
+    fi
     
     # Success message
     echo ""
@@ -451,7 +454,9 @@ main() {
     echo "  • GitHub Release: https://github.com/${NAMESPACE}/printfarmhq/releases/tag/${NEW_VERSION}"
     echo ""
     echo "Users can now run:"
-    echo "  VERSION=${NEW_VERSION} make up"
+    echo "  make up                    # Uses the released version ${NEW_VERSION}"
+    echo "  VERSION=latest make up     # Uses local development version"
+    echo "  make dev                   # Development mode with hot reload"
     echo ""
     
     # Disable trap on successful completion

@@ -44,6 +44,8 @@ make up
 
 On first visit, you'll be guided through creating your admin account.
 
+> **💡 Version Note:** `make up` runs the latest stable release. For development use `make dev` or `VERSION=latest make up`
+
 ---
 
 ## 🎮 Try It Out (5 minutes)
