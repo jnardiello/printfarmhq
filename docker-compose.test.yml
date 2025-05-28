@@ -2,13 +2,13 @@ version: '3.8'
 
 services:
   backend-api:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-backend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-backend:${VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
       args:
         REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        NAMESPACE: ${NAMESPACE:-jnardiello}
         BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-api
     environment:
@@ -23,13 +23,13 @@ services:
       - test-network
 
   frontend-app:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-frontend:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-frontend:${VERSION:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
         REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        NAMESPACE: ${NAMESPACE:-jnardiello}
         BASE_TAG: ${VERSION:-latest}
         NEXT_PUBLIC_API_URL: /api
         DOCKER_ENV: "true"
@@ -49,13 +49,13 @@ services:
       - test-network
 
   backend-test:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-backend-test:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-backend-test:${VERSION:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile.test
       args:
         REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        NAMESPACE: ${NAMESPACE:-jnardiello}
         BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-test
     environment:
@@ -73,13 +73,13 @@ services:
       - test-network
 
   frontend-test:
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-printfarmhq}/printfarmhq-frontend-test:${VERSION:-latest}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq-frontend-test:${VERSION:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile.test
       args:
         REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-printfarmhq}
+        NAMESPACE: ${NAMESPACE:-jnardiello}
         BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-frontend-test
     depends_on:

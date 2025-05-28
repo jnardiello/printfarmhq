@@ -26,7 +26,7 @@ install: ## Set up PrintFarmHQ for first time
 # Development commands
 up: ## Start services in background (always rebuild)
 	@echo "🚀 Starting PrintFarmHQ (rebuilding for latest changes)..."
-	@NAMESPACE=$$(whoami | tr '[:upper:]' '[:lower:]') $(COMPOSE) up -d --build
+	@NAMESPACE=$$(whoami | tr '[:upper:]' '[:lower:]') $(COMPOSE) up -d
 	@echo "✅ PrintFarmHQ is running at http://localhost:3000"
 	@echo "   Run 'make logs' to view logs or 'make down' to stop"
 
@@ -123,4 +123,7 @@ push-images: ## Build and push multi-arch images to registry
 	@./scripts/docker-auth.sh && \
 	PUSH=true ./scripts/docker-build-multiarch.sh && \
 	echo "✅ Images pushed successfully!"
+
+publish: ## Create new release with version tag and push to registry
+	@./scripts/publish.sh
 
