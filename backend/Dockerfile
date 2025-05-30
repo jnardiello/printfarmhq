@@ -1,18 +1,28 @@
 # Backend Application Image
-ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
-ARG BASE_TAG=latest
+FROM python:3.11-slim AS backend-app
 
-FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:backend-base-${BASE_TAG} AS backend-app
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
 
-# Switch to root to install packages
-USER root
+# Set working directory
+WORKDIR /app
 
-# Copy requirements as root
-COPY --chown=appuser:appuser requirements.txt ./
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 
-# Switch back to appuser
+# Switch to non-root user
 USER appuser
+
+# Set Python environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/appuser/.local/bin:$PATH" \
+    PYTHONPATH=/app
+
+# Copy requirements
+COPY --chown=appuser:appuser requirements.txt ./
 
 # Install Python dependencies
 RUN pip install --user --no-cache-dir -r requirements.txt
@@ -23,11 +33,8 @@ COPY --chown=appuser:appuser . .
 # Make startup script executable
 RUN chmod +x start.sh
 
-# Set environment variables
-ENV PYTHONPATH=/app
-
 # Add labels for GitHub Container Registry
-LABEL org.opencontainers.image.source="ghcr.io/jnardiello/printfarmhq"
+LABEL org.opencontainers.image.source="https://github.com/jnardiello/printfarmhq"
 LABEL org.opencontainers.image.description="PrintFarmHQ Backend - Complete 3D printing management platform"
 LABEL org.opencontainers.image.licenses="AGPL"
 LABEL org.opencontainers.image.title="PrintFarmHQ Backend"

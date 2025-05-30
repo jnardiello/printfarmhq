@@ -58,32 +58,18 @@ main() {
     print_status "Version: ${VERSION}"
     print_status "Push: ${PUSH}"
     
-    # Build backend base image
-    build_image \
-        "backend/Dockerfile.base" \
-        "backend" \
-        "backend-base" \
-        ""
-    
     # Build backend app image
     build_image \
         "backend/Dockerfile" \
         "backend" \
         "backend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
+        ""
     
     # Build backend test image
     build_image \
         "backend/Dockerfile.test" \
         "backend" \
         "backend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
-    
-    # Build frontend base image
-    build_image \
-        "frontend/Dockerfile.base" \
-        "frontend" \
-        "frontend-base" \
         ""
     
     # Build frontend app image
@@ -91,14 +77,14 @@ main() {
         "frontend/Dockerfile" \
         "frontend" \
         "frontend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
+        ""
     
     # Build frontend test image
     build_image \
         "frontend/Dockerfile.test" \
         "frontend" \
         "frontend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
+        ""
     
     print_status "Build process completed successfully!"
 }

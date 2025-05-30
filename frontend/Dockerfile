@@ -1,10 +1,21 @@
 # Frontend Application Image
-ARG REGISTRY=ghcr.io
-ARG NAMESPACE=jnardiello
-ARG BASE_TAG=latest
 
 # Build stage
-FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-base-${BASE_TAG} AS builder
+FROM node:20-alpine AS builder
+
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1
 
 # Copy package files
 COPY package.json package-lock.json* ./
@@ -27,7 +38,23 @@ RUN mkdir -p .next/cache/google-fonts
 RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} BACKEND_URL=${BACKEND_URL} npm run build
 
 # Production stage
-FROM ${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-base-${BASE_TAG} AS runner
+FROM node:20-alpine AS runner
+
+# Install system dependencies
+RUN apk add --no-cache libc6-compat curl
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nextjs -u 1001
+
+# Set environment variables
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3000 \
+    HOSTNAME="0.0.0.0"
 
 # Copy built application from builder
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
@@ -47,10 +74,6 @@ LABEL org.opencontainers.image.description="PrintFarmHQ Frontend - Complete 3D p
 LABEL org.opencontainers.image.licenses="AGPL"
 LABEL org.opencontainers.image.title="PrintFarmHQ Frontend"
 LABEL org.opencontainers.image.vendor="PrintFarmHQ"
-
-# Set environment variables
-ENV PORT=3000 \
-    HOSTNAME="0.0.0.0"
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

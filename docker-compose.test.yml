@@ -4,10 +4,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      args:
-        REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-jnardiello}
-        BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-api
     environment:
       - DATABASE_URL=sqlite:///./test.db
@@ -26,9 +22,6 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-jnardiello}
-        BASE_TAG: ${VERSION:-latest}
         NEXT_PUBLIC_API_URL: /api
         DOCKER_ENV: "true"
         BACKEND_URL: http://backend-api:8000
@@ -53,10 +46,6 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.test
-      args:
-        REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-jnardiello}
-        BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-backend-test
     environment:
       - DATABASE_URL=sqlite:///./test.db
@@ -73,10 +62,6 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.test
-      args:
-        REGISTRY: ${REGISTRY:-ghcr.io}
-        NAMESPACE: ${NAMESPACE:-jnardiello}
-        BASE_TAG: ${VERSION:-latest}
     container_name: printfarmhq-frontend-test
     depends_on:
       backend-api:

@@ -277,17 +277,11 @@ build_and_push_images() {
     # Build backend image
     print_status "Building backend image..."
     docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" \
-        --build-arg REGISTRY="${REGISTRY}" \
-        --build-arg NAMESPACE="${NAMESPACE}" \
-        --build-arg BASE_TAG="latest" \
         ./backend
     
     # Build frontend image
     print_status "Building frontend image..."
     docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" \
-        --build-arg REGISTRY="${REGISTRY}" \
-        --build-arg NAMESPACE="${NAMESPACE}" \
-        --build-arg BASE_TAG="latest" \
         ./frontend
     
     # Push images
