@@ -479,8 +479,8 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                           <Package className="h-5 w-5 text-primary" />
                           Product Plates
                         </h3>
-                        <Button type="button" onClick={addPlateRow} size="sm" className="gap-1 bg-primary hover:bg-primary/90 text-white">
-                          <Plus className="h-4 w-4" /> Add Plate
+                        <Button type="button" onClick={addPlateRow} className="gap-1.5 bg-primary hover:bg-primary/90 text-white shadow-sm">
+                          <Plus className="h-5 w-5" /> Add Plate
                         </Button>
                       </div>
                       <p className="text-sm text-muted-foreground p-3 rounded-lg border bg-background">
@@ -525,10 +525,11 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                 <Button
                                   type="button"
                                   size="sm"
+                                  variant="secondary"
                                   onClick={() => addFilamentToPlate(plateIndex)}
-                                  className="bg-primary hover:bg-primary/90 text-white"
+                                  className="gap-1"
                                 >
-                                  <Plus className="h-3 w-3 mr-1" /> Add Filament
+                                  <Plus className="h-3 w-3" /> Add Filament
                                 </Button>
                               </div>
                               
