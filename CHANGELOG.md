@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0 (2025-05-30)
+
+- Adding asciiart with current version running from make dev
+- feat: integrate PlateManager into product update modal
+- feat: improve product and plate management UI
+- feat: improve button hierarchy in product form
+
+
 ## v1.1.4 (2025-05-30)
 
 - Fixing failing delete of product
