@@ -77,4 +77,5 @@ export default defineConfig({
   ],
 
   /* No webServer configuration for Docker - services are already running */
+  webServer: undefined,
 });

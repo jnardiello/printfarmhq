@@ -13,17 +13,16 @@ import { Label } from "@/components/ui/label"
 import { Trash2, Plus, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard, AlertTriangle } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
-import type { FilamentRowData, ProductFormData, Product as ProductType, Printer, Filament, Subscription, FilamentUsage, PlateFormData, PlateFilamentRowData } from "@/lib/types"
+import { Separator } from "@/components/ui/separator"
+import type { ProductFormData, Product as ProductType, Printer, Filament, Subscription, FilamentUsage, PlateFormData, PlateFilamentRowData } from "@/lib/types"
 import { motion } from "framer-motion"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { PlateManager } from "@/components/plate-manager"
 
-// Define a type for the edit form, can be similar to ProductFormData or more specific
-// For now, let's assume it might have slight differences or could be a partial ProductType
+// Edit form data for product-level fields only
 interface ProductEditFormData {
   name: string;
   license_id?: string | number; // Keep as string for form compatibility, convert on submit
-  // Filament usages and model file will be handled separately in state for the edit modal
 }
 
 interface ProductsTabProps {
@@ -57,7 +56,6 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
     name: "",
     license_id: undefined,
   })
-  const [editFilamentRows, setEditFilamentRows] = useState<FilamentRowData[]>([])
   const editModelFileRef = useRef<HTMLInputElement>(null)
   const [editModelFileName, setEditModelFileName] = useState<string | null>(null)
   const [isEditDragging, setIsEditDragging] = useState(false)
@@ -84,10 +82,6 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
         name: editingProduct.name,
         license_id: editingProduct.license_id?.toString() ?? undefined,
       });
-      setEditFilamentRows(editingProduct.filament_usages.map((fu: FilamentUsage) => ({
-        filament_id: fu.filament_id.toString(),
-        grams_used: fu.grams_used.toString(),
-      })));
       setEditModelFileName(editingProduct.model_file || null);
     }
   }, [editingProduct]);
@@ -101,39 +95,13 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
     setEditForm((prev: ProductEditFormData) => ({ ...prev, [field]: value }));
   };
 
-  const handleEditFilamentRowChange = (index: number, field: keyof FilamentRowData, value: string | number) => {
-    const newRows = [...editFilamentRows];
-    newRows[index] = { ...newRows[index], [field]: value };
-    setEditFilamentRows(newRows);
-  };
-
-  const addEditFilamentRow = () => {
-    setEditFilamentRows([...editFilamentRows, { filament_id: "", grams_used: "" }]);
-  };
-
-  const removeEditFilamentRow = (index: number) => {
-    const newRows = [...editFilamentRows];
-    newRows.splice(index, 1);
-    setEditFilamentRows(newRows);
-  };
 
   const handleUpdateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
 
-    if (editFilamentRows.length === 0) {
-      alert("Product must have at least one filament usage.");
-      return;
-    }
-
     const formData = new FormData();
     formData.append("name", editForm.name);
-    
-    const usages = editFilamentRows.map((row: FilamentRowData) => ({
-      filament_id: Number(row.filament_id),
-      grams_used: Number(row.grams_used),
-    }));
-    formData.append("filament_usages", JSON.stringify(usages));
 
     if (editForm.license_id && editForm.license_id !== "none") {
       formData.append("license_id", editForm.license_id.toString());
@@ -143,23 +111,13 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
     
     if (editModelFileRef.current?.files?.[0]) {
       formData.append("model_file", editModelFileRef.current.files[0]);
-    } else if (editModelFileName === null) { 
-      // If modelFileName is explicitly set to null (e.g. by a "remove file" button, not implemented yet)
-      // and backend supports removing a file by sending an empty value or specific flag.
-      // For now, if no new file is selected, the old one remains unless backend logic changes it.
     }
-    
-    // This part depends on whether `printer_profile_id` should be included or is handled differently
-    // For now, as per user request, printer_profile is ignored. If it's mandatory or part of ProductType:
-    // formData.append("printer_profile_id", editingProduct.printer_profile_id.toString());
-
 
     try {
-      // @ts-ignore // updateProduct may not be typed yet in useData
+      // @ts-ignore
       await updateProduct(editingProduct.id, formData);
       setIsEditModalOpen(false);
       setEditingProduct(null);
-      // Optionally, refresh products list or optimistically update UI
     } catch (error) {
       console.error("Failed to update product:", error);
       alert("Failed to update product. Check console for details.");
@@ -998,14 +956,14 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
       {/* Edit Product Modal */}
       {editingProduct && (
         <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-3xl">
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl">
                 <Pencil className="h-5 w-5 text-primary" />
                 Edit Product: {editingProduct.name}
               </DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleUpdateProduct} className="space-y-6 py-4 max-h-[80vh] overflow-y-auto pr-2">
+            <form onSubmit={handleUpdateProduct} className="space-y-6 py-4 overflow-y-auto pr-2 flex-1">
               {/* Basic Info Section */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border border-muted">
                 <div>
@@ -1098,76 +1056,16 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                 </p>
               </div>
 
-              {/* Filaments Used Section */}
-              <div className="space-y-4 p-4 bg-muted/30 rounded-lg border border-muted">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-md font-medium flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.29 7 12 12 20.71 7"></polyline><line x1="12" y1="22" x2="12" y2="12"></line></svg>
-                    Filaments Used
-                  </h3>
-                  <Button type="button" variant="outline" onClick={addEditFilamentRow} size="sm" className="gap-1">
-                    <Plus className="h-4 w-4" /> Add Filament
-                  </Button>
-                </div>
-                <div className="overflow-x-auto rounded-lg border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="bg-muted/50">
-                        <TableHead>Filament</TableHead>
-                        <TableHead>Grams</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {editFilamentRows.length > 0 ? (
-                        editFilamentRows.map((row, index) => (
-                          <TableRow key={index} className="hover:bg-muted/50 transition-colors">
-                            <TableCell>
-                              <Select
-                                value={row.filament_id ? row.filament_id.toString() : undefined}
-                                onValueChange={(value) => handleEditFilamentRowChange(index, "filament_id", value)}
-                                required
-                              >
-                                <SelectTrigger className="bg-white dark:bg-gray-800">
-                                  <SelectValue placeholder="Select Filament" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {filaments.map((filament) => (
-                                    <SelectItem key={filament.id} value={filament.id.toString()}>
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-3 h-3 rounded-full border border-gray-300" style={{ backgroundColor: filament.color.toLowerCase(), boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)" }}></div>
-                                        {filament.color} {filament.material} ({filament.brand})
-                                      </div>
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                type="number" min="0" step="0.1" value={row.grams_used}
-                                onChange={(e) => handleEditFilamentRowChange(index, "grams_used", e.target.value)}
-                                placeholder="grams" required className="bg-white dark:bg-gray-800"
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-gray-500 hover:text-red-600" onClick={() => removeEditFilamentRow(index)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={3} className="text-center text-muted-foreground py-6">
-                            <Package className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
-                            <p>No filaments added. Product must have at least one filament.</p>
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
+              {/* Plates Section */}
+              <Separator className="my-4" />
+              <div className="space-y-2">
+                <h3 className="text-lg font-semibold mb-2">Plates</h3>
+                <PlateManager 
+                  productId={editingProduct.id} 
+                  plates={editingProduct.plates || []}
+                  filaments={filaments}
+                  onPlatesChange={() => fetchProducts()}
+                />
               </div>
 
               {/* Actions */}
