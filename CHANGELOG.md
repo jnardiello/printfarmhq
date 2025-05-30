@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.4 (2025-05-30)
+
+- Fixing failing delete of product
+- Removing base images, not very useful
+
+
 ## v1.1.3 (2025-05-29)
 
 - fix: Update publish script to handle existing versions in docker-compose.yml
