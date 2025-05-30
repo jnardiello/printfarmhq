@@ -638,6 +638,57 @@ async def update_product_endpoint(
     return schemas.ProductRead.model_validate(product)
 
 
+@app.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_product(product_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Delete a product and all its associated data"""
+    product = db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Check if product is used in any print jobs
+    print_job_products = db.query(models.PrintJobProduct).filter(models.PrintJobProduct.product_id == product_id).first()
+    if print_job_products:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete product that is used in print jobs. Please delete or update the print jobs first."
+        )
+    
+    # Delete model file if exists
+    if product.file_path:
+        file_path = os.path.join(UPLOAD_DIRECTORY, product.file_path)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError as e:
+                logger.error(f"Error deleting product file {file_path}: {e}")
+    
+    # Delete plates and their files
+    plates = db.query(models.Plate).filter(models.Plate.product_id == product_id).all()
+    for plate in plates:
+        # Delete plate model file if exists
+        if plate.file_path:
+            plate_file_path = os.path.join(UPLOAD_DIRECTORY, plate.file_path)
+            if os.path.exists(plate_file_path):
+                try:
+                    os.remove(plate_file_path)
+                except OSError as e:
+                    logger.error(f"Error deleting plate file {plate_file_path}: {e}")
+        
+        # Delete plate G-code file if exists
+        if plate.gcode_path:
+            gcode_file_path = os.path.join(UPLOAD_DIRECTORY, plate.gcode_path)
+            if os.path.exists(gcode_file_path):
+                try:
+                    os.remove(gcode_file_path)
+                except OSError as e:
+                    logger.error(f"Error deleting G-code file {gcode_file_path}: {e}")
+    
+    # Delete the product (cascading will handle FilamentUsage, Plates, and PlateFilamentUsage)
+    db.delete(product)
+    db.commit()
+    return
+
+
 # ---------- Plates ---------- #
 
 @app.post("/products/{product_id}/plates", response_model=schemas.PlateRead)
