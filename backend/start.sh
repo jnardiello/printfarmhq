@@ -1,8 +1,6 @@
 #!/bin/bash
 set -e
 
-echo "🚀 Starting PrintFarmHQ Backend..."
-
 # Check if migrations should be run
 if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
     echo "🔄 Running database migrations..."
