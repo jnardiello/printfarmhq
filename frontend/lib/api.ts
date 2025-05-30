@@ -2,6 +2,18 @@ import { authStorage } from './auth'
 
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Handle 401 errors globally
+function handle401Error() {
+  if (typeof window !== 'undefined') {
+    // Clear auth data
+    authStorage.clear();
+    // Redirect to login - we check if we're not already on the auth page to avoid redirect loops
+    if (window.location.pathname !== '/auth') {
+      window.location.href = '/auth';
+    }
+  }
+}
+
 /**
  * Fetches data from the API.
  * @param path The path to the API endpoint (e.g., "/filaments").
@@ -32,6 +44,11 @@ export async function api<T = any>(
   const res = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
 
   if (!res.ok) {
+    // Handle 401 Unauthorized errors
+    if (res.status === 401) {
+      handle401Error();
+    }
+    
     // Attempt to parse error message from backend if available
     let errorDetail = `API request failed with status ${res.status}`;
     try {
@@ -102,6 +119,11 @@ export async function apiUpload<T = any>(
   const res = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
 
   if (!res.ok) {
+    // Handle 401 Unauthorized errors
+    if (res.status === 401) {
+      handle401Error();
+    }
+    
     let errorDetail = `API upload failed with status ${res.status}`;
     try {
       const errorData = await res.json();

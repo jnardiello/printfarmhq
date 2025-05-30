@@ -3,6 +3,7 @@
 // TODO: Implement proper error tracking service (e.g., Sentry) to replace console.error statements
 
 import React, { createContext, useContext, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { User } from '@/lib/auth'
 
 const TOKEN_KEY = 'auth_token'
@@ -134,6 +135,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
@@ -205,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     authStorage.clear()
     setUser(null)
+    router.push('/auth')
   }
 
   return (
