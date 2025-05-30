@@ -645,13 +645,14 @@ def delete_product(product_id: int, db: Session = Depends(get_db), current_user:
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Check if product is used in any print jobs
-    print_job_products = db.query(models.PrintJobProduct).filter(models.PrintJobProduct.product_id == product_id).first()
-    if print_job_products:
-        raise HTTPException(
-            status_code=400, 
-            detail="Cannot delete product that is used in print jobs. Please delete or update the print jobs first."
-        )
+    # Delete all print job products that reference this product
+    # This will allow deletion of products even if they're used in print jobs
+    print_job_products = db.query(models.PrintJobProduct).filter(models.PrintJobProduct.product_id == product_id).all()
+    for pjp in print_job_products:
+        db.delete(pjp)
+    
+    # Commit the deletion of print job products before deleting the product
+    db.commit()
     
     # Delete model file if exists
     if product.file_path:
@@ -785,7 +786,11 @@ async def create_plate(
     
     db.add_all(usages_to_add)
     db.commit()
-    db.refresh(db_plate)
+    
+    # Reload the plate with all relationships
+    db_plate = db.query(models.Plate).filter(models.Plate.id == db_plate.id)\
+                 .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
+                 .first()
     
     return schemas.PlateRead.model_validate(db_plate)
 
@@ -932,7 +937,12 @@ async def update_plate(
             raise HTTPException(status_code=400, detail=f"Invalid filament_usages: {str(e)}")
 
     db.commit()
-    db.refresh(plate)
+    
+    # Reload the plate with all relationships
+    plate = db.query(models.Plate).filter(models.Plate.id == plate_id)\
+              .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
+              .first()
+    
     return schemas.PlateRead.model_validate(plate)
 
 

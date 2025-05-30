@@ -31,13 +31,29 @@ interface ProductsTabProps {
 
 export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
   const { filaments, products, printers, subscriptions, addProduct, deleteProduct, updateProduct, fetchProducts, addPlate } = useData()
+  
+  
+  // Clean up deleted filaments from plate form state
+  useEffect(() => {
+    const availableFilamentIds = new Set(filaments.map(f => f.id.toString()))
+    
+    setPlateRows(prevRows => 
+      prevRows.map(plate => ({
+        ...plate,
+        filament_usages: plate.filament_usages.map(usage => ({
+          ...usage,
+          filament_id: availableFilamentIds.has(usage.filament_id) ? usage.filament_id : ""
+        }))
+      }))
+    )
+  }, [filaments])
 
   const [productForm, setProductForm] = useState<ProductFormData>({
     name: "",
     license_id: undefined,
   })
 
-  const [plateRows, setPlateRows] = useState<PlateFormData[]>([{ name: "Main", quantity: 1, print_time_hrs: "", filament_usages: [{ filament_id: "", grams_used: "" }], gcode_file: null }])
+  const [plateRows, setPlateRows] = useState<PlateFormData[]>([{ name: "Plate 1", quantity: 1, print_time_hrs: "", filament_usages: [{ filament_id: "", grams_used: "" }], gcode_file: null }])
   const [selectedProduct, setSelectedProduct] = useState<ProductType | null>(null)
   
   const modelFileRef = useRef<HTMLInputElement>(null)
@@ -56,6 +72,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
     name: "",
     license_id: undefined,
   })
+  const [isAddingPlateInEditModal, setIsAddingPlateInEditModal] = useState(false)
   const editModelFileRef = useRef<HTMLInputElement>(null)
   const [editModelFileName, setEditModelFileName] = useState<string | null>(null)
   const [isEditDragging, setIsEditDragging] = useState(false)
@@ -118,6 +135,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
       await updateProduct(editingProduct.id, formData);
       setIsEditModalOpen(false);
       setEditingProduct(null);
+      setIsAddingPlateInEditModal(false);
     } catch (error) {
       console.error("Failed to update product:", error);
       alert("Failed to update product. Check console for details.");
@@ -130,7 +148,18 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
 
   // Plate management functions
   const addPlateRow = () => {
-    setPlateRows([...plateRows, { name: "", quantity: 1, print_time_hrs: "", filament_usages: [{ filament_id: "", grams_used: "" }], gcode_file: null }])
+    // Generate the next plate name
+    const plateNumbers = plateRows
+      .map(plate => {
+        const match = plate.name.match(/^Plate (\d+)$/)
+        return match ? parseInt(match[1]) : 0
+      })
+      .filter(num => num > 0)
+    
+    const nextNumber = plateNumbers.length > 0 ? Math.max(...plateNumbers) + 1 : 1
+    const nextPlateName = `Plate ${nextNumber}`
+    
+    setPlateRows([...plateRows, { name: nextPlateName, quantity: 1, print_time_hrs: "", filament_usages: [{ filament_id: "", grams_used: "" }], gcode_file: null }])
   }
 
   const removePlateRow = (plateIndex: number) => {
@@ -251,7 +280,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
       for (const plate of plateRows) {
         const plateFormData = new FormData()
         plateFormData.append("name", plate.name)
-        plateFormData.append("quantity", plate.quantity.toString())
+        plateFormData.append("quantity", "1") // Plates are always quantity 1
         plateFormData.append("print_time_hrs", (plate.print_time_hrs || "0").toString())
         
         const plateFilamentUsages = plate.filament_usages.map(usage => ({
@@ -273,7 +302,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
         name: "",
         license_id: undefined,
       })
-      setPlateRows([{ name: "Main", quantity: 1, print_time_hrs: "", filament_usages: [{ filament_id: "", grams_used: "" }], gcode_file: null }])
+      setPlateRows([{ name: "Plate 1", quantity: 1, print_time_hrs: "", filament_usages: [{ filament_id: "", grams_used: "" }], gcode_file: null }])
       if (modelFileRef.current) modelFileRef.current.value = ""
       setModelFileName("")
       
@@ -389,13 +418,13 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                       </div>
                     </div>
 
-                    <div className="space-y-2 p-4 bg-muted/30 rounded-lg border border-muted">
-                      <h3 className="text-md font-medium flex items-center gap-2">
-                        <UploadCloud className="h-5 w-5 text-primary" /> Model File (.stl, .3mf) (Optional)
+                    <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <h3 className="text-md font-medium flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                        <UploadCloud className="h-5 w-5 text-gray-600" /> Model File (.stl, .3mf) (Optional)
                       </h3>
                       <div 
                         className={`flex items-center justify-center w-full p-6 border-2 border-dashed rounded-lg cursor-pointer 
-                                    ${isDragging ? 'border-primary bg-primary/10' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'}
+                                    ${isDragging ? 'border-gray-500 bg-gray-100 dark:bg-gray-800/50' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-white dark:bg-gray-950/20'}
                                     transition-colors duration-200 ease-in-out`}
                         onClick={() => modelFileRef.current?.click()}
                         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
@@ -421,8 +450,8 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                           onChange={(e) => setModelFileName(e.target.files?.[0]?.name || "")}
                         />
                         <div className="text-center">
-                          <UploadCloud className={`mx-auto h-10 w-10 mb-2 ${isDragging ? 'text-primary' : 'text-gray-400'}`} />
-                          <p className={`text-sm ${isDragging ? 'text-primary' : 'text-gray-500 dark:text-gray-400'}`}>
+                          <UploadCloud className={`mx-auto h-10 w-10 mb-2 ${isDragging ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400'}`} />
+                          <p className={`text-sm ${isDragging ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
                             <span className="font-semibold">Click to upload</span> or drag and drop
                           </p>
                           <p className="text-xs text-gray-400 dark:text-gray-500">STL or 3MF</p>
@@ -444,66 +473,30 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                       <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
                     </div>
 
-                    <div className="space-y-4 p-5 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-xl border-2 border-blue-200 dark:border-blue-800 shadow-sm">
+                    <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold flex items-center gap-2 text-blue-700 dark:text-blue-300">
-                          <Package className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                        <h3 className="text-lg font-semibold flex items-center gap-2">
+                          <Package className="h-5 w-5 text-primary" />
                           Product Plates
                         </h3>
-                        <Button type="button" variant="outline" onClick={addPlateRow} size="sm" className="gap-1">
+                        <Button type="button" onClick={addPlateRow} size="sm" className="gap-1 bg-primary hover:bg-primary/90 text-white">
                           <Plus className="h-4 w-4" /> Add Plate
                         </Button>
                       </div>
-                      <p className="text-sm text-blue-600 dark:text-blue-300 bg-blue-100/50 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-700">
+                      <p className="text-sm text-muted-foreground p-3 rounded-lg border bg-background">
                         💡 Create plates for your product. Each plate can have multiple filaments and its own quantity.
                       </p>
                       <div className="space-y-4">
                         {plateRows.map((plate, plateIndex) => (
-                          <div key={plateIndex} className="border-2 border-blue-300 dark:border-blue-600 rounded-xl p-5 bg-white dark:bg-blue-950/20 shadow-md hover:shadow-lg transition-shadow">
-                            <div className="flex items-center gap-4 mb-6">
-                              <div className="flex-1">
-                                <Label htmlFor={`plate-name-${plateIndex}`} className="text-blue-700 dark:text-blue-300 font-medium">Plate Name</Label>
-                                <Input
-                                  id={`plate-name-${plateIndex}`}
-                                  value={plate.name}
-                                  onChange={(e) => handlePlateChange(plateIndex, 'name', e.target.value)}
-                                  placeholder="e.g., Base, Top, Handle"
-                                  className="border-blue-300 focus:border-blue-500 focus:ring-blue-500 dark:border-blue-600"
-                                  required
-                                />
-                              </div>
-                              <div className="w-24">
-                                <Label htmlFor={`plate-quantity-${plateIndex}`} className="text-blue-700 dark:text-blue-300 font-medium">Quantity</Label>
-                                <Input
-                                  id={`plate-quantity-${plateIndex}`}
-                                  type="number"
-                                  min="1"
-                                  value={plate.quantity}
-                                  onChange={(e) => handlePlateChange(plateIndex, 'quantity', Number(e.target.value))}
-                                  className="border-blue-300 focus:border-blue-500 focus:ring-blue-500 dark:border-blue-600"
-                                  required
-                                />
-                              </div>
-                              <div className="w-28">
-                                <Label htmlFor={`plate-print-time-${plateIndex}`} className="text-blue-700 dark:text-blue-300 font-medium">Print Time (hrs)</Label>
-                                <Input
-                                  id={`plate-print-time-${plateIndex}`}
-                                  type="number"
-                                  step="0.1"
-                                  min="0"
-                                  value={plate.print_time_hrs}
-                                  onChange={(e) => handlePlateChange(plateIndex, 'print_time_hrs', e.target.value)}
-                                  placeholder="e.g., 1.5"
-                                  className="border-blue-300 focus:border-blue-500 focus:ring-blue-500 dark:border-blue-600"
-                                  required
-                                />
-                              </div>
+                          <div key={plateIndex} className="border rounded-lg p-4 bg-card">
+                            <div className="flex items-center justify-between mb-4">
+                              <h4 className="text-lg font-semibold">{plate.name}</h4>
                               {plateRows.length > 1 && (
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="mt-6 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
                                   onClick={() => removePlateRow(plateIndex)}
                                 >
                                   <Trash2 className="h-4 w-4" />
@@ -511,25 +504,40 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                               )}
                             </div>
                             
+                            <div className="flex items-center gap-2 mb-6">
+                              <Label htmlFor={`plate-print-time-${plateIndex}`}>Print Time (hrs)</Label>
+                              <Input
+                                id={`plate-print-time-${plateIndex}`}
+                                type="number"
+                                step="0.1"
+                                min="0"
+                                value={plate.print_time_hrs}
+                                onChange={(e) => handlePlateChange(plateIndex, 'print_time_hrs', e.target.value)}
+                                placeholder="e.g., 1.5"
+                                required
+                                className="w-28"
+                              />
+                            </div>
+                            
                             <div className="space-y-3">
                               <div className="flex items-center justify-between">
-                                <Label className="text-sm font-semibold text-blue-700 dark:text-blue-300">Filament Usage</Label>
+                                <Label className="text-sm font-semibold">Filament Usage</Label>
                                 <Button
                                   type="button"
-                                  variant="outline"
                                   size="sm"
                                   onClick={() => addFilamentToPlate(plateIndex)}
+                                  className="bg-primary hover:bg-primary/90 text-white"
                                 >
                                   <Plus className="h-3 w-3 mr-1" /> Add Filament
                                 </Button>
                               </div>
                               
-                              <div className="overflow-x-auto rounded-lg border-2 border-blue-200 dark:border-blue-700">
+                              <div className="overflow-x-auto rounded-lg border">
                                 <Table>
                                   <TableHeader>
-                                    <TableRow className="bg-blue-50 dark:bg-blue-950/50 border-blue-200 dark:border-blue-700">
-                                      <TableHead className="text-xs font-semibold text-blue-700 dark:text-blue-300">Filament</TableHead>
-                                      <TableHead className="text-xs font-semibold text-blue-700 dark:text-blue-300">Grams</TableHead>
+                                    <TableRow>
+                                      <TableHead className="text-xs font-semibold">Filament</TableHead>
+                                      <TableHead className="text-xs font-semibold">Grams</TableHead>
                                       <TableHead className="w-12"></TableHead>
                                     </TableRow>
                                   </TableHeader>
@@ -539,7 +547,8 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                         <TableRow key={usageIndex}>
                                           <TableCell>
                                             <Select
-                                              value={usage.filament_id?.toString() || ""}
+                                              key={`product-filament-${plateIndex}-${usageIndex}-${filaments.length}`}
+                                              value={filaments.find(f => f.id.toString() === usage.filament_id?.toString()) ? usage.filament_id?.toString() || "" : ""}
                                               onValueChange={(value) => handleFilamentUsageChange(plateIndex, usageIndex, 'filament_id', value)}
                                               required
                                             >
@@ -599,11 +608,11 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                             </div>
 
                             {/* G-code File Upload for Plate */}
-                            <div className="mt-6 p-4 bg-gradient-to-r from-teal-50 to-cyan-50 dark:from-teal-950/30 dark:to-cyan-950/30 rounded-lg border border-teal-200 dark:border-teal-700">
-                              <Label className="text-sm font-semibold text-teal-700 dark:text-teal-300 mb-3 block">📄 G-code File (.gcode, .g, .gc) (Optional)</Label>
+                            <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
+                              <Label className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3 block">📄 G-code File (.gcode, .g, .gc) (Optional)</Label>
                               <div 
                                 className={`flex items-center justify-center w-full p-6 border-2 border-dashed rounded-xl cursor-pointer transition-all duration-200 ease-in-out
-                                            ${plateGcodeDragStates[plateIndex] ? 'border-teal-500 bg-teal-100 dark:bg-teal-900/50 shadow-lg' : 'border-teal-300 dark:border-teal-600 hover:border-teal-400 dark:hover:border-teal-500 bg-white dark:bg-teal-950/20'}`}
+                                            ${plateGcodeDragStates[plateIndex] ? 'border-gray-500 bg-gray-100 dark:bg-gray-800/50 shadow-lg' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-white dark:bg-gray-950/20'}`}
                                 onClick={() => {
                                   const input = document.querySelector(`#gcode-file-${plateIndex}`) as HTMLInputElement
                                   input?.click()
@@ -638,13 +647,13 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                   onChange={(e) => handlePlateGcodeFileChange(plateIndex, e.target.files?.[0] || null)}
                                 />
                                 <div className="text-center">
-                                  <svg xmlns="http://www.w3.org/2000/svg" className={`mx-auto h-10 w-10 mb-3 ${plateGcodeDragStates[plateIndex] ? 'text-teal-600 dark:text-teal-400' : 'text-teal-400 dark:text-teal-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <svg xmlns="http://www.w3.org/2000/svg" className={`mx-auto h-10 w-10 mb-3 ${plateGcodeDragStates[plateIndex] ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                   </svg>
-                                  <p className={`text-sm font-medium ${plateGcodeDragStates[plateIndex] ? 'text-teal-700 dark:text-teal-300' : 'text-teal-600 dark:text-teal-400'}`}>
+                                  <p className={`text-sm font-medium ${plateGcodeDragStates[plateIndex] ? 'text-gray-700 dark:text-gray-300' : 'text-gray-600 dark:text-gray-400'}`}>
                                     <span className="font-bold">Click</span> or drag G-code file
                                   </p>
-                                  <p className="text-xs text-teal-500 dark:text-teal-400 mt-1">Supports .gcode, .g, .gc files</p>
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Supports .gcode, .g, .gc files</p>
                                   {plateGcodeFileNames[plateIndex] && (
                                     <div className="mt-3 p-2 bg-green-100 dark:bg-green-900/30 rounded-lg border border-green-200 dark:border-green-700">
                                       <p className="text-sm font-medium text-green-700 dark:text-green-300">
@@ -740,10 +749,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                         <TableCell className="font-medium">{product.sku}</TableCell>
                         <TableCell>{product.name}</TableCell>
                         <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className="bg-blue-100 text-blue-800 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300"
-                          >
+                          <Badge variant="secondary">
                             €{product.cop ? product.cop.toFixed(2) : 'N/A'}
                           </Badge>
                         </TableCell>
@@ -755,7 +761,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                 return (
                                   <Button
                                     variant="link"
-                                    className="p-0 h-auto font-normal text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                                    className="p-0 h-auto font-normal text-primary hover:text-primary/80 hover:underline cursor-pointer"
                                     onClick={() => handleOpenLicenseModal(license)}
                                   >
                                     {license.name}
@@ -821,10 +827,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                     <div className="bg-muted/30 p-3 rounded-lg border">
                                       <dt className="text-sm font-medium text-muted-foreground">Est. COP</dt>
                                       <dd className="mt-1">
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-lg font-semibold bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300"
-                                        >
+                                        <Badge variant="secondary" className="text-lg font-semibold">
                                           €{selectedProduct.cop ? Number(selectedProduct.cop).toFixed(2) : 'N/A'}
                                         </Badge>
                                       </dd>
@@ -929,7 +932,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                             size="icon"
                             className="h-8 w-8 text-gray-500 hover:text-red-600"
                             onClick={() => {
-                              if (confirm(`Delete product #${product.id}?`)) {
+                              if (confirm(`Are you sure you want to delete "${product.name}"?`)) {
                                 deleteProduct(product.id)
                               }
                             }}
@@ -955,8 +958,30 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
 
       {/* Edit Product Modal */}
       {editingProduct && (
-        <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+        <Dialog 
+          open={isEditModalOpen} 
+          onOpenChange={(open) => {
+            // Prevent closing if Add Plate dialog is open
+            if (!open && isAddingPlateInEditModal) {
+              return;
+            }
+            setIsEditModalOpen(open);
+            if (!open) {
+              // Clean up when modal closes
+              setEditingProduct(null);
+              setIsAddingPlateInEditModal(false);
+            }
+          }}
+        >
+          <DialogContent 
+            className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+            onPointerDownOutside={(e) => {
+              // Prevent closing when clicking outside if Add Plate dialog is open
+              if (isAddingPlateInEditModal) {
+                e.preventDefault();
+              }
+            }}
+          >
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-xl">
                 <Pencil className="h-5 w-5 text-primary" />
@@ -1059,23 +1084,53 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
               {/* Plates Section */}
               <Separator className="my-4" />
               <div className="space-y-2">
-                <h3 className="text-lg font-semibold mb-2">Plates</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold">Plates</h3>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsAddingPlateInEditModal(true)}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Add Plate
+                  </Button>
+                </div>
                 <PlateManager 
                   productId={editingProduct.id} 
                   plates={editingProduct.plates || []}
                   filaments={filaments}
-                  onPlatesChange={() => fetchProducts()}
+                  isAddingPlate={isAddingPlateInEditModal}
+                  setIsAddingPlate={setIsAddingPlateInEditModal}
+                  onPlatesChange={(updatedPlates) => {
+                    if (updatedPlates) {
+                      // Update only the local state, don't refetch all products
+                      setEditingProduct(prev => {
+                        if (!prev) return prev;
+                        return {
+                          ...prev,
+                          plates: updatedPlates
+                        };
+                      });
+                    }
+                  }}
                 />
               </div>
 
               {/* Actions */}
               <div className="pt-3 flex justify-end gap-2">
-                <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setIsEditModalOpen(false);
+                    setEditingProduct(null);
+                    setIsAddingPlateInEditModal(false);
+                  }}
+                >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-gradient-to-r from-yellow-600 to-yellow-500 hover:from-yellow-700 hover:to-yellow-600 text-white px-6"
+                  className="bg-gradient-to-r from-green-600 to-green-500 hover:from-green-700 hover:to-green-600 text-white px-6"
                 >
                   Update Product
                 </Button>
@@ -1108,7 +1163,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                     href={selectedLicenseDetails.license_uri} 
                     target="_blank" 
                     rel="noopener noreferrer" 
-                    className="block text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline break-all mt-0.5"
+                    className="block text-sm font-semibold text-primary hover:text-primary/80 hover:underline break-all mt-0.5"
                   >
                     {selectedLicenseDetails.license_uri}
                   </a>

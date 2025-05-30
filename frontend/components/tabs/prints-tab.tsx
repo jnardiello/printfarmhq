@@ -320,8 +320,8 @@ export function PrintsTab() {
                       <TableRow key={job.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{job.name || `Job #${job.id.slice(0,6)}`}</TableCell>
                         <TableCell>
-                          {job.products && job.products.length > 0 
-                            ? `${job.products.length} Product Line${job.products.length > 1 ? 's' : ''}` 
+                          {job.products && job.products.length > 0
+                            ? `${job.products.length} Product Line${job.products.length > 1 ? 's' : ''}`
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
@@ -333,18 +333,14 @@ export function PrintsTab() {
                           {job.products ? job.products.reduce((acc: number, p_item: any) => acc + (p_item.items_qty || 0), 0) : 0}
                         </TableCell>
                         <TableCell>
-                          <span 
+                          <span
                             className="font-medium text-gray-700 dark:text-gray-300"
-                            title={(
-`Filament Costs: Sum per product line ((grams/1000 * €/kg) * items qty) + 
-Printer Costs: Sum per printer line ((€/hr * hours each) * printers qty) + 
-Packaging Cost: €${job.packaging_cost_eur !== undefined ? job.packaging_cost_eur.toFixed(2) : '0.00'}`
-                            ).replace(/\n/g, ' ')}
+                            title={`Filament Costs: Sum per product line ((grams/1000 * €/kg) * items qty) + Printer Costs: Sum per printer line ((€/hr * hours each) * printers qty) + Packaging Cost: €${job.packaging_cost_eur !== undefined ? job.packaging_cost_eur.toFixed(2) : '0.00'}`}
                           >
                             €{job.calculated_cogs_eur ? job.calculated_cogs_eur.toFixed(2) : 'N/A'}
                           </span>
                         </TableCell>
-                        <TableCell>{new Date(job.created_at).toLocaleDateString()}</TableCell> {/* Assuming created_at exists */}
+                        <TableCell>{new Date(job.created_at).toLocaleDateString()}</TableCell>{/* Assuming created_at exists */}
                         <TableCell>
                           <Button
                             variant="ghost"

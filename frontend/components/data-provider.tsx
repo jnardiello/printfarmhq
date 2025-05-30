@@ -375,11 +375,20 @@ export function DataProvider({ children }: { children: ReactNode }) {
         title: "Success",
         description: "Product deleted successfully",
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deleting product:", error)
+      
+      let errorMessage = "Failed to delete product"
+      
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
       toast({
-        title: "Error Deleting Product",
-        description: (error as Error).message,
+        title: "Cannot Delete Product",
+        description: errorMessage,
         variant: "destructive",
       })
     }
@@ -403,12 +412,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const addPlate = async (productId: number, plateData: FormData) => {
     try {
-      await apiUpload<Plate>(`/products/${productId}/plates`, plateData)
-      await fetchProducts() // Refresh products to get updated plates
-      toast({
-        title: "Success",
-        description: "Plate added successfully",
-      })
+      const newPlate = await apiUpload<Plate>(`/products/${productId}/plates`, plateData)
+      // Don't call fetchProducts here - let the caller decide what to do
+      // Also don't show toast here - let the PlateManager handle it
+      return newPlate
     } catch (error) {
       console.error("Error adding plate:", error)
       toast({
@@ -416,19 +423,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+      throw error
     }
   }
 
   const updatePlate = async (plateId: number, plateData: FormData) => {
     try {
-      await apiUpload<Plate>(`/plates/${plateId}`, plateData, {
+      const updatedPlate = await apiUpload<Plate>(`/plates/${plateId}`, plateData, {
         method: "PATCH",
       })
-      await fetchProducts() // Refresh products to get updated plates
-      toast({
-        title: "Success",
-        description: "Plate updated successfully",
-      })
+      // Don't call fetchProducts here - let the caller decide what to do
+      // Also don't show toast here - let the PlateManager handle it
+      return updatedPlate
     } catch (error) {
       console.error("Error updating plate:", error)
       toast({
@@ -436,6 +442,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+      throw error
     }
   }
 
@@ -444,11 +451,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       await api(`/plates/${plateId}`, {
         method: "DELETE",
       })
-      await fetchProducts() // Refresh products to get updated plates
-      toast({
-        title: "Success",
-        description: "Plate deleted successfully",
-      })
+      // Don't call fetchProducts here - let the caller decide what to do
+      // Also don't show toast here - let the PlateManager handle it
     } catch (error) {
       console.error("Error deleting plate:", error)
       toast({
@@ -456,6 +460,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+      throw error
     }
   }
 
