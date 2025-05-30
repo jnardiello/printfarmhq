@@ -441,6 +441,40 @@ main() {
     # Update CHANGELOG.md file
     update_changelog_file "$NEW_VERSION" "$CHANGELOG"
     
+    # Show changelog preview
+    echo ""
+    print_status "Generated changelog for $NEW_VERSION:"
+    echo "----------------------------------------"
+    echo "$CHANGELOG"
+    echo "----------------------------------------"
+    echo ""
+    
+    # Allow user to review and edit CHANGELOG.md
+    print_status "CHANGELOG.md has been updated. Please review it now."
+    echo ""
+    echo "You can:"
+    echo "  1) Open CHANGELOG.md in your editor to review/edit"
+    echo "  2) The changes are staged but not committed yet"
+    echo ""
+    read -p "Press ENTER when you're done reviewing/editing CHANGELOG.md..." -r
+    
+    # Re-stage CHANGELOG.md in case it was edited
+    git add CHANGELOG.md
+    
+    # Show the final changelog diff
+    print_status "Final CHANGELOG.md changes:"
+    git diff --cached CHANGELOG.md
+    echo ""
+    
+    # Confirm before committing
+    read -p "Do you want to proceed with these changelog changes? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        print_warning "Aborting release. You can manually edit CHANGELOG.md and run the script again."
+        git reset HEAD docker-compose*.yml CHANGELOG.md
+        exit 0
+    fi
+    
     # Commit version bump and changelog
     git add docker-compose*.yml CHANGELOG.md
     git commit -m "chore: bump version to $NEW_VERSION and update changelog"
