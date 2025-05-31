@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
 import type { Plate, PlateFormData, PlateFilamentRowData, Filament } from "@/lib/types"
-import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat } from "@/lib/time-format"
+import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat, formatHoursDisplay } from "@/lib/time-format"
 
 interface PlateManagerProps {
   productId: number
@@ -87,7 +87,7 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
       setEditForm({
         name: editingPlate.name,
         quantity: editingPlate.quantity,
-        print_time_hrs: editingPlate.print_time_hrs,
+        print_time_hrs: editingPlate.print_time_formatted || formatHoursDisplay(editingPlate.print_time_hrs),
         filament_usages: editingPlate.filament_usages.map(fu => ({
           filament_id: fu.filament_id,
           grams_used: fu.grams_used

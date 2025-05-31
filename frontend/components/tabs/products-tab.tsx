@@ -18,7 +18,7 @@ import type { ProductFormData, Product as ProductType, Printer, Filament, Subscr
 import { motion } from "framer-motion"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { PlateManager } from "@/components/plate-manager"
-import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat } from "@/lib/time-format"
+import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat, formatHoursDisplay } from "@/lib/time-format"
 
 // Edit form data for product-level fields only
 interface ProductEditFormData {
@@ -830,8 +830,8 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                       <dt className="text-sm font-medium text-muted-foreground">Print time</dt>
                                       <dd className="mt-1 text-lg font-semibold">
                                         {selectedProduct.plates && selectedProduct.plates.length > 0 
-                                          ? `${selectedProduct.plates.reduce((total, plate) => total + (plate.print_time_hrs * plate.quantity), 0).toFixed(2)}h`
-                                          : selectedProduct.print_time_formatted || `${selectedProduct.print_time_hrs}h`}
+                                          ? formatHoursDisplay(selectedProduct.plates.reduce((total, plate) => total + (plate.print_time_hrs * plate.quantity), 0))
+                                          : selectedProduct.print_time_formatted || formatHoursDisplay(selectedProduct.print_time_hrs)}
                                       </dd>
                                     </div>
                                     <div className="bg-muted/30 p-3 rounded-lg border">

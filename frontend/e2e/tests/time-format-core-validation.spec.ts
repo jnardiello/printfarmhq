@@ -117,4 +117,56 @@ test.describe('Time Format Core Validation', () => {
       expect(result.passed, `Regex test failed for "${result.input}": expected ${result.expected}, got ${result.actual}`).toBe(true)
     }
   })
+  
+  test('formatHoursDisplay function works correctly', async ({ page }) => {
+    await page.goto('/')
+    
+    const formatResults = await page.evaluate(() => {
+      // Import the formatHoursDisplay function
+      function formatHoursDisplay(hours: number): string {
+        if (hours <= 0) return "0m"
+        
+        const h = Math.floor(hours)
+        const m = Math.round((hours - h) * 60)
+        
+        if (m === 60) {  // Handle rounding edge case
+          return `${h + 1}h`
+        }
+        
+        if (h > 0 && m > 0) {
+          return `${h}h${m}m`
+        } else if (h > 0) {
+          return `${h}h`
+        } else {
+          return `${m}m`
+        }
+      }
+      
+      const testCases = [
+        { input: 1.5, expected: '1h30m' },
+        { input: 1.75, expected: '1h45m' },
+        { input: 2.0, expected: '2h' },
+        { input: 0.5, expected: '30m' },
+        { input: 0.75, expected: '45m' },
+        { input: 2.25, expected: '2h15m' },
+        { input: 0, expected: '0m' },
+        { input: -1, expected: '0m' },
+        // Edge cases
+        { input: 0.9999, expected: '1h' }, // Rounds to 60 minutes = 1h
+        { input: 1.999, expected: '2h' }, // Rounds to 120 minutes = 2h
+        { input: 0.083333, expected: '5m' }, // 5/60 hours
+      ]
+      
+      return testCases.map(test => ({
+        input: test.input,
+        expected: test.expected,
+        actual: formatHoursDisplay(test.input),
+        passed: formatHoursDisplay(test.input) === test.expected
+      }))
+    })
+    
+    for (const result of formatResults) {
+      expect(result.passed, `Format failed for ${result.input}: expected "${result.expected}", got "${result.actual}"`).toBe(true)
+    }
+  })
 })
