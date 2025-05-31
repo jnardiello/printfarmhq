@@ -18,6 +18,7 @@ import type { ProductFormData, Product as ProductType, Printer, Filament, Subscr
 import { motion } from "framer-motion"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { PlateManager } from "@/components/plate-manager"
+import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat } from "@/lib/time-format"
 
 // Edit form data for product-level fields only
 interface ProductEditFormData {
@@ -281,7 +282,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
         const plateFormData = new FormData()
         plateFormData.append("name", plate.name)
         plateFormData.append("quantity", "1") // Plates are always quantity 1
-        plateFormData.append("print_time_hrs", (plate.print_time_hrs || "0").toString())
+        plateFormData.append("print_time", (plate.print_time_hrs || "0").toString())
         
         const plateFilamentUsages = plate.filament_usages.map(usage => ({
           filament_id: Number(usage.filament_id),
@@ -505,17 +506,25 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                             </div>
                             
                             <div className="flex items-center gap-2 mb-6">
-                              <Label htmlFor={`plate-print-time-${plateIndex}`}>Print Time (hrs)</Label>
+                              <Label htmlFor={`plate-print-time-${plateIndex}`}>Print Time</Label>
                               <Input
                                 id={`plate-print-time-${plateIndex}`}
-                                type="number"
-                                step="0.1"
-                                min="0"
+                                type="text"
                                 value={plate.print_time_hrs}
-                                onChange={(e) => handlePlateChange(plateIndex, 'print_time_hrs', e.target.value)}
-                                placeholder="e.g., 1.5"
+                                onChange={(e) => {
+                                  const value = e.target.value
+                                  handlePlateChange(plateIndex, 'print_time_hrs', value)
+                                  // Provide immediate visual feedback
+                                  const input = e.target as HTMLInputElement
+                                  if (value && !isValidTimeFormat(value)) {
+                                    input.setCustomValidity("Use format like 1h30m, 2h, 45m, or 1.5")
+                                  } else {
+                                    input.setCustomValidity("")
+                                  }
+                                }}
+                                placeholder={TIME_FORMAT_PLACEHOLDER}
                                 required
-                                className="w-28"
+                                className="w-40"
                               />
                             </div>
                             
@@ -821,8 +830,8 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                       <dt className="text-sm font-medium text-muted-foreground">Print time</dt>
                                       <dd className="mt-1 text-lg font-semibold">
                                         {selectedProduct.plates && selectedProduct.plates.length > 0 
-                                          ? selectedProduct.plates.reduce((total, plate) => total + (plate.print_time_hrs * plate.quantity), 0).toFixed(2)
-                                          : selectedProduct.print_time_hrs} h
+                                          ? `${selectedProduct.plates.reduce((total, plate) => total + (plate.print_time_hrs * plate.quantity), 0).toFixed(2)}h`
+                                          : selectedProduct.print_time_formatted || `${selectedProduct.print_time_hrs}h`}
                                       </dd>
                                     </div>
                                     <div className="bg-muted/30 p-3 rounded-lg border">

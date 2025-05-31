@@ -8,7 +8,7 @@ test.describe('Dashboard Navigation', () => {
         localStorage.clear();
       } catch (e) {
         // Handle cases where localStorage is not accessible
-        console.log('localStorage not accessible:', e);
+        // localStorage not accessible
       }
     });
     await page.goto('/auth');

@@ -116,7 +116,8 @@ test.describe('Authentication', () => {
     } else {
       // Desktop navigation - Inventory dropdown
       await page.click('button:has-text("Inventory")');
-      await page.click('text=Filaments');
+      await page.waitForSelector('[role="menu"]', { state: 'visible' });
+      await page.click('[role="menuitem"]:has-text("Filaments")');
     }
     await page.waitForURL('/?tab=filaments');
 

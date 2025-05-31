@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
 import type { Plate, PlateFormData, PlateFilamentRowData, Filament } from "@/lib/types"
+import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat } from "@/lib/time-format"
 
 interface PlateManagerProps {
   productId: number
@@ -116,7 +117,7 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
       const formData = new FormData()
       formData.append("name", plateName)
       formData.append("quantity", "1") // Plates are always quantity 1
-      formData.append("print_time_hrs", plateForm.print_time_hrs.toString())
+      formData.append("print_time", plateForm.print_time_hrs.toString())
       
       const usages = filamentRows.map(row => ({
         filament_id: Number(row.filament_id),
@@ -168,7 +169,7 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
     const formData = new FormData()
     formData.append("name", editingPlate.name) // Keep the original name
     formData.append("quantity", "1") // Plates are always quantity 1
-    formData.append("print_time_hrs", editForm.print_time_hrs.toString())
+    formData.append("print_time", editForm.print_time_hrs.toString())
     
     const usages = editFilamentRows.map(row => ({
       filament_id: Number(row.filament_id),
@@ -354,7 +355,7 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
                       </div>
                       <div>
                         <span className="text-sm text-gray-500">Print Time</span>
-                        <p className="font-semibold">{plate.print_time_hrs}h</p>
+                        <p className="font-semibold">{plate.print_time_formatted || `${plate.print_time_hrs}h`}</p>
                       </div>
                       <div>
                         <span className="text-sm text-gray-500">Cost</span>
@@ -427,15 +428,23 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
             onClick={(e) => e.stopPropagation()}
           >
             <div>
-              <Label htmlFor="platePrintTime">Print Time (hrs)</Label>
+              <Label htmlFor="platePrintTime">Print Time</Label>
               <Input
                 id="platePrintTime"
-                type="number"
-                min="0"
-                step="0.1"
+                type="text"
                 value={plateForm.print_time_hrs}
-                onChange={(e) => setPlateForm({...plateForm, print_time_hrs: e.target.value})}
-                placeholder="e.g., 2.5"
+                onChange={(e) => {
+                  const value = e.target.value
+                  setPlateForm({...plateForm, print_time_hrs: value})
+                  // Provide immediate visual feedback
+                  const input = e.target as HTMLInputElement
+                  if (value && !isValidTimeFormat(value)) {
+                    input.setCustomValidity("Use format like 1h30m, 2h, 45m, or 1.5")
+                  } else {
+                    input.setCustomValidity("")
+                  }
+                }}
+                placeholder={TIME_FORMAT_PLACEHOLDER}
                 required
               />
             </div>
@@ -622,14 +631,23 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
             </DialogHeader>
             <form onSubmit={handleUpdatePlate} className="space-y-4">
               <div>
-                <Label htmlFor="editPlatePrintTime">Print Time (hrs)</Label>
+                <Label htmlFor="editPlatePrintTime">Print Time</Label>
                 <Input
                   id="editPlatePrintTime"
-                  type="number"
-                  min="0"
-                  step="0.1"
+                  type="text"
                   value={editForm.print_time_hrs}
-                  onChange={(e) => setEditForm({...editForm, print_time_hrs: e.target.value})}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setEditForm({...editForm, print_time_hrs: value})
+                    // Provide immediate visual feedback
+                    const input = e.target as HTMLInputElement
+                    if (value && !isValidTimeFormat(value)) {
+                      input.setCustomValidity("Use format like 1h30m, 2h, 45m, or 1.5")
+                    } else {
+                      input.setCustomValidity("")
+                    }
+                  }}
+                  placeholder={TIME_FORMAT_PLACEHOLDER}
                   required
                 />
               </div>

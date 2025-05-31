@@ -37,6 +37,7 @@ export interface Plate {
   name: string
   quantity: number
   print_time_hrs: number
+  print_time_formatted: string
   cost: number
   file_path?: string | null
   gcode_path?: string | null

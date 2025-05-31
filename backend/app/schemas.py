@@ -2,7 +2,8 @@ from datetime import date, datetime
 from typing import Optional, Literal, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict, EmailStr
+from pydantic import BaseModel, Field, ConfigDict, EmailStr, computed_field
+from .utils.time_parser import format_hours_display
 
 
 class FilamentBase(BaseModel):
@@ -61,6 +62,12 @@ class ProductRead(ProductBase):
     plates: Optional[List["PlateRead"]] = None  # New plate-based structure
 
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
+    
+    @computed_field
+    @property
+    def print_time_formatted(self) -> str:
+        """Return print time in human-readable format."""
+        return format_hours_display(self.print_time_hrs)
 
 
 class ProductUpdate(BaseModel):
@@ -102,6 +109,12 @@ class PlateRead(PlateBase):
     id: int
     cost: float
     filament_usages: List[PlateFilamentUsageRead] = []
+    
+    @computed_field
+    @property
+    def print_time_formatted(self) -> str:
+        """Return print time in human-readable format."""
+        return format_hours_display(self.print_time_hrs)
 
 
 class PlateUpdate(BaseModel):

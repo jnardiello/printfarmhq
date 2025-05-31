@@ -11,6 +11,7 @@ import logging
 
 from . import models, schemas
 from .database import Base, engine, SessionLocal
+from .utils.form_helpers import parse_time_from_form
 from .auth import (
     get_current_user, 
     get_current_admin_user,
@@ -488,13 +489,17 @@ def export_filament_purchases(db: Session = Depends(get_db), current_user: model
 @app.post("/products", response_model=schemas.ProductRead)
 async def create_product(
     name: str = Form(...),
-    print_time_hrs: float = Form(...),
+    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
+    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
     license_id: Optional[int] = Form(None),
     filament_usages_str: str = Form(..., alias="filament_usages"),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    # Handle time format conversion
+    actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
+    
     saved_model_file_path: Optional[str] = None
     if file and file.filename:
         original_filename = file.filename
@@ -526,7 +531,7 @@ async def create_product(
     skl = _generate_sku(name, db)
     db_product_data = {
         "name": name, "sku": skl,
-        "print_time_hrs": print_time_hrs,
+        "print_time_hrs": actual_print_time_hrs,
         "license_id": license_id, "file_path": saved_model_file_path,
         "filament_weight_g": 0.0,
     }
@@ -697,7 +702,8 @@ async def create_plate(
     product_id: int,
     name: str = Form(...),
     quantity: int = Form(...),
-    print_time_hrs: float = Form(...),
+    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
+    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
     filament_usages_str: str = Form(..., alias="filament_usages"),
     file: Optional[UploadFile] = File(None),
     gcode_file: Optional[UploadFile] = File(None),
@@ -708,6 +714,9 @@ async def create_plate(
     product = db.get(models.Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Handle time format conversion
+    actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
     
     # Handle file upload
     saved_file_path: Optional[str] = None
@@ -765,7 +774,7 @@ async def create_plate(
         product_id=product_id,
         name=name,
         quantity=quantity,
-        print_time_hrs=print_time_hrs,
+        print_time_hrs=actual_print_time_hrs,
         file_path=saved_file_path,
         gcode_path=saved_gcode_path
     )
@@ -833,7 +842,8 @@ async def update_plate(
     plate_id: int,
     name: Optional[str] = Form(None),
     quantity: Optional[int] = Form(None),
-    print_time_hrs: Optional[float] = Form(None),
+    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
+    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
     filament_usages_str: Optional[str] = Form(None, alias="filament_usages"),
     file: Optional[UploadFile] = File(None),
     gcode_file: Optional[UploadFile] = File(None),
@@ -843,14 +853,19 @@ async def update_plate(
     plate = db.get(models.Plate, plate_id)
     if not plate:
         raise HTTPException(status_code=404, detail="Plate not found")
+    
+    # Handle time format conversion (optional for updates)
+    actual_print_time_hrs = None
+    if print_time is not None or print_time_hrs is not None:
+        actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
 
     # Update basic fields
     if name is not None:
         plate.name = name
     if quantity is not None:
         plate.quantity = quantity
-    if print_time_hrs is not None:
-        plate.print_time_hrs = print_time_hrs
+    if actual_print_time_hrs is not None:
+        plate.print_time_hrs = actual_print_time_hrs
 
     # Handle file update
     if file and file.filename:
