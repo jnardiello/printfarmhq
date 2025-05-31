@@ -10,6 +10,7 @@ import { PrintersTab } from "@/components/tabs/printers-tab"
 import { SubscriptionsTab } from "@/components/tabs/subscriptions-tab"
 import { PrintsTab } from "@/components/tabs/prints-tab"
 import { UsersTab } from "@/components/tabs/users-tab"
+import { FilamentTypesTab } from "@/components/tabs/filament-types-tab"
 import { HomePage } from "@/components/home-page"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -40,7 +41,7 @@ export function Dashboard() {
     const tab = searchParams.get("tab")
     const validTabs = ["home", "filaments", "products", "printers", "subscriptions", "prints"]
     if (user?.is_admin) {
-      validTabs.push("users")
+      validTabs.push("users", "filament-types")
     }
     
     if (tab && validTabs.includes(tab)) {
@@ -84,7 +85,8 @@ export function Dashboard() {
   ]
   
   const administrationOptions = [
-    { value: "users", label: "Users" }
+    { value: "users", label: "Users" },
+    { value: "filament-types", label: "Filament Types" }
   ]
   
   const tabOptions = baseTabOptions
@@ -247,6 +249,7 @@ export function Dashboard() {
         {activeTab === "prints" && <PrintsTab />}
         {activeTab === "subscriptions" && <SubscriptionsTab />}
         {user?.is_admin && activeTab === "users" && <UsersTab />}
+        {user?.is_admin && activeTab === "filament-types" && <FilamentTypesTab />}
       </main>
       <Toaster />
     </div>

@@ -325,10 +325,28 @@ def update_current_user(
     return schemas.UserRead.model_validate(user)
 
 
+# ---------- Filament Helpers ---------- #
+
+def check_existing_filament(db: Session, color: str, brand: str, material: str) -> Optional[models.Filament]:
+    """Check if a filament with the same color, brand, and material already exists (case-insensitive)."""
+    from sqlalchemy import func
+    
+    color_normalized = color.strip().lower()
+    brand_normalized = brand.strip().lower()
+    material_normalized = material.strip()
+    
+    return db.query(models.Filament).filter(
+        func.lower(func.trim(models.Filament.color)) == color_normalized,
+        func.lower(func.trim(models.Filament.brand)) == brand_normalized,
+        func.trim(models.Filament.material) == material_normalized
+    ).first()
+
+
 # ---------- Filaments ---------- #
 
 @app.post("/filaments", response_model=schemas.FilamentRead, status_code=status.HTTP_201_CREATED)
 def create_filament(filament: schemas.FilamentCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Create a new filament type (any authenticated user can create filament types)"""
     db_filament = models.Filament(**filament.model_dump())
     db.add(db_filament)
     db.commit()
@@ -338,6 +356,7 @@ def create_filament(filament: schemas.FilamentCreate, db: Session = Depends(get_
 
 @app.get("/filaments", response_model=list[schemas.FilamentRead])
 def list_filaments(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """List all filament types (any authenticated user can view filament types)"""
     return db.query(models.Filament).all()
 
 
@@ -351,9 +370,28 @@ def get_filament(filament_id: int, db: Session = Depends(get_db), current_user: 
 
 @app.delete("/filaments/{filament_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_filament(filament_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Delete a filament type (any authenticated user can delete filament types)"""
     filament = db.get(models.Filament, filament_id)
     if not filament:
         raise HTTPException(status_code=404, detail="Filament not found")
+    
+    # Check if filament has inventory
+    if filament.total_qty_kg > 0:
+        raise HTTPException(
+            status_code=400, 
+            detail="Cannot delete filament type with existing inventory. Use up or transfer the inventory first."
+        )
+    
+    # Check if filament is used in any products
+    filament_usages = db.query(models.FilamentUsage).filter(models.FilamentUsage.filament_id == filament_id).first()
+    plate_usages = db.query(models.PlateFilamentUsage).filter(models.PlateFilamentUsage.filament_id == filament_id).first()
+    
+    if filament_usages or plate_usages:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete filament type that is used in products. Remove it from all products first."
+        )
+    
     db.delete(filament)
     db.commit()
     return
@@ -361,6 +399,7 @@ def delete_filament(filament_id: int, db: Session = Depends(get_db), current_use
 
 @app.patch("/filaments/{filament_id}", response_model=schemas.FilamentRead)
 def update_filament(filament_id: int, upd: schemas.FilamentUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Update a filament type (any authenticated user can update filament types)"""
     filament = db.get(models.Filament, filament_id)
     if not filament:
         raise HTTPException(status_code=404, detail="Filament not found")
@@ -370,6 +409,131 @@ def update_filament(filament_id: int, upd: schemas.FilamentUpdate, db: Session =
     db.commit()
     db.refresh(filament)
     return filament
+
+
+@app.post("/filaments/create-flexible", response_model=schemas.FilamentFlexibleResponse)
+def create_filament_flexible(
+    filament_data: schemas.FilamentFlexibleCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """
+    Create a new filament type with optional initial inventory.
+    Any authenticated user can create filament types.
+    """
+    from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+    from datetime import date
+    
+    try:
+        # Check for existing filament first (case-insensitive)
+        existing_filament = check_existing_filament(
+            db, filament_data.color, filament_data.brand, filament_data.material
+        )
+        
+        if existing_filament:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Filament already exists",
+                    "existing_filament": schemas.FilamentRead.model_validate(existing_filament).model_dump()
+                }
+            )
+        
+        # Start transaction - SQLAlchemy session is transactional by default
+        # Create filament (store with original case but trimmed)
+        db_filament = models.Filament(
+            color=filament_data.color.strip(),
+            brand=filament_data.brand.strip(),
+            material=filament_data.material.strip(),
+            price_per_kg=filament_data.estimated_cost_per_kg,  # Use estimated cost initially
+            total_qty_kg=0.0,  # No inventory by default
+            min_filaments_kg=None  # User can set this later
+        )
+        
+        warnings = []
+        db_purchase = None
+        
+        # Optionally create purchase
+        if filament_data.create_purchase and filament_data.purchase_data:
+            # Update filament with actual purchase data
+            db_filament.price_per_kg = filament_data.purchase_data.price_per_kg
+            db_filament.total_qty_kg = filament_data.purchase_data.quantity_kg
+            
+            db.add(db_filament)
+            db.flush()  # Flush to get the ID without committing
+            
+            # Create purchase record
+            db_purchase = models.FilamentPurchase(
+                filament_id=db_filament.id,
+                quantity_kg=filament_data.purchase_data.quantity_kg,
+                price_per_kg=filament_data.purchase_data.price_per_kg,
+                purchase_date=filament_data.purchase_data.purchase_date or date.today(),
+                channel=filament_data.purchase_data.purchase_channel,
+                notes=filament_data.purchase_data.notes
+            )
+            db.add(db_purchase)
+        else:
+            # No purchase - just create the filament type
+            db.add(db_filament)
+            warnings.append("No inventory tracked for this filament")
+        
+        # Commit transaction
+        db.commit()
+        
+        # Refresh to get all fields
+        db.refresh(db_filament)
+        if db_purchase:
+            db.refresh(db_purchase)
+        
+        return schemas.FilamentFlexibleResponse(
+            filament=schemas.FilamentRead.model_validate(db_filament),
+            purchase=schemas.FilamentPurchaseRead.model_validate(db_purchase) if db_purchase else None,
+            message="Filament created successfully" + (" with initial inventory" if db_purchase else ""),
+            warnings=warnings
+        )
+        
+    except HTTPException:
+        # Re-raise HTTPException without catching it
+        db.rollback()
+        raise
+    except IntegrityError as e:
+        db.rollback()
+        # This could happen if another request created the same filament concurrently
+        # Try to fetch the existing filament (case-insensitive)
+        existing_filament = check_existing_filament(
+            db, filament_data.color, filament_data.brand, filament_data.material
+        )
+        
+        if existing_filament:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "message": "Filament was created by another process",
+                    "existing_filament": schemas.FilamentRead.model_validate(existing_filament).model_dump()
+                }
+            )
+        else:
+            # Some other integrity error
+            logger.error(f"Integrity error creating filament: {str(e)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create filament due to data integrity error"
+            )
+            
+    except SQLAlchemyError as e:
+        db.rollback()
+        logger.error(f"Database error creating filament with purchase: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to create filament with purchase. Transaction rolled back."
+        )
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error creating filament with purchase: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred"
+        )
 
 
 # ---------- Filament Purchases ---------- #

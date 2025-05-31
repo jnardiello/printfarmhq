@@ -12,18 +12,21 @@ interface FilamentStatsProps {
 
 export function FilamentStats({ filaments, purchases }: FilamentStatsProps) {
   const stats = useMemo(() => {
-    // Total filament weight
-    const totalWeight = filaments.reduce((sum, f) => sum + f.total_qty_kg, 0)
+    // Filter to only include filaments with inventory
+    const inventoryFilaments = filaments.filter(f => f.total_qty_kg > 0)
+    
+    // Total filament weight (only those with inventory)
+    const totalWeight = inventoryFilaments.reduce((sum, f) => sum + f.total_qty_kg, 0)
 
-    // Total spent
+    // Total spent (from all purchases)
     const totalSpent = purchases.reduce((sum, p) => sum + p.quantity_kg * p.price_per_kg, 0)
 
-    // Average price per kg
+    // Average price per kg (weighted by quantity in stock)
     const avgPrice =
-      totalWeight > 0 ? filaments.reduce((sum, f) => sum + f.price_per_kg * f.total_qty_kg, 0) / totalWeight : 0
+      totalWeight > 0 ? inventoryFilaments.reduce((sum, f) => sum + f.price_per_kg * f.total_qty_kg, 0) / totalWeight : 0
 
-    // Unique materials count
-    const uniqueMaterials = new Set(filaments.map((f) => f.material)).size
+    // Unique materials count (only those with inventory)
+    const uniqueMaterials = new Set(inventoryFilaments.map((f) => f.material)).size
 
     return {
       totalWeight: totalWeight.toFixed(2),

@@ -12,10 +12,10 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Label } from "@/components/ui/label"
 import { Pencil, Trash2, Download, ChevronDown, ChevronUp, Info, AlertTriangle, RefreshCw } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import type { PurchaseFormData } from "@/lib/types"
 import { formatDate, calculateTotalSpent } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FilamentStats } from "@/components/filament-stats"
+import { FilamentSelect } from "@/components/filament-select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { toast } from "@/components/ui/use-toast"
 import { api } from "@/lib/api"
@@ -48,39 +48,16 @@ export function FilamentsTab() {
   const [page, setPage] = useState(1)
   const pageSize = 10
 
-  const colorOptions = ["Black", "White", "Gray", "Red", "Blue", "Green", "Yellow", "Orange", "Pink", "Purple"]
-
-  const brandOptions = ["Bambu Lab", "Sunlu", "eSun", "Overture"]
-
-  const materialOptions = [
-    "PLA basic",
-    "PLA matte",
-    "PLA Silk",
-    "PLA turbo/+",
-    "PETG basic",
-    "PETG matte",
-    "ABS",
-    "ASA",
-    "Carbon Fiber",
-    "Nylon Fiber",
-  ]
-
-  const initialPurchaseFormState: PurchaseFormData = {
-    color: "",
-    brand: "",
-    material: "",
+  const [selectedFilamentId, setSelectedFilamentId] = useState<string>("")
+  const [purchaseForm, setPurchaseForm] = useState({
     quantity_kg: "",
     price_per_kg: "",
     purchase_date: new Date().toISOString().split("T")[0],
     channel: "",
     notes: "",
-    colorCustom: "",
-    brandCustom: "",
-    materialCustom: "",
-  }
-  const [purchaseForm, setPurchaseForm] = useState<PurchaseFormData>(initialPurchaseFormState)
+  })
 
-  const handlePurchaseChange = (field: keyof PurchaseFormData, value: string) => {
+  const handlePurchaseChange = (field: string, value: string) => {
     setPurchaseForm((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -130,6 +107,11 @@ export function FilamentsTab() {
     const qtyKg = parseFloat(purchaseForm.quantity_kg)
     const pricePerKg = parseFloat(purchaseForm.price_per_kg)
 
+    if (!selectedFilamentId) {
+      toast({ title: "Missing Field", description: "Please select a filament type.", variant: "destructive" })
+      return
+    }
+    
     if (isNaN(qtyKg) || qtyKg <= 0) {
       toast({ title: "Invalid Quantity", description: "Quantity must be a positive number.", variant: "destructive" })
       return
@@ -138,70 +120,31 @@ export function FilamentsTab() {
       toast({ title: "Invalid Price", description: "Price must be a positive number with up to 2 decimals.", variant: "destructive" })
       return
     }
-    if (!purchaseForm.color) {
-      toast({ title: "Missing Field", description: "Please select a color.", variant: "destructive" })
-      return
-    }
-    if (!purchaseForm.brand) {
-      toast({ title: "Missing Field", description: "Please select a brand.", variant: "destructive" })
-      return
-    }
-    if (!purchaseForm.material) {
-      toast({ title: "Missing Field", description: "Please select a material.", variant: "destructive" })
-      return
-    }
-
-    const colorFinal = purchaseForm.color === "Other" ? purchaseForm.colorCustom : purchaseForm.color
-    const brandFinal = purchaseForm.brand === "Other" ? purchaseForm.brandCustom : purchaseForm.brand
-    const materialFinal = purchaseForm.material === "Other" ? purchaseForm.materialCustom : purchaseForm.material
-
-    if (purchaseForm.color === "Other" && !colorFinal) {
-      toast({ title: "Missing Field", description: "Please enter a custom color.", variant: "destructive" })
-      return
-    }
-    if (purchaseForm.brand === "Other" && !brandFinal) {
-      toast({ title: "Missing Field", description: "Please enter a custom brand.", variant: "destructive" })
-      return
-    }
-    if (purchaseForm.material === "Other" && !materialFinal) {
-      toast({ title: "Missing Field", description: "Please enter a custom material.", variant: "destructive" })
-      return
-    }
-
     try {
-      let filamentId = filaments.find(
-        (f) => f.color === colorFinal && f.brand === brandFinal && f.material === materialFinal
-      )?.id
-
-      if (!filamentId) {
-        toast({ title: "Creating Filament", description: `Adding new filament: ${colorFinal} ${brandFinal} ${materialFinal}` })
-        const newFilament = await addFilament({
-          color: colorFinal,
-          brand: brandFinal,
-          material: materialFinal,
-        })
-        if (newFilament && newFilament.id) {
-          filamentId = newFilament.id
-        } else {
-          throw new Error("Failed to create new filament. It might already exist or an API error occurred.")
-        }
-      }
-      
-      if (!filamentId) {
-        toast({ title: "Filament ID Error", description: "Could not determine filament ID for the purchase.", variant: "destructive" })
-        return
-      }
-
       await addPurchase({
-        filament_id: Number(filamentId),
+        filament_id: Number(selectedFilamentId),
         quantity_kg: qtyKg,
         price_per_kg: pricePerKg,
         purchase_date: purchaseForm.purchase_date || null,
         channel: purchaseForm.channel || null,
         notes: purchaseForm.notes || null,
       })
-      setPurchaseForm(initialPurchaseFormState)
+      
+      // Reset form
+      setSelectedFilamentId("")
+      setPurchaseForm({
+        quantity_kg: "",
+        price_per_kg: "",
+        purchase_date: new Date().toISOString().split("T")[0],
+        channel: "",
+        notes: "",
+      })
       setPurchasesOpen(true)
+      
+      toast({ 
+        title: "Success", 
+        description: "Purchase added successfully" 
+      })
     } catch (error) {
       console.error("Error during add purchase process:", error)
       toast({ title: "Purchase Operation Failed", description: (error as Error).message, variant: "destructive" })
@@ -231,12 +174,13 @@ export function FilamentsTab() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Get low stock filaments (less than their min threshold, or less than 1kg if no threshold is set)
-  const lowStockFilaments = filaments.filter((f) => 
-    f.min_filaments_kg !== null && f.min_filaments_kg !== undefined
-      ? f.total_qty_kg < f.min_filaments_kg
-      : false // Only include filaments with a defined minimum threshold
-  )
+  // Get low stock filaments (only those with inventory and below minimum threshold)
+  const lowStockFilaments = filaments.filter((f) => (
+    f.total_qty_kg > 0 && // Only consider filaments with actual inventory
+    f.min_filaments_kg !== null && 
+    f.min_filaments_kg !== undefined &&
+    f.total_qty_kg < f.min_filaments_kg
+  ))
 
   return (
     <div className="space-y-6">
@@ -288,128 +232,18 @@ export function FilamentsTab() {
                 onSubmit={handleAddPurchase}
                 className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end mb-6 p-4 bg-muted/30 rounded-lg border border-muted"
               >
-                <div>
-                  <Label htmlFor="purchaseColor" className="text-sm font-medium">
-                    Color
+                <div className="sm:col-span-2">
+                  <Label htmlFor="purchaseFilament" className="text-sm font-medium">
+                    Filament Type
                   </Label>
-                  <Select
-                    value={purchaseForm.color}
-                    onValueChange={(value) => handlePurchaseChange("color", value)}
+                  <FilamentSelect
+                    value={selectedFilamentId}
+                    onValueChange={(value) => setSelectedFilamentId(value.toString())}
+                    filaments={filaments}
+                    placeholder="Select filament type"
                     required
-                  >
-                    <SelectTrigger id="purchaseColor" className="bg-white dark:bg-gray-800">
-                      <SelectValue placeholder="Select Color" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {colorOptions.map((color) => (
-                        <SelectItem key={`pc-${color}`} value={color}>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded-full border border-gray-300"
-                              style={{
-                                backgroundColor: color.toLowerCase(),
-                                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
-                              }}
-                            ></div>
-                            {color}
-                          </div>
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  />
                 </div>
-
-                {purchaseForm.color === "Other" && (
-                  <div>
-                    <Label htmlFor="purchaseColorCustom" className="text-sm font-medium">
-                      Custom Color
-                    </Label>
-                    <Input
-                      id="purchaseColorCustom"
-                      value={purchaseForm.colorCustom}
-                      onChange={(e) => handlePurchaseChange("colorCustom", e.target.value)}
-                      placeholder="Custom Color"
-                      className="bg-white dark:bg-gray-800"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <Label htmlFor="purchaseBrand" className="text-sm font-medium">
-                    Brand
-                  </Label>
-                  <Select
-                    value={purchaseForm.brand}
-                    onValueChange={(value) => handlePurchaseChange("brand", value)}
-                    required
-                  >
-                    <SelectTrigger id="purchaseBrand" className="bg-white dark:bg-gray-800">
-                      <SelectValue placeholder="Select Brand" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {brandOptions.map((brand) => (
-                        <SelectItem key={`pb-${brand}`} value={brand}>
-                          {brand}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {purchaseForm.brand === "Other" && (
-                  <div>
-                    <Label htmlFor="purchaseBrandCustom" className="text-sm font-medium">
-                      Custom Brand
-                    </Label>
-                    <Input
-                      id="purchaseBrandCustom"
-                      value={purchaseForm.brandCustom}
-                      onChange={(e) => handlePurchaseChange("brandCustom", e.target.value)}
-                      placeholder="Custom Brand"
-                      className="bg-white dark:bg-gray-800"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <Label htmlFor="purchaseMaterial" className="text-sm font-medium">
-                    Material
-                  </Label>
-                  <Select
-                    value={purchaseForm.material}
-                    onValueChange={(value) => handlePurchaseChange("material", value)}
-                    required
-                  >
-                    <SelectTrigger id="purchaseMaterial" className="bg-white dark:bg-gray-800">
-                      <SelectValue placeholder="Select Material" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {materialOptions.map((material) => (
-                        <SelectItem key={`pm-${material}`} value={material}>
-                          {material}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {purchaseForm.material === "Other" && (
-                  <div>
-                    <Label htmlFor="purchaseMaterialCustom" className="text-sm font-medium">
-                      Custom Material
-                    </Label>
-                    <Input
-                      id="purchaseMaterialCustom"
-                      value={purchaseForm.materialCustom}
-                      onChange={(e) => handlePurchaseChange("materialCustom", e.target.value)}
-                      placeholder="Custom Material"
-                      className="bg-white dark:bg-gray-800"
-                    />
-                  </div>
-                )}
 
                 <div>
                   <Label htmlFor="purchaseQuantity" className="text-sm font-medium">
@@ -685,8 +519,10 @@ export function FilamentsTab() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filaments.length > 0 ? (
-                    filaments.map((filament) => (
+                  {(() => {
+                    const inventoryFilaments = filaments.filter(f => f.total_qty_kg > 0)
+                    return inventoryFilaments.length > 0 ? (
+                      inventoryFilaments.map((filament) => (
                       <TableRow
                         key={filament.id}
                         className={`
@@ -782,7 +618,7 @@ export function FilamentsTab() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         <div className="flex flex-col items-center">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -800,12 +636,14 @@ export function FilamentsTab() {
                             <polyline points="3.29 7 12 12 20.71 7"></polyline>
                             <line x1="12" y1="22" x2="12" y2="12"></line>
                           </svg>
-                          <p>No filaments added yet.</p>
-                          <p className="text-sm mt-1">Add your first filament purchase below.</p>
+                          <p>No filaments in inventory</p>
+                          <p className="text-sm mt-1">Add filament purchases above to track inventory.</p>
+                          <p className="text-xs mt-2 text-muted-foreground">Configure filament types in Administration → Filament Types</p>
                         </div>
                       </TableCell>
                     </TableRow>
-                  )}
+                  )
+                  })()}
                 </TableBody>
               </Table>
             )}

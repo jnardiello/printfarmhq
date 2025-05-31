@@ -232,6 +232,7 @@ class TestFilamentInventoryWorkflow:
         
         response = client.post("/filament_purchases", json=purchase_data, headers=auth_headers)
         assert response.status_code == 201
+        purchase_id = response.json()["id"]
         
         # Verify purchase exists
         response = client.get(f"/filament_purchases?filament_id={filament_id}", headers=auth_headers)
@@ -239,7 +240,16 @@ class TestFilamentInventoryWorkflow:
         purchases = response.json()
         assert len(purchases) == 1
         
-        # Delete filament
+        # Try to delete filament with inventory - should fail
+        response = client.delete(f"/filaments/{filament_id}", headers=auth_headers)
+        assert response.status_code == 400
+        assert "Cannot delete filament type with existing inventory" in response.json()["detail"]
+        
+        # Delete the purchase first to remove inventory
+        response = client.delete(f"/filament_purchases/{purchase_id}", headers=auth_headers)
+        assert response.status_code == 204
+        
+        # Now delete filament - should succeed
         response = client.delete(f"/filaments/{filament_id}", headers=auth_headers)
         assert response.status_code == 204
         
@@ -248,7 +258,7 @@ class TestFilamentInventoryWorkflow:
         filaments = response.json()
         assert not any(f["id"] == filament_id for f in filaments)
         
-        # Verify purchases are gone (cascade delete)
+        # Verify purchases are gone
         response = client.get(f"/filament_purchases?filament_id={filament_id}", headers=auth_headers)
         assert response.status_code == 200
         purchases = response.json()

@@ -140,6 +140,17 @@ def admin_auth_headers(client, admin_user):
 
 
 @pytest.fixture
+def regular_user_headers(client, test_user):
+    """Get authorization headers for a regular (non-admin) user."""
+    response = client.post(
+        "/auth/login",
+        json={"email": "test@example.com", "password": "testpassword"}
+    )
+    token = response.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
 def temp_upload_dir():
     """Create a temporary directory for file uploads."""
     with tempfile.TemporaryDirectory() as temp_dir:

@@ -14,7 +14,8 @@ class FilamentBase(BaseModel):
 
 
 class FilamentCreate(FilamentBase):
-    pass  # no additional fields
+    price_per_kg: float = Field(default=0.0, ge=0)
+    total_qty_kg: float = Field(default=0.0, ge=0)
 
 
 class FilamentRead(FilamentBase):
@@ -167,11 +168,41 @@ class FilamentPurchaseRead(FilamentPurchaseCreate):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
-    filament: FilamentMini # Note: This was FilamentMini, if ProductRead needs full FilamentRead for usages, this might need alignment too.
-                           # However, FilamentUsageRead uses FilamentRead, which is good.
+    filament: FilamentMini
+
+
+class FilamentPurchaseData(BaseModel):
+    """Purchase data for flexible filament creation"""
+    quantity_kg: float = Field(..., gt=0)
+    price_per_kg: float = Field(..., gt=0)
+    purchase_date: Optional[date] = None
+    purchase_channel: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class FilamentFlexibleCreate(BaseModel):
+    """Create filament with optional inventory tracking"""
+    color: str = Field(..., examples=["Black"])
+    brand: str = Field(..., examples=["ESUN"]) 
+    material: str = Field(..., examples=["PETG"])
+    estimated_cost_per_kg: float = Field(..., gt=0, description="Average cost used for COGS calculation")
+    create_purchase: bool = Field(False, description="Whether to create initial inventory")
+    purchase_data: Optional[FilamentPurchaseData] = None
+
+
+class FilamentFlexibleResponse(BaseModel):
+    """Response for flexible filament creation"""
+    filament: FilamentRead
+    purchase: Optional[FilamentPurchaseRead] = None
+    message: str
+    warnings: List[str] = []
 
 
 class FilamentUpdate(BaseModel):
+    color: Optional[str] = None
+    brand: Optional[str] = None
+    material: Optional[str] = None
+    price_per_kg: Optional[float] = None
     total_qty_kg: Optional[float] = None
     min_filaments_kg: Optional[float] = None
 

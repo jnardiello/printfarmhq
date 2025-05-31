@@ -12,6 +12,7 @@ import { Trash2, Plus, UploadCloud, Pencil, Package } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "@/components/ui/use-toast"
+import { FilamentSelect } from "@/components/filament-select"
 import type { Plate, PlateFormData, PlateFilamentRowData, Filament } from "@/lib/types"
 import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat, formatHoursDisplay } from "@/lib/time-format"
 
@@ -517,23 +518,14 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
                     filamentRows.map((row, index) => (
                       <TableRow key={index}>
                         <TableCell>
-                          <Select
+                          <FilamentSelect
                             key={`add-filament-${index}-${filaments.length}`}
-                            value={filaments.find(f => f.id.toString() === row.filament_id.toString()) ? row.filament_id.toString() : ""}
+                            value={row.filament_id}
                             onValueChange={(value) => handleFilamentRowChange(index, "filament_id", value)}
+                            filaments={filaments}
+                            placeholder="Select Filament"
                             required
-                          >
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Filament" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {filaments.map((filament) => (
-                                <SelectItem key={filament.id} value={filament.id.toString()}>
-                                  {filament.color} {filament.material} ({filament.brand})
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          />
                         </TableCell>
                         <TableCell>
                           <Input
@@ -722,23 +714,14 @@ export function PlateManager({ productId, plates, filaments, isAddingPlate: exte
                       editFilamentRows.map((row, index) => (
                         <TableRow key={index}>
                           <TableCell>
-                            <Select
+                            <FilamentSelect
                               key={`edit-filament-${index}-${filaments.length}`}
-                              value={filaments.find(f => f.id.toString() === row.filament_id.toString()) ? row.filament_id.toString() : ""}
+                              value={row.filament_id}
                               onValueChange={(value) => handleEditFilamentRowChange(index, "filament_id", value)}
+                              filaments={filaments}
+                              placeholder="Select Filament"
                               required
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select Filament" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {filaments.map((filament) => (
-                                  <SelectItem key={filament.id} value={filament.id.toString()}>
-                                    {filament.color} {filament.material} ({filament.brand})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            />
                           </TableCell>
                           <TableCell>
                             <Input

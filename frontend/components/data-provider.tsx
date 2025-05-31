@@ -8,6 +8,28 @@ import type { Filament, FilamentPurchase, Product, Printer, Subscription, PrintJ
 import { api, apiUpload, API_BASE_URL } from "@/lib/api"
 import { useAuth } from "@/components/auth/auth-context"
 
+interface FilamentFlexibleData {
+  color: string
+  brand: string
+  material: string
+  estimated_cost_per_kg: number
+  create_purchase: boolean
+  purchase_data?: {
+    quantity_kg: number
+    price_per_kg: number
+    purchase_date?: string
+    purchase_channel?: string
+    notes?: string
+  }
+}
+
+interface FilamentFlexibleResponse {
+  filament: Filament
+  purchase?: FilamentPurchase
+  message: string
+  warnings: string[]
+}
+
 interface DataContextType {
   filaments: Filament[]
   purchases: FilamentPurchase[]
@@ -42,6 +64,7 @@ interface DataContextType {
   deletePrintJob: (id: string) => Promise<void>
   exportPurchasesCSV: () => Promise<void>
   setCurrentTab: (tab: string) => void
+  createFilamentFlexible: (data: FilamentFlexibleData) => Promise<FilamentFlexibleResponse>
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined)
@@ -602,6 +625,46 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const createFilamentFlexible = async (data: FilamentFlexibleData): Promise<FilamentFlexibleResponse> => {
+    try {
+      const response = await api<FilamentFlexibleResponse>("/filaments/create-flexible", {
+        method: "POST",
+        body: JSON.stringify(data),
+      })
+      
+      // Update local state
+      setFilaments(prev => [...prev, response.filament])
+      
+      // Only add purchase if one was created
+      if (response.purchase) {
+        setPurchases(prev => [...prev, response.purchase!])
+      }
+      
+      // Sort filaments alphabetically
+      setFilaments(prev => 
+        [...prev].sort((a, b) => 
+          `${a.color} ${a.material}`.localeCompare(`${b.color} ${b.material}`)
+        )
+      )
+      
+      return response
+    } catch (error: any) {
+      // Handle duplicate filament error specially
+      if (error.response?.status === 409) {
+        // Re-throw with the proper structure
+        throw error
+      }
+      
+      console.error("Error creating filament:", error)
+      toast({
+        title: "Error Creating Filament",
+        description: error.message || "Failed to create filament",
+        variant: "destructive",
+      })
+      throw error
+    }
+  }
+
   return (
     <DataContext.Provider
       value={{
@@ -637,6 +700,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         deletePrintJob,
         exportPurchasesCSV,
         setCurrentTab,
+        createFilamentFlexible,
       }}
     >
       {children}

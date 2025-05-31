@@ -18,6 +18,7 @@ import type { ProductFormData, Product as ProductType, Printer, Filament, Subscr
 import { motion } from "framer-motion"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { PlateManager } from "@/components/plate-manager"
+import { FilamentSelect } from "@/components/filament-select"
 import { TIME_FORMAT_PLACEHOLDER, isValidTimeFormat, formatHoursDisplay } from "@/lib/time-format"
 
 // Edit form data for product-level fields only
@@ -226,6 +227,8 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
     }
 
     // Validate that each plate has at least one filament
+    const noInventoryFilaments = new Set<string>()
+    
     for (let i = 0; i < plateRows.length; i++) {
       const plate = plateRows[i]
       if (!plate.name.trim()) {
@@ -246,6 +249,22 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
           alert(`Please complete all filament entries for plate "${plate.name}"`)
           return
         }
+        
+        // Check for no-inventory filaments
+        const filament = filaments.find(f => f.id.toString() === usage.filament_id.toString())
+        if (filament && filament.total_qty_kg === 0) {
+          noInventoryFilaments.add(`${filament.color} ${filament.material} (${filament.brand})`)
+        }
+      }
+    }
+    
+    // Show inventory warning if there are no-inventory filaments
+    if (noInventoryFilaments.size > 0) {
+      const filamentList = Array.from(noInventoryFilaments).join('\n• ')
+      const confirmMessage = `⚠️ Inventory Warning\n\nThis product uses filaments with no tracked inventory:\n\n• ${filamentList}\n\nMake sure to order these filaments before starting production.\n\nDo you want to save anyway?`
+      
+      if (!confirm(confirmMessage)) {
+        return
       }
     }
 
@@ -556,29 +575,15 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                       plate.filament_usages.map((usage, usageIndex) => (
                                         <TableRow key={usageIndex}>
                                           <TableCell>
-                                            <Select
+                                            <FilamentSelect
                                               key={`product-filament-${plateIndex}-${usageIndex}-${filaments.length}`}
-                                              value={filaments.find(f => f.id.toString() === usage.filament_id?.toString()) ? usage.filament_id?.toString() || "" : ""}
+                                              value={usage.filament_id}
                                               onValueChange={(value) => handleFilamentUsageChange(plateIndex, usageIndex, 'filament_id', value)}
+                                              filaments={filaments}
+                                              placeholder="Select filament"
+                                              className="h-8 text-xs"
                                               required
-                                            >
-                                              <SelectTrigger className="h-8 text-xs">
-                                                <SelectValue placeholder="Select" />
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                {filaments.map((filament) => (
-                                                  <SelectItem key={filament.id} value={filament.id.toString()}>
-                                                    <div className="flex items-center gap-2">
-                                                      <div
-                                                        className="w-2 h-2 rounded-full border"
-                                                        style={{ backgroundColor: filament.color.toLowerCase() }}
-                                                      />
-                                                      {filament.color} {filament.material}
-                                                    </div>
-                                                  </SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
+                                            />
                                           </TableCell>
                                           <TableCell>
                                             <Input
