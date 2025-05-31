@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.3.0 (2025-05-31)
+
+- feat: add CHANGELOG review step to publish workflow
+- Auto-logout after session expires
+- feat: add flexible time format support for print times
+
+
 ## v1.2.0 (2025-05-30)
 
 - Adding asciiart with current version running from make dev
