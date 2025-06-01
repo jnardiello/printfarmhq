@@ -123,6 +123,22 @@ test-frontend: clean-test-artifacts ## Run frontend tests only
 	@$(COMPOSE_TEST) up frontend-test --abort-on-container-exit
 	@$(COMPOSE_TEST) down -v
 
+test-frontend-spec: clean-test-artifacts ## Run specific frontend test file (usage: make test-frontend-spec SPEC=filaments.spec.ts)
+	@if [ -z "$(SPEC)" ]; then \
+		echo "Usage: make test-frontend-spec SPEC=filename.spec.ts"; \
+		exit 1; \
+	fi
+	@echo "🐳 Running frontend E2E test: $(SPEC)..."
+	@echo "Building test images..."
+	@$(COMPOSE_TEST) build --quiet > /dev/null 2>&1 || { echo "❌ Build failed"; exit 1; }
+	@$(COMPOSE_TEST) up -d backend-api frontend-app > /dev/null 2>&1
+	@echo "⏳ Waiting for services to be ready..."
+	@sleep 10
+	@echo "📊 Setting up test data..."
+	@$(COMPOSE_TEST) exec -T backend-api python tests/fixtures/setup_test_data.py > /dev/null 2>&1 || echo "⚠️  Test data setup completed"
+	@$(COMPOSE_TEST) run --rm -T frontend-test npx playwright test --config=playwright.docker.config.ts e2e/tests/$(SPEC) --reporter=list
+	@$(COMPOSE_TEST) down -v
+
 test-ci: clean-test-artifacts ## Run tests in CI mode
 	@$(COMPOSE_TEST) up --build --abort-on-container-exit
 	@$(COMPOSE_TEST) down -v

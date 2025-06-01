@@ -3,98 +3,45 @@ import { testData } from '../fixtures/test-data';
 import { uniqueId } from '../helpers/unique-id';
 
 test.describe('Filaments Management', () => {
-  test.beforeEach(async ({ page, authHelper, dashboardPage }) => {
-    // Ensure clean state before each test
-    await page.evaluate(() => {
-      try {
-        localStorage.clear();
-      } catch (e) {
-        // Handle cases where localStorage is not accessible
-        // localStorage not accessible
-      }
-    });
+  test.beforeEach(async ({ page, authHelper }) => {
+    // Simple setup - just login and navigate
     await page.goto('/auth');
-    
-    // Login as admin
     await authHelper.loginAsAdmin();
     
-    // Clean database after login
-    const token = await page.evaluate(() => localStorage.getItem('auth_token'));
-    if (token) {
-      // Delete all purchases first (foreign key constraint)
-      try {
-        const purchasesResponse = await page.request.get('/api/filament_purchases', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (purchasesResponse.ok()) {
-          const purchases = await purchasesResponse.json();
-          for (const purchase of purchases) {
-            await page.request.delete(`/api/filament_purchases/${purchase.id}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-          }
-        }
-      } catch (e) {
-        // Silently continue if cleanup fails
-      }
-      
-      // Delete all filaments
-      try {
-        const filamentsResponse = await page.request.get('/api/filaments', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (filamentsResponse.ok()) {
-          const filaments = await filamentsResponse.json();
-          for (const filament of filaments) {
-            await page.request.delete(`/api/filaments/${filament.id}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
-            });
-          }
-        }
-      } catch (e) {
-        // Silently continue if cleanup fails
-      }
-    }
-    
-    // Navigate to dashboard and then filaments using responsive navigation
-    // Handle Safari redirect from / to /?tab=home gracefully
-    try {
-      await page.goto('/');
-      await page.waitForURL(url => url.pathname === '/' && (!url.search || url.search === '?tab=home'), { timeout: 15000 });
-    } catch {
-      // Fallback - try direct navigation to home tab for Safari
-      await page.goto('/?tab=home');
-      await page.waitForURL('/?tab=home', { timeout: 15000 });
-    }
+    // Navigate directly to filaments tab
+    await page.goto('/?tab=filaments');
     await page.waitForLoadState('networkidle');
-    await page.waitForSelector('[data-testid="user-menu"]', { timeout: 10000 });
-    
-    // Navigate to filaments tab using responsive navigation
-    await dashboardPage.navigateToTab('filaments');
   });
 
   test('should load filaments page with required sections', async ({ page }) => {
-    // Verify key sections are present
+    // Verify we're on the filaments page
+    await expect(page).toHaveURL(/.*[?&]tab=filaments/);
+    
+    // Wait for the main content to load
+    await page.waitForSelector('.card-hover', { timeout: 10000 });
+    
+    // Verify the two main sections are present
     await expect(page.locator('text=Filament Purchases')).toBeVisible();
-    await expect(page.locator('text=Filament Inventory').first()).toBeVisible();
+    await expect(page.locator('text=Filament Inventory')).toBeVisible();
     
-    // Open purchases section to see form
-    await page.click('text=Filament Purchases');
+    // Click on the purchases section to expand it
+    await page.locator('text=Filament Purchases').click();
+    await page.waitForTimeout(500); // Wait for animation
     
-    // Wait for the collapsible to open
-    await page.waitForTimeout(500);
+    // Verify the form is now visible
+    const form = page.locator('form').first();
+    await expect(form).toBeVisible();
     
-    // Verify purchase form elements exist
-    await expect(page.locator('#purchaseColor')).toBeVisible();
-    await expect(page.locator('#purchaseBrand')).toBeVisible();  
-    await expect(page.locator('#purchaseMaterial')).toBeVisible();
-    await expect(page.locator('#purchaseQuantity')).toBeVisible();
-    await expect(page.locator('#purchasePrice')).toBeVisible();
-    await expect(page.locator('button[type="submit"]:has-text("Add Purchase")')).toBeVisible();
+    // Check for the new form structure with FilamentSelect
+    await expect(form.locator('text=Filament Type')).toBeVisible();
+    await expect(form.locator('button[role="combobox"]')).toBeVisible(); // The FilamentSelect component
+    await expect(form.locator('#purchaseQuantity')).toBeVisible();
+    await expect(form.locator('#purchasePrice')).toBeVisible();
+    await expect(form.locator('button:has-text("Add Purchase")')).toBeVisible();
     
-    // Verify inventory table exists - be specific about which table
-    const inventoryCard = page.locator('.card-hover').filter({ hasText: 'Filament Inventory' });
-    await expect(inventoryCard.locator('table').first()).toBeVisible();
+    // Verify inventory table structure
+    const inventorySection = page.locator('div:has(h3:text("Filament Inventory"))');
+    await expect(inventorySection.locator('table')).toBeVisible();
   });
 
   test('should display empty state when no purchases exist', async ({ page, authHelper }) => {
@@ -121,8 +68,8 @@ test.describe('Filaments Management', () => {
     const inventoryCard = page.locator('.card-hover').filter({ hasText: 'Filament Inventory' });
     
     
-    await expect(inventoryCard.locator('text=No filaments added yet.')).toBeVisible();
-    await expect(inventoryCard.locator('text=Add your first filament purchase below.')).toBeVisible();
+    await expect(inventoryCard.locator('text=No filaments in inventory')).toBeVisible();
+    await expect(inventoryCard.locator('text=Add filament purchases above to track inventory.')).toBeVisible();
   });
 
   test('should export CSV with authentication', async ({ page, authHelper }) => {
@@ -144,7 +91,9 @@ test.describe('Filaments Management', () => {
       data: {
         color: 'Black',
         brand: 'Bambu Lab',
-        material: 'PLA basic'
+        material: 'PLA basic',
+        price_per_kg: 25.99,
+        total_qty_kg: 0
       }
     });
     
