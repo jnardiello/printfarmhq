@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Trash2, Plus, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard, AlertTriangle } from "lucide-react"
+import { Trash2, Plus, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard, AlertTriangle, DollarSign } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -58,6 +58,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
 
   const [printTime, setPrintTime] = useState<string>("")
   const [filamentUsageRows, setFilamentUsageRows] = useState<FilamentUsageRowData[]>([{ filament_id: "", grams_used: "" }])
+  const [additionalPartsCost, setAdditionalPartsCost] = useState<string>("")
   const [selectedProduct, setSelectedProduct] = useState<ProductType | null>(null)
   
   const modelFileRef = useRef<HTMLInputElement>(null)
@@ -185,6 +186,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
       formData.append("name", productForm.name)
       formData.append("print_time", printTime)  // Send in flexible format
       formData.append("filament_usages", JSON.stringify(filamentUsages))
+      formData.append("additional_parts_cost", additionalPartsCost || "0")
       
       if (productForm.license_id) {
         formData.append("license_id", productForm.license_id.toString())
@@ -204,6 +206,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
       setProductForm({ name: "", license_id: undefined })
       setPrintTime("")
       setFilamentUsageRows([{ filament_id: "", grams_used: "" }])
+      setAdditionalPartsCost("")
       setModelFileName("")
       if (modelFileRef.current) modelFileRef.current.value = ""
       setActiveAccordionItem("")
@@ -256,75 +259,87 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
           <AccordionContent>
             <div className="p-6 pt-2">
               <form onSubmit={handleAddProduct} className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end p-4 bg-muted/30 rounded-lg border border-muted">
-                  <div>
-                    <Label htmlFor="prodName" className="text-sm font-medium">
-                      Name
-                    </Label>
-                    <Input
-                      id="prodName"
-                      value={productForm.name}
-                      onChange={(e) => handleProductChange("name", e.target.value)}
-                      placeholder="Product Name"
-                      required
-                      className="bg-white dark:bg-gray-800"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="printTime" className="text-sm font-medium">
-                      Print Time
-                    </Label>
-                    <Input
-                      id="printTime"
-                      type="text"
-                      value={printTime}
-                      onChange={(e) => {
-                        const value = e.target.value
-                        setPrintTime(value)
-                        // Provide immediate visual feedback
-                        const input = e.target as HTMLInputElement
-                        if (value && !isValidTimeFormat(value)) {
-                          input.setCustomValidity("Use format like 1h30m, 2h, 45m, or 1.5")
-                        } else {
-                          input.setCustomValidity("")
-                        }
-                      }}
-                      placeholder={TIME_FORMAT_PLACEHOLDER}
-                      required
-                      className="bg-white dark:bg-gray-800"
-                    />
-                  </div>
-
-                  <div className="lg:col-span-2">
-                    <Label htmlFor="prodLicense" className="text-sm font-medium">
-                      Commercial License (Optional)
-                    </Label>
-                    <Select
-                      value={productForm.license_id ? productForm.license_id.toString() : "none"}
-                      onValueChange={(value) => {
-                        if (value === "none") handleProductChange("license_id", undefined)
-                        else handleProductChange("license_id", value)
-                      }}
-                    >
-                      <SelectTrigger id="prodLicense" className="bg-white dark:bg-gray-800">
-                        <SelectValue placeholder="Select License" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No License</SelectItem>
-                        {subscriptions.map((sub) => (
-                          <SelectItem key={sub.id} value={sub.id.toString()}>
-                            {sub.name} ({sub.platform})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {/* Side by side: Filament Usage and 3D Model File */}
+                {/* First Row: Basic Product Info + Filament Usage */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Filament Usage */}
+                  {/* Left: Basic Product Information */}
+                  <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Info className="h-5 w-5 text-primary" />
+                      Product Information
+                    </h3>
+                    
+                    <div className="space-y-4">
+                      {/* First row: Name + Print Time */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="prodName" className="text-sm font-medium">
+                            Name
+                          </Label>
+                          <Input
+                            id="prodName"
+                            value={productForm.name}
+                            onChange={(e) => handleProductChange("name", e.target.value)}
+                            placeholder="Product Name"
+                            required
+                            className="bg-white dark:bg-gray-800"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="printTime" className="text-sm font-medium">
+                            Print Time
+                          </Label>
+                          <Input
+                            id="printTime"
+                            type="text"
+                            value={printTime}
+                            onChange={(e) => {
+                              const value = e.target.value
+                              setPrintTime(value)
+                              // Provide immediate visual feedback
+                              const input = e.target as HTMLInputElement
+                              if (value && !isValidTimeFormat(value)) {
+                                input.setCustomValidity("Use format like 1h30m, 2h, 45m, or 1.5")
+                              } else {
+                                input.setCustomValidity("")
+                              }
+                            }}
+                            placeholder={TIME_FORMAT_PLACEHOLDER}
+                            required
+                            className="bg-white dark:bg-gray-800"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Second row: License */}
+                      <div>
+                        <Label htmlFor="prodLicense" className="text-sm font-medium">
+                          Commercial License (Optional)
+                        </Label>
+                        <Select
+                          value={productForm.license_id ? productForm.license_id.toString() : "none"}
+                          onValueChange={(value) => {
+                            if (value === "none") handleProductChange("license_id", undefined)
+                            else handleProductChange("license_id", value)
+                          }}
+                        >
+                          <SelectTrigger id="prodLicense" className="bg-white dark:bg-gray-800">
+                            <SelectValue placeholder="Select License" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">No License</SelectItem>
+                            {subscriptions.map((sub) => (
+                              <SelectItem key={sub.id} value={sub.id.toString()}>
+                                {sub.name} ({sub.platform})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Filament Usage */}
                   <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
                     <div className="flex items-center justify-between">
                       <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -394,11 +409,37 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                       </Table>
                     </div>
                   </div>
+                </div>
 
-                  {/* 3D Model File Upload */}
+                {/* Second Row: Optional Sections */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Additional Parts (Optional) */}
                   <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
                     <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <UploadCloud className="h-5 w-5 text-primary" /> 3D Model File (.stl, .3mf) (Optional)
+                      <DollarSign className="h-5 w-5 text-primary" />
+                      Additional Parts (Optional)
+                    </h3>
+                    <div>
+                      <Label htmlFor="additionalPartsCost" className="text-sm font-medium">
+                        Cost of additional parts (magnets, glue, screws, etc.) €
+                      </Label>
+                      <Input
+                        id="additionalPartsCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={additionalPartsCost}
+                        onChange={(e) => setAdditionalPartsCost(e.target.value)}
+                        placeholder="0.00"
+                        className="bg-white dark:bg-gray-800"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 3D Model File Upload (Optional) */}
+                  <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <UploadCloud className="h-5 w-5 text-primary" /> 3D Model File (Optional)
                     </h3>
                     <div 
                       className={`flex items-center justify-center w-full p-6 border-2 border-dashed rounded-lg cursor-pointer 
