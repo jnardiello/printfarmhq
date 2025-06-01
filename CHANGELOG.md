@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.4.0 (2025-06-01)
+
+- fix: display formatted time in product info and plate edit modals
+- feat: implement filament type/inventory separation architecture
+- fix: temporarily disable frontend tests in publish process
+
+
 ## v1.3.0 (2025-05-31)
 
 - feat: add CHANGELOG review step to publish workflow
