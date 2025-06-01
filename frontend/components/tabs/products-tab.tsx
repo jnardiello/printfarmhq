@@ -322,128 +322,124 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                   </div>
                 </div>
 
-                <div className="space-y-2 p-4 bg-gray-50 dark:bg-gray-900/30 rounded-lg border border-gray-200 dark:border-gray-700">
-                  <h3 className="text-md font-medium flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                    <UploadCloud className="h-5 w-5 text-gray-600" /> 3D Model File (.stl, .3mf) (Optional)
-                  </h3>
-                  <div 
-                    className={`flex items-center justify-center w-full p-6 border-2 border-dashed rounded-lg cursor-pointer 
-                                ${isDragging ? 'border-gray-500 bg-gray-100 dark:bg-gray-800/50' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-white dark:bg-gray-950/20'}
-                                transition-colors duration-200 ease-in-out`}
-                    onClick={() => modelFileRef.current?.click()}
-                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
-                    onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
-                    onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      setIsDragging(false)
-                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                        if (modelFileRef.current) {
-                          modelFileRef.current.files = e.dataTransfer.files
-                        }
-                        setModelFileName(e.dataTransfer.files[0].name)
-                      }
-                    }}
-                  >
-                    <input 
-                      type="file" 
-                      accept=".stl,.3mf" 
-                      ref={modelFileRef} 
-                      className="hidden"
-                      onChange={(e) => setModelFileName(e.target.files?.[0]?.name || "")}
-                    />
-                    <div className="text-center">
-                      <UploadCloud className={`mx-auto h-10 w-10 mb-2 ${isDragging ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400'}`} />
-                      <p className={`text-sm ${isDragging ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                        <span className="font-semibold">Click to upload</span> or drag and drop
-                      </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">STL or 3MF</p>
-                      {modelFileName && (
-                        <p className="text-xs text-green-600 dark:text-green-400 mt-2">
-                          Selected: {modelFileName}
-                        </p>
-                      )}
+                {/* Side by side: Filament Usage and 3D Model File */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Filament Usage */}
+                  <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold flex items-center gap-2">
+                        <Package className="h-5 w-5 text-primary" />
+                        Filament Usage
+                      </h3>
+                      <Button type="button" onClick={addFilamentUsageRow} variant="secondary" size="sm" className="gap-1">
+                        <Plus className="h-4 w-4" /> Add Filament
+                      </Button>
+                    </div>
+                    
+                    <div className="overflow-x-auto rounded-lg border">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs font-semibold text-center">Filament</TableHead>
+                            <TableHead className="text-xs font-semibold text-center w-32">Grams</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filamentUsageRows.map((usage, index) => (
+                            <TableRow key={index}>
+                              <TableCell className="text-center">
+                                <div className="flex justify-center w-full px-2">
+                                  <FilamentSelect
+                                    key={`product-filament-${index}-${filaments.length}`}
+                                    value={usage.filament_id}
+                                    onValueChange={(value) => handleFilamentUsageChange(index, 'filament_id', value)}
+                                    filaments={filaments}
+                                    placeholder="Select filament"
+                                    className="h-8 text-xs w-2/3"
+                                    required
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex justify-center">
+                                  <Input
+                                    type="number"
+                                    value={usage.grams_used}
+                                    onChange={(e) => handleFilamentUsageChange(index, 'grams_used', e.target.value)}
+                                    placeholder="0"
+                                    min="0.1"
+                                    step="0.1"
+                                    required
+                                    className="h-8 w-20 text-xs"
+                                  />
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                {filamentUsageRows.length > 1 && (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                    onClick={() => removeFilamentUsageRow(index)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
                   </div>
-                </div>
 
-                {/* Visual separator */}
-                <div className="flex items-center gap-4 py-4">
-                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-                  <div className="text-sm font-medium text-gray-500 dark:text-gray-400 px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-full">
-                    Filament Usage
-                  </div>
-                  <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-                </div>
-
-                <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
-                  <div className="flex items-center justify-between">
+                  {/* 3D Model File Upload */}
+                  <div className="space-y-4 p-5 bg-muted/30 rounded-lg border border-muted">
                     <h3 className="text-lg font-semibold flex items-center gap-2">
-                      <Package className="h-5 w-5 text-primary" />
-                      Filament Usage
+                      <UploadCloud className="h-5 w-5 text-primary" /> 3D Model File (.stl, .3mf) (Optional)
                     </h3>
-                    <Button type="button" onClick={addFilamentUsageRow} variant="secondary" size="sm" className="gap-1">
-                      <Plus className="h-4 w-4" /> Add Filament
-                    </Button>
-                  </div>
-                  
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="text-xs font-semibold text-center">Filament</TableHead>
-                          <TableHead className="text-xs font-semibold text-center w-32">Grams</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filamentUsageRows.map((usage, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="text-center">
-                              <div className="flex justify-center w-full px-2">
-                                <FilamentSelect
-                                  key={`product-filament-${index}-${filaments.length}`}
-                                  value={usage.filament_id}
-                                  onValueChange={(value) => handleFilamentUsageChange(index, 'filament_id', value)}
-                                  filaments={filaments}
-                                  placeholder="Select filament"
-                                  className="h-8 text-xs w-2/3"
-                                  required
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex justify-center">
-                                <Input
-                                  type="number"
-                                  value={usage.grams_used}
-                                  onChange={(e) => handleFilamentUsageChange(index, 'grams_used', e.target.value)}
-                                  placeholder="0"
-                                  min="0.1"
-                                  step="0.1"
-                                  required
-                                  className="h-8 w-20 text-xs"
-                                />
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-center">
-                              {filamentUsageRows.length > 1 && (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                                  onClick={() => removeFilamentUsageRow(index)}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    <div 
+                      className={`flex items-center justify-center w-full p-6 border-2 border-dashed rounded-lg cursor-pointer 
+                                  ${isDragging ? 'border-gray-500 bg-gray-100 dark:bg-gray-800/50' : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500 bg-white dark:bg-gray-950/20'}
+                                  transition-colors duration-200 ease-in-out`}
+                      onClick={() => modelFileRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                      onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                      onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setIsDragging(false)
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          if (modelFileRef.current) {
+                            modelFileRef.current.files = e.dataTransfer.files
+                          }
+                          setModelFileName(e.dataTransfer.files[0].name)
+                        }
+                      }}
+                    >
+                      <input 
+                        type="file" 
+                        accept=".stl,.3mf" 
+                        ref={modelFileRef} 
+                        className="hidden"
+                        onChange={(e) => setModelFileName(e.target.files?.[0]?.name || "")}
+                      />
+                      <div className="text-center">
+                        <UploadCloud className={`mx-auto h-10 w-10 mb-2 ${isDragging ? 'text-gray-600 dark:text-gray-400' : 'text-gray-400'}`} />
+                        <p className={`text-sm ${isDragging ? 'text-gray-700 dark:text-gray-300' : 'text-gray-500 dark:text-gray-400'}`}>
+                          <span className="font-semibold">Click to upload</span> or drag and drop
+                        </p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">STL or 3MF</p>
+                        {modelFileName && (
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                            Selected: {modelFileName}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
