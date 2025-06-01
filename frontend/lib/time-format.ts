@@ -41,3 +41,29 @@ export function formatHoursDisplay(hours: number): string {
     return `${m}m`
   }
 }
+
+/**
+ * Parse time format string to decimal hours
+ * @param value - Time string (e.g., "1h30m", "2h", "45m", or "1.5")
+ * @returns Decimal hours or null if invalid
+ */
+export function parseTimeToHours(value: string): number | null {
+  if (!value || typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  
+  // Check if it's already a decimal
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const hours = parseFloat(trimmed)
+    return isNaN(hours) ? null : hours
+  }
+  
+  // Parse "1h30m" format
+  const match = trimmed.match(/^(?:(\d+)h)?(?:(\d+)m)?$/)
+  if (!match || (!match[1] && !match[2])) return null
+  
+  const hours = parseInt(match[1] || '0', 10)
+  const minutes = parseInt(match[2] || '0', 10)
+  
+  return hours + minutes / 60
+}
