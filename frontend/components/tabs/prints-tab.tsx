@@ -25,7 +25,7 @@ export function PrintsTab() {
   const [formOpen, setFormOpen] = useState(false)
 
   const [newPrintJob, setNewPrintJob] = useState({
-    name: "", // Optional: name for the print job
+    name: "", // Optional: name for the print queue entry
     productId: "",
     printerId: "",
     quantity: "1",
@@ -72,7 +72,7 @@ export function PrintsTab() {
     setFormOpen(false); // Close the form after submission
   }
 
-  // Placeholder: Calculate COGS for a print job
+  // Placeholder: Calculate COGS for a print queue entry
   const calculateCogs = (printJob: any) => {
     // This will be implemented later based on product, printer, filament, etc.
     // For now, returning a placeholder value
@@ -117,7 +117,7 @@ export function PrintsTab() {
                 <CardHeader className="flex flex-row items-center justify-between cursor-pointer">
                   <CardTitle className="flex items-center gap-2 text-xl">
                     <ScanLine />
-                    Create New Print Job
+                    Create New Print Queue Entry
                   </CardTitle>
                   {formOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                 </CardHeader>
@@ -222,7 +222,7 @@ export function PrintsTab() {
                       type="submit"
                       className="w-full bg-gradient-to-r from-blue-500 to-blue-500/80 hover:from-blue-500/90 hover:to-blue-500" // Changed color
                     >
-                      <Plus className="mr-2 h-4 w-4" /> Add Print Job
+                      <Plus className="mr-2 h-4 w-4" /> Add to Print Queue
                     </Button>
                   </div>
                 </form>
@@ -243,7 +243,7 @@ export function PrintsTab() {
             <CardContent>
               <div className="space-y-4">
                 <p className="text-amber-700 dark:text-amber-300">
-                  To create print jobs, you need at least one product and one printer configured.
+                  To add items to the print queue, you need at least one product and one printer configured.
                 </p>
                 
                 <div className="space-y-2">
@@ -296,7 +296,7 @@ export function PrintsTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Package />
-              Print Jobs
+              Print Queue
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -347,7 +347,7 @@ export function PrintsTab() {
                             size="icon"
                             className="h-8 w-8 text-gray-500 hover:text-red-600"
                             onClick={() => {
-                              if (confirm(`Delete print job #${job.id}? This action cannot be undone.`)) {
+                              if (confirm(`Delete print queue entry #${job.id}? This action cannot be undone.`)) {
                                 deletePrintJob(job.id)
                               }
                             }}
@@ -362,8 +362,8 @@ export function PrintsTab() {
               ) : (
                 <div className="text-center text-muted-foreground py-12 bg-muted/30">
                   <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" /> {/* Changed icon */}
-                  <p>No print jobs created yet.</p>
-                  <p className="text-sm mt-1">Click on "Create New Print Job" above to add your first print job.</p>
+                  <p>No items in print queue yet.</p>
+                  <p className="text-sm mt-1">Click on "Create New Print Queue Entry" above to add your first item.</p>
                 </div>
               )}
             </div>

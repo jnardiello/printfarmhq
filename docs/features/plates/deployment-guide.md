@@ -88,7 +88,7 @@ npm run build
 1. **Product List**: Verify products display correctly with COP values
 2. **Product Details**: Check that product details show plates instead of direct filament usages
 3. **Plate Management**: Test creating, editing, and deleting plates
-4. **COGS Calculation**: Verify print job COGS calculations work correctly
+4. **COGS Calculation**: Verify print queue COGS calculations work correctly
 5. **File Uploads**: Test plate-level file uploads work
 
 ## Post-Deployment Monitoring
@@ -204,7 +204,7 @@ The deployment is considered successful when:
 - [ ] All existing products have been migrated to have at least one plate
 - [ ] Product COP calculations match pre-migration values
 - [ ] Users can create, edit, and delete plates through the UI
-- [ ] Print job COGS calculations work correctly with plate-based products
+- [ ] Print queue COGS calculations work correctly with plate-based products
 - [ ] No critical errors in application logs
 - [ ] All automated tests pass in production environment
 

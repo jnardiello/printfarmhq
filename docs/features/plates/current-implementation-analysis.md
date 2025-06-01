@@ -67,7 +67,7 @@ Product (1) ←→ (N) FilamentUsage (N) ←→ (1) Filament
 ### Current Implementation (`backend/app/main.py:700-729`)
 ```python
 def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
-    # For each product in the print job:
+    # For each product in the print queue entry:
     for job_product_item in job.products:
         product_model = db.get(models.Product, job_product_item.product_id)
         

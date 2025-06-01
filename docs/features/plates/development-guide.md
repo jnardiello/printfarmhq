@@ -142,7 +142,7 @@ product.cop  # Uses sum of plate costs if plates exist
 Test both legacy and new API responses:
 - `GET /products` - Should include both `filament_usages` and `plates` data
 - `GET /products/{id}/plates` - New plate management endpoints
-- COGS calculations in print jobs work with both structures
+- COGS calculations in print queue work with both structures
 
 ### 4. UI Testing
 - Product details modal shows plates instead of filament_usages

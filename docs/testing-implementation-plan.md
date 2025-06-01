@@ -45,7 +45,7 @@ backend/
 │   ├── test_e2e/            # End-to-end tests
 │   │   ├── test_auth_flow.py
 │   │   ├── test_inventory_management.py
-│   │   ├── test_print_job_workflow.py
+│   │   ├── test_print_queue_workflow.py
 │   │   └── test_business_calculations.py
 │   └── test_unit/           # Unit tests for complex logic
 │       ├── test_cogs_calculation.py
@@ -68,24 +68,24 @@ backend/
 # - Create filament type
 # - Record multiple purchases
 # - Verify weighted average price calculation
-# - Create print job that consumes inventory
+# - Create print queue entry that consumes inventory
 # - Verify stock depletion
 # - Test low stock alerts
 # - Delete purchase and verify recalculation
 ```
 
-#### 3. Print Job Workflow (test_print_job_workflow.py)
+#### 3. Print Queue Workflow (test_print_queue_workflow.py)
 ```python
-# Test end-to-end print job creation:
+# Test end-to-end print queue entry creation:
 # - Set up filaments with sufficient stock
 # - Create products with filament requirements
 # - Create printer profiles
-# - Create print job and verify:
+# - Create print queue entry and verify:
 #   - Inventory validation
 #   - COGS calculation
 #   - Stock depletion
-# - Update print job and verify differential inventory
-# - Delete print job and verify stock restoration
+# - Update print queue entry and verify differential inventory
+# - Delete print queue entry and verify stock restoration
 ```
 
 #### 4. Business Calculations (test_business_calculations.py)
@@ -147,7 +147,7 @@ frontend/
 │   │   ├── auth.spec.ts     # Authentication flows
 │   │   ├── inventory.spec.ts # Inventory management
 │   │   ├── products.spec.ts  # Product management
-│   │   └── print-jobs.spec.ts # Print job workflows
+│   │   └── print-queue.spec.ts # Print queue workflows
 │   └── playwright.config.ts
 ```
 
@@ -178,9 +178,9 @@ frontend/
 // Test validation messages
 ```
 
-#### 4. Print Job Workflow (print-jobs.spec.ts)
+#### 4. Print Queue Workflow (print-queue.spec.ts)
 ```typescript
-// Test complete print job creation flow
+// Test complete print queue entry creation flow
 // Test inventory validation warnings
 // Test COGS display
 // Test job status updates
@@ -196,7 +196,7 @@ frontend/
 
 ### Phase 2: Backend Business Logic (Week 2)
 1. Implement inventory management tests
-2. Implement print job workflow tests
+2. Implement print queue workflow tests
 3. Add unit tests for calculations
 4. Achieve 80% coverage of critical paths
 
@@ -209,7 +209,7 @@ frontend/
 ### Phase 4: Frontend Workflows (Week 4)
 1. Implement inventory management tests
 2. Implement product management tests
-3. Implement print job workflow tests
+3. Implement print queue workflow tests
 4. Add cross-browser testing
 
 ## Makefile Integration

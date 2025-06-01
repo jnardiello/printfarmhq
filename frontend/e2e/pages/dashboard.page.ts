@@ -21,7 +21,7 @@ export class DashboardPage {
     this.filamentsTab = page.locator('button:has-text("Inventory")'); // Filaments is under Inventory dropdown
     this.productsTab = page.locator('button:has-text("Inventory")'); // Products is under Inventory dropdown  
     this.printersTab = page.locator('button:has-text("Inventory")'); // Printers is under Inventory dropdown
-    this.printJobsTab = page.locator('button:has-text("Print Jobs")');
+    this.printJobsTab = page.locator('button:has-text("Print Queue")');
     this.subscriptionsTab = page.locator('button:has-text("Inventory")'); // Subscriptions is under Inventory dropdown
     this.usersTab = page.locator('button:has-text("Administration")'); // Users is under Administration dropdown
     
@@ -64,7 +64,7 @@ export class DashboardPage {
       }
       
       // Mobile navigation - simple approach first, Safari workarounds if needed
-      const mobileDropdown = this.page.locator('button').filter({ hasText: /Overview|Print Jobs|Filaments|Products/ }).first();
+      const mobileDropdown = this.page.locator('button').filter({ hasText: /Overview|Print Queue|Filaments|Products/ }).first();
       await mobileDropdown.waitFor({ state: 'visible', timeout: 5000 });
       await mobileDropdown.click();
       
@@ -87,7 +87,7 @@ export class DashboardPage {
           break;
         case 'prints':
           // More reliable approach for Safari - find by exact text match
-          const printJobsMenuItem = this.page.locator('[role="menuitem"]').filter({ hasText: 'Print Jobs' });
+          const printJobsMenuItem = this.page.locator('[role="menuitem"]').filter({ hasText: 'Print Queue' });
           await printJobsMenuItem.click();
           await this.page.waitForURL('**/?tab=prints', { timeout: 10000 });
           break;
@@ -116,8 +116,8 @@ export class DashboardPage {
           break;
           
         case 'prints':
-          await this.page.waitForSelector('button:has-text("Print Jobs")', { state: 'visible' });
-          await this.page.click('button:has-text("Print Jobs")');
+          await this.page.waitForSelector('button:has-text("Print Queue")', { state: 'visible' });
+          await this.page.click('button:has-text("Print Queue")');
           await this.page.waitForURL('**/?tab=prints');
           break;
           
@@ -255,7 +255,7 @@ export class DashboardPage {
       case 'home':
         return await this.page.locator('button:has-text("Overview")').isVisible();
       case 'prints':
-        return await this.page.locator('button:has-text("Print Jobs")').isVisible();
+        return await this.page.locator('button:has-text("Print Queue")').isVisible();
       case 'filaments':
       case 'products':
       case 'printers':
@@ -297,7 +297,7 @@ export class DashboardPage {
     const dropdownButtons = await this.page.locator('button').all();
     for (const button of dropdownButtons) {
       const text = await button.textContent();
-      if (text && (text.includes('Overview') || text.includes('Print Jobs') || text.includes('Filaments') || text.includes('Products'))) {
+      if (text && (text.includes('Overview') || text.includes('Print Queue') || text.includes('Filaments') || text.includes('Products'))) {
         return text.trim();
       }
     }
@@ -308,7 +308,7 @@ export class DashboardPage {
   async openMobileMenu() {
     // Mobile navigation - use single dropdown menu
     // Find the mobile dropdown button - try multiple approaches for Safari compatibility
-    let mobileDropdown = this.page.locator('button').filter({ hasText: /Overview|Print Jobs|Filaments|Products|Menu/ }).first();
+    let mobileDropdown = this.page.locator('button').filter({ hasText: /Overview|Print Queue|Filaments|Products|Menu/ }).first();
     
     // If not found, try looking for any button with text content in the navigation area
     if (!(await mobileDropdown.isVisible().catch(() => false))) {

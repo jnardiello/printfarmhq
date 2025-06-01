@@ -1,6 +1,6 @@
 """
-E2E tests for the complete print job workflow.
-Tests the business process: create products → create print jobs → track COGS calculations.
+E2E tests for the complete print queue workflow.
+Tests the business process: create products → add to print queue → track COGS calculations.
 """
 import json
 import pytest
@@ -12,10 +12,10 @@ from app import models
 
 
 class TestPrintJobWorkflow:
-    """Test complete print job business workflows end-to-end."""
+    """Test complete print queue business workflows end-to-end."""
 
     def test_complete_product_creation_and_print_job_workflow(self, client: TestClient, db: Session, auth_headers: dict):
-        """Test full workflow: filaments → products → print jobs → COGS calculation."""
+        """Test full workflow: filaments → products → print queue → COGS calculation."""
         
         # Step 1: Create required filaments for multi-filament product
         pla_red_data = {
@@ -86,7 +86,7 @@ class TestPrintJobWorkflow:
         assert product_data["print_time_hrs"] == 2.5
         assert len(product_data["filament_usages"]) == 2
         
-        # Step 4: Create print job with the product
+        # Step 4: Add product to print queue
         job_data = {
             "name": "Batch Order #001",
             "products": [
@@ -181,9 +181,9 @@ class TestPrintJobWorkflow:
         assert product_data["file_path"].endswith(".stl")
 
     def test_print_job_status_progression(self, client: TestClient, db: Session, auth_headers: dict):
-        """Test print job status changes through the workflow."""
+        """Test print queue entry status changes through the workflow."""
         
-        # Create minimal setup for print job
+        # Create minimal setup for print queue entry
         filament_data = {"material": "PLA", "color": "White", "brand": "eSUN"}
         filament_response = client.post("/filaments", json=filament_data, headers=auth_headers)
         assert filament_response.status_code == 201
@@ -212,7 +212,7 @@ class TestPrintJobWorkflow:
         assert printer_response.status_code == 201
         printer_id = printer_response.json()["id"]
         
-        # Create print job
+        # Add to print queue
         job_data = {
             "name": "Status Test Job",
             "products": [{"product_id": product_id, "items_qty": 1}],
@@ -242,7 +242,7 @@ class TestPrintJobWorkflow:
         assert update_response.json()["status"] == "completed"
 
     def test_complex_multi_product_print_job(self, client: TestClient, db: Session, auth_headers: dict):
-        """Test print job with multiple different products."""
+        """Test print queue entry with multiple different products."""
         
         # Create multiple filaments
         filament1_data = {"material": "PLA", "color": "White", "brand": "eSUN"}
@@ -299,7 +299,7 @@ class TestPrintJobWorkflow:
         assert printer_response.status_code == 201
         printer_id = printer_response.json()["id"]
         
-        # Create print job with multiple products
+        # Add multiple products to print queue
         job_data = {
             "name": "Multi-Product Job",
             "products": [
@@ -387,7 +387,7 @@ class TestPrintJobWorkflow:
         assert abs(job_detail["calculated_cogs_eur"] - expected_total) < 0.01
 
     def test_insufficient_inventory_prevents_print_job(self, client: TestClient, db: Session, auth_headers: dict):
-        """Test that print jobs are rejected when there's insufficient filament inventory."""
+        """Test that print queue entries are rejected when there's insufficient filament inventory."""
         
         # Create filament with limited stock
         filament_data = {"material": "TPU", "color": "Flex Black", "brand": "NinjaFlex"}  # Only 100g
@@ -419,7 +419,7 @@ class TestPrintJobWorkflow:
         assert printer_response.status_code == 201
         printer_id = printer_response.json()["id"]
         
-        # Attempt to create print job - should fail
+        # Attempt to add to print queue - should fail
         job_data = {
             "name": "Impossible Job",
             "products": [{"product_id": product_id, "items_qty": 1}],
@@ -438,7 +438,7 @@ class TestPrintJobWorkflow:
         assert filament_check_response.json()["total_qty_kg"] == 0.1
 
     def test_print_job_deletion_restores_inventory(self, client: TestClient, db: Session, auth_headers: dict):
-        """Test that deleting print jobs restores consumed filament inventory."""
+        """Test that deleting print queue entries restores consumed filament inventory."""
         
         # Create filament with known stock
         initial_stock = 1.0  # 1 kg
@@ -472,7 +472,7 @@ class TestPrintJobWorkflow:
         assert printer_response.status_code == 201
         printer_id = printer_response.json()["id"]
         
-        # Create print job
+        # Add to print queue
         job_data = {
             "name": "To Be Deleted",
             "products": [{"product_id": product_id, "items_qty": 2}],  # 2 items = 400g total
@@ -490,7 +490,7 @@ class TestPrintJobWorkflow:
         expected_after_consumption = initial_stock - (grams_used * 2 / 1000)  # 1.0 - 0.4 = 0.6
         assert abs(reduced_stock - expected_after_consumption) < 0.001
         
-        # Delete the print job
+        # Delete the print queue entry
         delete_response = client.delete(f"/print_jobs/{job_id}", headers=auth_headers)
         assert delete_response.status_code == 204
         

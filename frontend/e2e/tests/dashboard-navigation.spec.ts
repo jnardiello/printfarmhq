@@ -139,7 +139,7 @@ test.describe('Dashboard Navigation', () => {
     await expect(dropdownMenu).toBeVisible();
     
     // Verify key navigation items are present
-    await expect(page.locator('[role="menuitem"]').filter({ hasText: 'Print Jobs' })).toBeVisible();
+    await expect(page.locator('[role="menuitem"]').filter({ hasText: 'Print Queue' })).toBeVisible();
     await expect(page.locator('[role="menuitem"]').filter({ hasText: 'Filaments' })).toBeVisible();
     
     // Navigate to filaments via mobile menu

@@ -5,7 +5,7 @@ This document outlines a comprehensive plan for implementing end-to-end (E2E) te
 
 ## Goals
 1. **Prevent UI Regressions**: Ensure no existing functionality breaks during development
-2. **Business Workflow Coverage**: Test complete user journeys from login to print job completion
+2. **Business Workflow Coverage**: Test complete user journeys from login to print queue completion
 3. **Visual Regression Testing**: Detect unintended UI changes
 4. **Performance Monitoring**: Ensure the app remains performant
 5. **Accessibility Validation**: Maintain WCAG compliance
@@ -61,16 +61,16 @@ This document outlines a comprehensive plan for implementing end-to-end (E2E) te
 - Cost of production display
 ```
 
-### 4. Print Job Workflow Tests
+### 4. Print Queue Workflow Tests
 ```typescript
 // Tests to implement:
-- Complete print job creation flow
+- Complete print queue entry creation flow
 - Multi-product selection
 - Printer assignment
 - COGS calculation display
 - Status updates (pending → in_progress → completed)
 - Inventory deduction verification
-- Print job deletion and inventory restoration
+- Print queue entry deletion and inventory restoration
 ```
 
 ### 5. UI Component Tests
@@ -89,7 +89,7 @@ This document outlines a comprehensive plan for implementing end-to-end (E2E) te
 ```typescript
 // Key pages to snapshot:
 - Dashboard overview
-- Each tab (Filaments, Products, Printers, Print Jobs)
+- Each tab (Filaments, Products, Printers, Print Queue)
 - Forms (create/edit dialogs)
 - Empty states
 - Error states
@@ -176,12 +176,12 @@ This document outlines a comprehensive plan for implementing end-to-end (E2E) te
 2. **Basic CRUD Operations**
    - Filament management
    - Product creation
-   - Print job workflow
+   - Print queue workflow
 
 ### Phase 3: Advanced Tests (Week 3)
 1. **Complex Workflows**
    - Multi-filament product creation
-   - Print job with multiple products
+   - Print queue entry with multiple products
    - Inventory tracking through workflow
 
 2. **Error Handling**

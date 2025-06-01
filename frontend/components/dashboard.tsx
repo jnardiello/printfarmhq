@@ -74,7 +74,7 @@ export function Dashboard() {
 
   const baseTabOptions = [
     { value: "home", label: "Overview" },
-    { value: "prints", label: "Print Jobs" }
+    { value: "prints", label: "Print Queue" }
   ]
 
   const inventoryOptions = [
