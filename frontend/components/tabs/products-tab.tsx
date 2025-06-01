@@ -421,7 +421,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                     </h3>
                     <div>
                       <Label htmlFor="additionalPartsCost" className="text-sm font-medium">
-                        Cost of additional parts (magnets, glue, screws, etc.) €
+                        Cost of additional parts (magnets, glue, screws, etc.)
                       </Label>
                       <Input
                         id="additionalPartsCost"
