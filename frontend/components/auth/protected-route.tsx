@@ -9,18 +9,20 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, isLoading, setupRequired } = useAuth()
+  const { user, isLoading, setupRequired, godUserRequired } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
     if (!isLoading) {
       if (setupRequired) {
         router.push('/setup')
+      } else if (godUserRequired) {
+        router.push('/setup/god-user')
       } else if (!user) {
         router.push('/auth')
       }
     }
-  }, [user, isLoading, setupRequired, router])
+  }, [user, isLoading, setupRequired, godUserRequired, router])
 
   if (isLoading) {
     return (
@@ -30,7 +32,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  if (setupRequired || !user) {
+  if (setupRequired || godUserRequired || !user) {
     return null
   }
 

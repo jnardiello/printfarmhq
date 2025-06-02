@@ -11,6 +11,7 @@ import { SubscriptionsTab } from "@/components/tabs/subscriptions-tab"
 import { PrintsTab } from "@/components/tabs/prints-tab"
 import { UsersTab } from "@/components/tabs/users-tab"
 import { FilamentTypesTab } from "@/components/tabs/filament-types-tab"
+import { GodDashboardTab } from "@/components/tabs/god-dashboard-tab"
 import { HomePage } from "@/components/home-page"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -42,6 +43,9 @@ export function Dashboard() {
     const validTabs = ["home", "filaments", "products", "printers", "subscriptions", "prints"]
     if (user?.is_admin) {
       validTabs.push("users", "filament-types")
+    }
+    if (user?.is_god_user) {
+      validTabs.push("god-dashboard")
     }
     
     if (tab && validTabs.includes(tab)) {
@@ -88,10 +92,20 @@ export function Dashboard() {
     { value: "users", label: "Users" },
     { value: "filament-types", label: "Filament Types" }
   ]
+
+  // Add God Dashboard as the very last option after configurations
+  const godDashboardOptions = user?.is_god_user ? [
+    { value: "god-dashboard", label: "God Dashboard" }
+  ] : []
   
   const tabOptions = baseTabOptions
 
-  const allTabOptions = [...baseTabOptions, ...inventoryOptions, ...(user?.is_admin ? configurationOptions : [])]
+  const allTabOptions = [
+    ...baseTabOptions, 
+    ...inventoryOptions, 
+    ...(user?.is_admin ? configurationOptions : []),
+    ...godDashboardOptions
+  ]
   
   const isInventoryTab = inventoryOptions.some(option => option.value === activeTab)
   const isConfigurationTab = configurationOptions.some(option => option.value === activeTab)
@@ -171,6 +185,23 @@ export function Dashboard() {
                       ))}
                     </>
                   )}
+                  
+                  {user?.is_god_user && (
+                    <>
+                      <DropdownMenuItem className="font-medium text-muted-foreground">
+                        System
+                      </DropdownMenuItem>
+                      {godDashboardOptions.map((tab) => (
+                        <DropdownMenuItem 
+                          key={tab.value}
+                          className={`ml-4 ${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""}`}
+                          onClick={() => handleTabChange(tab.value)}
+                        >
+                          {tab.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -235,6 +266,16 @@ export function Dashboard() {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+
+                {user?.is_god_user && (
+                  <Button
+                    variant={activeTab === "god-dashboard" ? "default" : "ghost"}
+                    className="h-10"
+                    onClick={() => handleTabChange("god-dashboard")}
+                  >
+                    God Dashboard
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -250,6 +291,7 @@ export function Dashboard() {
         {activeTab === "subscriptions" && <SubscriptionsTab />}
         {user?.is_admin && activeTab === "users" && <UsersTab />}
         {user?.is_admin && activeTab === "filament-types" && <FilamentTypesTab />}
+        {user?.is_god_user && activeTab === "god-dashboard" && <GodDashboardTab />}
       </main>
       <Toaster />
     </div>

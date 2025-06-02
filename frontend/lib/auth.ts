@@ -5,6 +5,7 @@ export interface User {
   is_active: boolean
   is_admin: boolean
   is_superadmin: boolean
+  is_god_user: boolean
   created_at: string
 }
 

@@ -5,6 +5,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type { User } from '@/lib/auth'
+import { API_BASE_URL } from '@/lib/api'
 
 const TOKEN_KEY = 'auth_token'
 const USER_KEY = 'auth_user'
@@ -130,6 +131,7 @@ interface AuthContextType {
   logout: () => void
   isLoading: boolean
   setupRequired: boolean | null
+  godUserRequired: boolean | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -139,6 +141,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
+  const [godUserRequired, setGodUserRequired] = useState<boolean | null>(null)
 
   useEffect(() => {
     // Check setup status and auth on mount
@@ -148,9 +151,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const setupStatus = await authApi.getSetupStatus()
           setSetupRequired(setupStatus.setup_required)
+          setGodUserRequired(setupStatus.god_user_required || false)
           
           // If setup is required, no need to check auth
-          if (setupStatus.setup_required) {
+          if (setupStatus.setup_required || setupStatus.god_user_required) {
             setIsLoading(false)
             return
           }
@@ -211,7 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, isLoading, setupRequired }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading, setupRequired, godUserRequired }}>
       {children}
     </AuthContext.Provider>
   )

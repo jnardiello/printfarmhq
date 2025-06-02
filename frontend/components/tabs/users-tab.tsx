@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Trash2, UserPlus, Shield, User as UserIcon, Edit, Crown, AlertCircle } from "lucide-react"
+import { Trash2, UserPlus, Shield, User as UserIcon, Edit, Crown, AlertCircle, CheckCircle2, Loader2, RefreshCw, Copy, Eye, EyeOff } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "@/components/ui/use-toast"
 import type { User } from "@/lib/auth"
@@ -33,8 +33,7 @@ export function UsersTab() {
     email: "",
     name: "",
     password: "",
-    is_admin: false,
-    is_superadmin: false
+    is_admin: false
   })
   const [editFormData, setEditFormData] = useState({
     email: "",
@@ -51,6 +50,12 @@ export function UsersTab() {
   const [editFormError, setEditFormError] = useState("")
   const [profileFormError, setProfileFormError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  
+  // Password generator state
+  const [showEditPassword, setShowEditPassword] = useState(false)
+  const [showProfilePassword, setShowProfilePassword] = useState(false)
+  const [editPasswordCopied, setEditPasswordCopied] = useState(false)
+  const [profilePasswordCopied, setProfilePasswordCopied] = useState(false)
 
   const fetchUsers = async () => {
     try {
@@ -73,6 +78,69 @@ export function UsersTab() {
     fetchUsers()
   }, [])
 
+  // Password generator functions
+  const generateSecurePassword = () => {
+    const length = 12
+    const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < length; i++) {
+      password += charset.charAt(Math.floor(Math.random() * charset.length))
+    }
+    return password
+  }
+
+  const generateEditUserPassword = () => {
+    const newPassword = generateSecurePassword()
+    setEditFormData({ ...editFormData, password: newPassword })
+    setShowEditPassword(true)
+  }
+
+  const generateProfilePassword = () => {
+    const newPassword = generateSecurePassword()
+    setProfileFormData({ ...profileFormData, password: newPassword })
+    setShowProfilePassword(true)
+  }
+
+  const copyEditPasswordToClipboard = async () => {
+    if (editFormData.password) {
+      try {
+        await navigator.clipboard.writeText(editFormData.password)
+        setEditPasswordCopied(true)
+        setTimeout(() => setEditPasswordCopied(false), 2000)
+        toast({
+          title: "Password Copied",
+          description: "Password copied to clipboard successfully"
+        })
+      } catch (error) {
+        toast({
+          title: "Copy Failed",
+          description: "Failed to copy password to clipboard",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
+  const copyProfilePasswordToClipboard = async () => {
+    if (profileFormData.password) {
+      try {
+        await navigator.clipboard.writeText(profileFormData.password)
+        setProfilePasswordCopied(true)
+        setTimeout(() => setProfilePasswordCopied(false), 2000)
+        toast({
+          title: "Password Copied",
+          description: "Password copied to clipboard successfully"
+        })
+      } catch (error) {
+        toast({
+          title: "Copy Failed",
+          description: "Failed to copy password to clipboard",
+          variant: "destructive"
+        })
+      }
+    }
+  }
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsSubmitting(true)
@@ -90,7 +158,7 @@ export function UsersTab() {
       })
       
       setIsCreateDialogOpen(false)
-      setFormData({ email: "", name: "", password: "", is_admin: false, is_superadmin: false })
+      setFormData({ email: "", name: "", password: "", is_admin: false })
       fetchUsers()
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Failed to create user")
@@ -327,18 +395,6 @@ export function UsersTab() {
                   </Label>
                 </div>
 
-                {currentUser?.is_superadmin && (
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="is_superadmin"
-                      checked={formData.is_superadmin}
-                      onCheckedChange={(checked) => setFormData({ ...formData, is_superadmin: checked as boolean })}
-                    />
-                    <Label htmlFor="is_superadmin" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                      Superadministrator privileges
-                    </Label>
-                  </div>
-                )}
               </div>
               
               <DialogFooter>
@@ -355,61 +411,224 @@ export function UsersTab() {
         </div>
 
         <Dialog open={isProfileDialogOpen} onOpenChange={setIsProfileDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Profile</DialogTitle>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="space-y-4">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-2">
+                  <Edit className="h-5 w-5 text-primary" />
+                  Edit Profile
+                </DialogTitle>
+                {currentUser && (
+                  <Badge 
+                    variant={currentUser.is_superadmin ? "secondary" : currentUser.is_admin ? "default" : "outline"}
+                    className={`${
+                      currentUser.is_superadmin 
+                        ? "bg-orange-500 hover:bg-orange-600" 
+                        : currentUser.is_admin 
+                        ? "bg-blue-500 hover:bg-blue-600" 
+                        : "bg-gray-500 hover:bg-gray-600"
+                    } text-white border-none px-3 py-1`}
+                  >
+                    {currentUser.is_superadmin ? "Root User" : currentUser.is_admin ? "Admin" : "User"}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* User Preview Card */}
+              {currentUser && (
+                <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    {currentUser.is_superadmin ? (
+                      <Crown className="w-6 h-6 text-orange-600" />
+                    ) : currentUser.is_admin ? (
+                      <Shield className="w-6 h-6 text-primary" />
+                    ) : (
+                      <UserIcon className="w-6 h-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg truncate">{currentUser.name}</h3>
+                      {currentUser.is_superadmin && (
+                        <Crown className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <UserIcon className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{currentUser.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1 text-green-600">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span className="text-xs font-medium">Your Account</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <DialogDescription>
-                Update your profile information. Leave password blank to keep current password.
+                Update your personal information and account settings. Changes will be saved immediately.
               </DialogDescription>
             </DialogHeader>
             
-            <form onSubmit={handleUpdateProfile}>
-              <div className="space-y-4 py-4">
-                {profileFormError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{profileFormError}</AlertDescription>
-                  </Alert>
-                )}
+            <form onSubmit={handleUpdateProfile} className="space-y-6">
+              {profileFormError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{profileFormError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Basic Information Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <UserIcon className="h-4 w-4 text-primary" />
+                  <h3 className="font-medium text-sm">Personal Information</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="profile-name" className="text-sm font-medium">Full Name</Label>
+                  <Input
+                    id="profile-name"
+                    value={profileFormData.name}
+                    onChange={(e) => setProfileFormData({ ...profileFormData, name: e.target.value })}
+                    placeholder="Enter your full name"
+                    className="h-10"
+                    required
+                  />
+                </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="profile-email">Email</Label>
+                  <Label htmlFor="profile-email" className="text-sm font-medium">Email Address</Label>
                   <Input
                     id="profile-email"
                     type="email"
                     value={profileFormData.email}
                     onChange={(e) => setProfileFormData({ ...profileFormData, email: e.target.value })}
+                    placeholder="your@email.com"
+                    className="h-10"
                     required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="profile-name">Full Name</Label>
-                  <Input
-                    id="profile-name"
-                    value={profileFormData.name}
-                    onChange={(e) => setProfileFormData({ ...profileFormData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="profile-password">New Password</Label>
-                  <Input
-                    id="profile-password"
-                    type="password"
-                    placeholder="Leave blank to keep current password"
-                    value={profileFormData.password}
-                    onChange={(e) => setProfileFormData({ ...profileFormData, password: e.target.value })}
                   />
                 </div>
               </div>
+
+              {/* Security Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <h3 className="font-medium text-sm">Security Settings</h3>
+                </div>
+
+                <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
+                  <div className="space-y-2">
+                    <Label htmlFor="profile-password" className="text-sm font-medium">Change Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="profile-password"
+                        type={showProfilePassword ? "text" : "password"}
+                        placeholder="Leave blank to keep current password"
+                        value={profileFormData.password}
+                        onChange={(e) => setProfileFormData({ ...profileFormData, password: e.target.value })}
+                        className="h-10 pr-24"
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={copyProfilePasswordToClipboard}
+                                disabled={!profileFormData.password}
+                              >
+                                {profilePasswordCopied ? (
+                                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Copy password</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => setShowProfilePassword(!showProfilePassword)}
+                              >
+                                {showProfilePassword ? (
+                                  <EyeOff className="h-3 w-3" />
+                                ) : (
+                                  <Eye className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{showProfilePassword ? "Hide" : "Show"} password</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={generateProfilePassword}
+                        className="flex items-center gap-2"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Generate Password
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Minimum 8 characters recommended
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Only enter a password if you want to change it. Generated passwords are automatically copied to clipboard.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Account Info Alert */}
+              <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/30">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Account Security:</strong> After updating your email or password, you may need to log in again. 
+                  Make sure you remember your new credentials.
+                </AlertDescription>
+              </Alert>
               
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsProfileDialogOpen(false)}>
+              <DialogFooter className="flex gap-2 pt-4 border-t">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsProfileDialogOpen(false)}
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Updating..." : "Update Profile"}
+                <Button type="submit" disabled={isSubmitting} className="min-w-[120px]">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    "Update Profile"
+                  )}
                 </Button>
               </DialogFooter>
             </form>
@@ -417,78 +636,257 @@ export function UsersTab() {
         </Dialog>
 
         <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit User</DialogTitle>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="space-y-4">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-2">
+                  <Edit className="h-5 w-5 text-primary" />
+                  Edit User
+                </DialogTitle>
+                {editingUser && (
+                  <Badge 
+                    variant={editingUser.is_superadmin ? "secondary" : editingUser.is_admin ? "default" : "outline"}
+                    className={`${
+                      editingUser.is_superadmin 
+                        ? "bg-orange-500 hover:bg-orange-600" 
+                        : editingUser.is_admin 
+                        ? "bg-blue-500 hover:bg-blue-600" 
+                        : "bg-gray-500 hover:bg-gray-600"
+                    } text-white border-none px-3 py-1`}
+                  >
+                    {editingUser.is_superadmin ? "Root User" : editingUser.is_admin ? "Admin" : "User"}
+                  </Badge>
+                )}
+              </div>
+              
+              {/* User Preview Card */}
+              {editingUser && (
+                <div className="flex items-center gap-4 p-4 bg-muted/30 rounded-lg border">
+                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                    {editingUser.is_superadmin ? (
+                      <Crown className="w-6 h-6 text-orange-600" />
+                    ) : editingUser.is_admin ? (
+                      <Shield className="w-6 h-6 text-primary" />
+                    ) : (
+                      <UserIcon className="w-6 h-6 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-lg truncate">{editingUser.name}</h3>
+                      {editingUser.is_superadmin && (
+                        <Crown className="h-4 w-4 text-orange-600 flex-shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <UserIcon className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{editingUser.email}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-1 text-blue-600">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span className="text-xs font-medium">Team Member</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <DialogDescription>
-                Update user information and permissions. Leave password blank to keep current password.
+                Update user information and permissions. Changes will take effect immediately.
               </DialogDescription>
             </DialogHeader>
             
-            <form onSubmit={handleUpdateUser}>
-              <div className="space-y-4 py-4">
-                {editFormError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{editFormError}</AlertDescription>
-                  </Alert>
-                )}
+            <form onSubmit={handleUpdateUser} className="space-y-6">
+              {editFormError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{editFormError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Basic Information Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <UserIcon className="h-4 w-4 text-primary" />
+                  <h3 className="font-medium text-sm">Basic Information</h3>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name" className="text-sm font-medium">Full Name</Label>
+                  <Input
+                    id="edit-name"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    placeholder="Enter user's full name"
+                    className="h-10"
+                    required
+                  />
+                </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="edit-email">Email</Label>
+                  <Label htmlFor="edit-email" className="text-sm font-medium">Email Address</Label>
                   <Input
                     id="edit-email"
                     type="email"
                     value={editFormData.email}
                     onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                    placeholder="user@example.com"
+                    className="h-10"
                     required
                   />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-name">Full Name</Label>
-                  <Input
-                    id="edit-name"
-                    value={editFormData.name}
-                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-password">New Password</Label>
-                  <Input
-                    id="edit-password"
-                    type="password"
-                    placeholder="Leave blank to keep current password"
-                    value={editFormData.password}
-                    onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
-                  />
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="edit-is_admin"
-                    checked={editFormData.is_admin}
-                    onCheckedChange={(checked) => setEditFormData({ ...editFormData, is_admin: checked as boolean })}
-                  />
-                  <Label htmlFor="edit-is_admin" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                    Administrator privileges
-                  </Label>
                 </div>
               </div>
+
+              {/* Security Section */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 pb-2 border-b">
+                  <Shield className="h-4 w-4 text-primary" />
+                  <h3 className="font-medium text-sm">Security & Permissions</h3>
+                </div>
+
+                <div className="space-y-4 p-4 bg-muted/20 rounded-lg border">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-password" className="text-sm font-medium">Reset Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="edit-password"
+                        type={showEditPassword ? "text" : "password"}
+                        placeholder="Leave blank to keep current password"
+                        value={editFormData.password}
+                        onChange={(e) => setEditFormData({ ...editFormData, password: e.target.value })}
+                        className="h-10 pr-24"
+                      />
+                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={copyEditPasswordToClipboard}
+                                disabled={!editFormData.password}
+                              >
+                                {editPasswordCopied ? (
+                                  <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Copy password</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => setShowEditPassword(!showEditPassword)}
+                              >
+                                {showEditPassword ? (
+                                  <EyeOff className="h-3 w-3" />
+                                ) : (
+                                  <Eye className="h-3 w-3" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{showEditPassword ? "Hide" : "Show"} password</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={generateEditUserPassword}
+                        className="flex items-center gap-2"
+                      >
+                        <RefreshCw className="h-3 w-3" />
+                        Generate Password
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        Secure 12-character password
+                      </p>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Only enter a password if you want to reset it. User will need to use this new password to log in.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-row items-start space-x-3 space-y-0 p-3 bg-blue-50 dark:bg-blue-950/30 rounded border border-blue-200 dark:border-blue-800">
+                    <div className="mt-1">
+                      <Checkbox
+                        id="edit-is_admin"
+                        checked={editFormData.is_admin}
+                        onCheckedChange={(checked) => setEditFormData({ ...editFormData, is_admin: checked as boolean })}
+                      />
+                    </div>
+                    <div className="space-y-1 leading-none">
+                      <Label htmlFor="edit-is_admin" className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        Administrator Privileges
+                      </Label>
+                      <p className="text-xs text-blue-700 dark:text-blue-200">
+                        Can manage users, inventory, products, and system settings within the organization.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Security Notice */}
+              <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/30">
+                <AlertCircle className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Security Notice:</strong> Permission changes take effect immediately. 
+                  If you reset the password, make sure to communicate the new credentials securely.
+                </AlertDescription>
+              </Alert>
               
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              <DialogFooter className="flex gap-2 pt-4 border-t">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setIsEditDialogOpen(false)}
+                  disabled={isSubmitting}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Updating..." : "Update User"}
+                <Button type="submit" disabled={isSubmitting} className="min-w-[100px]">
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    "Update User"
+                  )}
                 </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
       </div>
+
+      {/* Team Membership Information */}
+      <Alert className="border-blue-200 bg-blue-50 dark:bg-blue-950/30">
+        <UserIcon className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-sm text-blue-800 dark:text-blue-200">
+          <strong>Team Membership:</strong> Users created here will join your organization team. 
+          Users who register through the public registration form will create their own separate team.
+        </AlertDescription>
+      </Alert>
 
       <Card>
         <CardHeader>
@@ -545,16 +943,10 @@ export function UsersTab() {
                   </TableCell>
                   <TableCell>{formatDate(user.created_at)}</TableCell>
                   <TableCell>
-                    {user.is_superadmin && user.id === currentUser?.id ? (
-                      <div className="flex items-center space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleEditProfile}
-                          title="Edit your profile"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
+                    {user.id === currentUser?.id ? (
+                      // Current user - no actions needed (use Edit Profile button instead)
+                      <div className="flex items-center justify-center">
+                        <span className="text-xs text-muted-foreground italic">You</span>
                       </div>
                     ) : !user.is_superadmin ? (
                       <div className="flex items-center justify-center gap-1">
