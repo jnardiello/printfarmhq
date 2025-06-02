@@ -84,17 +84,17 @@ export function Dashboard() {
     { value: "subscriptions", label: "Commercial Licenses" }
   ]
   
-  const administrationOptions = [
+  const configurationOptions = [
     { value: "users", label: "Users" },
     { value: "filament-types", label: "Filament Types" }
   ]
   
   const tabOptions = baseTabOptions
 
-  const allTabOptions = [...baseTabOptions, ...inventoryOptions, ...(user?.is_admin ? administrationOptions : [])]
+  const allTabOptions = [...baseTabOptions, ...inventoryOptions, ...(user?.is_admin ? configurationOptions : [])]
   
   const isInventoryTab = inventoryOptions.some(option => option.value === activeTab)
-  const isAdministrationTab = administrationOptions.some(option => option.value === activeTab)
+  const isConfigurationTab = configurationOptions.some(option => option.value === activeTab)
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -158,9 +158,9 @@ export function Dashboard() {
                   {user?.is_admin && (
                     <>
                       <DropdownMenuItem className="font-medium text-muted-foreground">
-                        Administration
+                        Configurations
                       </DropdownMenuItem>
-                      {administrationOptions.map((tab) => (
+                      {configurationOptions.map((tab) => (
                         <DropdownMenuItem 
                           key={tab.value}
                           className={`ml-4 ${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""}`}
@@ -215,15 +215,15 @@ export function Dashboard() {
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
-                        variant={isAdministrationTab ? "default" : "ghost"}
+                        variant={isConfigurationTab ? "default" : "ghost"}
                         className="h-10 flex items-center gap-1"
                       >
-                        Administration
+                        Configurations
                         <ChevronDown className="h-4 w-4" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
-                      {administrationOptions.map((option) => (
+                      {configurationOptions.map((option) => (
                         <DropdownMenuItem
                           key={option.value}
                           onClick={() => handleTabChange(option.value)}

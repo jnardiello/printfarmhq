@@ -630,7 +630,7 @@ export function FilamentsTab() {
                           </svg>
                           <p>No filament inventory to display</p>
                           <p className="text-sm mt-1">Add filament purchases above to start tracking inventory.</p>
-                          <p className="text-xs mt-2 text-muted-foreground">Configure filament types in Administration → Filament Types</p>
+                          <p className="text-xs mt-2 text-muted-foreground">Configure filament types in Configurations → Filament Types</p>
                         </div>
                       </TableCell>
                     </TableRow>
