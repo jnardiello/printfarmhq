@@ -189,7 +189,10 @@ class PrinterProfile(Base):
     price_eur = Column(Float, nullable=False)
     expected_life_hours = Column(Float, nullable=False)
 
-    print_jobs = relationship("PrintJobPrinter", back_populates="printer_profile")
+    # Remove back_populates since we don't have a proper foreign key anymore
+    print_jobs = relationship("PrintJobPrinter", 
+                            primaryjoin="PrinterProfile.id == PrintJobPrinter.printer_profile_id",
+                            viewonly=True)
 
 
 class PrintJobProduct(Base):
@@ -220,8 +223,9 @@ class PrintJobPrinter(Base):
     printer_expected_life_hours = Column(Float, nullable=True)
 
     # Optional relationship - may be null if printer was deleted
-    printer_profile = relationship("PrinterProfile", back_populates="print_jobs", foreign_keys=[printer_profile_id], 
-                                 primaryjoin="PrintJobPrinter.printer_profile_id == PrinterProfile.id")
+    printer_profile = relationship("PrinterProfile", 
+                                 primaryjoin="PrintJobPrinter.printer_profile_id == PrinterProfile.id",
+                                 viewonly=True)
 
 
 class PrintJob(Base):
