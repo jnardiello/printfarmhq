@@ -544,13 +544,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const updatePrinter = async (id: number, data: Partial<Printer>) => {
     try {
       await api(`/printer_profiles/${id}`, {
-        method: "PATCH",
+        method: "PUT",
         body: JSON.stringify(data),
       })
       await fetchPrinters()
       toast({
         title: "Success",
-        description: "Printer profile updated successfully",
+        description: "Printer updated successfully",
       })
     } catch (error) {
       console.error("Error updating printer:", error)

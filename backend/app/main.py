@@ -1248,6 +1248,28 @@ def delete_printer_profile(profile_id: int, db: Session = Depends(get_db), curre
     return
 
 
+@app.put("/printer_profiles/{profile_id}", response_model=schemas.PrinterProfileRead)
+def update_printer_profile(
+    profile_id: int,
+    profile_update: schemas.PrinterProfileCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    prof = db.get(models.PrinterProfile, profile_id)
+    if not prof:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # Update fields
+    prof.name = profile_update.name
+    prof.manufacturer = profile_update.manufacturer
+    prof.price_eur = profile_update.price_eur
+    prof.expected_life_hours = profile_update.expected_life_hours
+    
+    db.commit()
+    db.refresh(prof)
+    return prof
+
+
 # Utility SKU generator
 
 def _generate_sku(name: str, db: Session) -> str:
