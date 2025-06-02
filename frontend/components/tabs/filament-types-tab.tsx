@@ -8,29 +8,22 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "@/components/ui/use-toast"
 import { Plus, Pencil, Trash2, Package2, AlertTriangle, AlertCircle } from "lucide-react"
 import type { Filament } from "@/lib/types"
 import { MATERIAL_OPTIONS, getColorHex } from "@/lib/constants/filaments"
+import { QuickFilamentForm } from "@/components/quick-filament-form"
 
 export function FilamentTypesTab() {
-  const { filaments, addFilament, updateFilament, deleteFilament } = useData()
+  const { filaments, updateFilament, deleteFilament } = useData()
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingFilament, setEditingFilament] = useState<Filament | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [filamentToDelete, setFilamentToDelete] = useState<Filament | null>(null)
   
-  // Form state for adding new filament type
-  const [newFilament, setNewFilament] = useState({
-    color: "",
-    brand: "",
-    material: "PLA",
-    price_per_kg: ""
-  })
-  
-  // Form state for editing
+  // Form state for editing (keeping the edit functionality as-is since it's simpler for updates)
   const [editForm, setEditForm] = useState({
     color: "",
     brand: "",
@@ -38,38 +31,16 @@ export function FilamentTypesTab() {
     price_per_kg: ""
   })
   
-  const handleAddFilament = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    try {
-      await addFilament({
-        color: newFilament.color.trim(),
-        brand: newFilament.brand.trim(),
-        material: newFilament.material,
-        price_per_kg: parseFloat(newFilament.price_per_kg),
-        total_qty_kg: 0 // Filament types start with no inventory
-      })
-      
-      // Reset form
-      setNewFilament({
-        color: "",
-        brand: "",
-        material: "PLA",
-        price_per_kg: ""
-      })
-      setIsAddDialogOpen(false)
-      
-      toast({
-        title: "Success",
-        description: "Filament type created successfully"
-      })
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to create filament type",
-        variant: "destructive"
-      })
-    }
+  const handleFilamentCreated = (filament: Filament) => {
+    setIsAddDialogOpen(false)
+    toast({
+      title: "Success",
+      description: `Successfully created ${filament.color} ${filament.material} filament type`
+    })
+  }
+  
+  const handleFilamentCreationCancelled = () => {
+    setIsAddDialogOpen(false)
   }
   
   const handleEditFilament = async (e: React.FormEvent) => {
@@ -164,76 +135,24 @@ export function FilamentTypesTab() {
                 Add Filament Type
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-md">
+            <DialogContent 
+              className="max-w-2xl"
+              onPointerDownOutside={(e) => e.preventDefault()}
+              onInteractOutside={(e) => e.preventDefault()}
+              onOpenAutoFocus={(e) => e.preventDefault()}
+            >
               <DialogHeader>
                 <DialogTitle>Add New Filament Type</DialogTitle>
+                <DialogDescription>
+                  Create a new filament type for your inventory. You can optionally add it to inventory tracking with an initial purchase.
+                </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleAddFilament} className="space-y-4">
-                <div>
-                  <Label htmlFor="color">Color</Label>
-                  <Input
-                    id="color"
-                    value={newFilament.color}
-                    onChange={(e) => setNewFilament({...newFilament, color: e.target.value})}
-                    placeholder="e.g., Black, Red, Blue"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="brand">Brand</Label>
-                  <Input
-                    id="brand"
-                    value={newFilament.brand}
-                    onChange={(e) => setNewFilament({...newFilament, brand: e.target.value})}
-                    placeholder="e.g., Prusament, eSUN"
-                    required
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="material">Material</Label>
-                  <Select
-                    value={newFilament.material}
-                    onValueChange={(value) => setNewFilament({...newFilament, material: value})}
-                  >
-                    <SelectTrigger id="material">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {MATERIAL_OPTIONS.map(material => (
-                        <SelectItem key={material} value={material}>
-                          {material}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div>
-                  <Label htmlFor="price">Average Cost per kg (€)</Label>
-                  <Input
-                    id="price"
-                    type="number"
-                    step="0.01"
-                    min="0.01"
-                    value={newFilament.price_per_kg}
-                    onChange={(e) => setNewFilament({...newFilament, price_per_kg: e.target.value})}
-                    placeholder="25.00"
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Default price used for COGS calculations
-                  </p>
-                </div>
-                
-                <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Create Type</Button>
-                </div>
-              </form>
+              <QuickFilamentForm
+                onSuccess={handleFilamentCreated}
+                onCancel={handleFilamentCreationCancelled}
+                isModal={true}
+                autoSelectAfterCreate={false}
+              />
             </DialogContent>
           </Dialog>
         </CardHeader>
@@ -241,7 +160,7 @@ export function FilamentTypesTab() {
         <CardContent>
           <div className="text-sm text-muted-foreground mb-4">
             <p>Manage filament type configurations. These define the available filament options for your inventory.</p>
-            <p className="mt-1">Actual inventory quantities are tracked through purchase orders.</p>
+            <p className="mt-1">Create filament types with optional initial inventory tracking and automatic duplicate detection.</p>
           </div>
           
           <div className="rounded-lg border">
