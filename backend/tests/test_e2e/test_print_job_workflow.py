@@ -93,7 +93,7 @@ class TestPrintJobWorkflow:
                 {"product_id": product_id, "items_qty": 10}
             ],
             "printers": [
-                {"printer_profile_id": printer_id, "printers_qty": 1, "hours_each": 25.0}
+                {"printer_profile_id": printer_id, "printers_qty": 1}
             ],
             "packaging_cost_eur": 5.00,
             "status": "pending"

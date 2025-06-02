@@ -242,28 +242,21 @@ class TestCOGSCalculations:
         product.plates = [plate]
         product.filament_usages = []  # Empty for new structure
         product.cop = plate.cost  # Set COP to match plate cost
+        product.total_print_time_hrs = 5.0  # Product takes 5 hours to print
         
         job_product = Mock()
         job_product.product_id = 1
-        job_product.items_qty = 1
+        job_product.items_qty = 2  # Test with 2 items to verify multiplication
         
-        # Multiple printer profiles using real objects for arithmetic
-        class MockPrinter1:
+        # Single printer profile using real objects for arithmetic
+        class MockPrinter:
             def __init__(self):
                 self.id = 1
                 self.name = "Printer 1"
                 self.price_eur = 500.00
                 self.expected_life_hours = 2 * 8760  # 2 years * 8760 hours/year
         
-        class MockPrinter2:
-            def __init__(self):
-                self.id = 2
-                self.name = "Printer 2"
-                self.price_eur = 1200.00
-                self.expected_life_hours = 5 * 8760  # 5 years * 8760 hours/year
-        
-        printer1 = MockPrinter1()
-        printer2 = MockPrinter2()
+        printer = MockPrinter()
         
         # Mock db.get to return different objects based on model type and ID
         def mock_db_get(model_class, id_value):
@@ -271,44 +264,34 @@ class TestCOGSCalculations:
                 return product
             elif model_class == models.PrinterProfile:
                 if id_value == 1:
-                    return printer1
-                elif id_value == 2:
-                    return printer2
+                    return printer
             return None
         
         db.get.side_effect = mock_db_get
         
-        job_printer1 = Mock()
-        job_printer1.printer_profile_id = 1
-        job_printer1.printers_qty = 1
-        job_printer1.hours_each = 3.0
-        job_printer1.printer_profile = printer1
-        
-        job_printer2 = Mock()
-        job_printer2.printer_profile_id = 2
-        job_printer2.printers_qty = 1
-        job_printer2.hours_each = 2.0
-        job_printer2.printer_profile = printer2
+        job_printer = Mock()
+        job_printer.printer_profile_id = 1
+        job_printer.printers_qty = 1
+        job_printer.printer_profile = printer
         
         print_job = Mock()
         print_job.products = [job_product]
-        print_job.printers = [job_printer1, job_printer2]
+        print_job.printers = [job_printer]
         print_job.packaging_cost_eur = 1.00
         
         total_cogs = _calculate_print_job_cogs(print_job, db)
         
-        # Expected calculations:
-        # Filament: (100g * €30/kg) / 1000 = €3.00
-        # Printer 1: (€500 / (2 * 8760) hrs) * 3 hrs = €0.171
-        # Printer 2: (€1200 / (5 * 8760) hrs) * 2 hrs = €0.055
+        # Expected calculations with new logic:
+        # Filament: (100g * €30/kg) / 1000 * 2 items = €6.00
+        # Printer: (€500 / (2 * 8760) hrs) * (5.0 hrs/product * 2 items) * 1 printer = €1.712
         # Packaging: €1.00
-        # Total: €4.226
+        # Total: €8.712
         
-        expected_filament_cost = (100.0 * 30.00) / 1000
-        expected_printer1_cost = (500.00 / (2 * 8760)) * 3.0
-        expected_printer2_cost = (1200.00 / (5 * 8760)) * 2.0
+        expected_filament_cost = (100.0 * 30.00) / 1000 * 2  # 2 items
+        total_print_hours = 5.0 * 2  # 5 hrs/product * 2 items = 10 hours
+        expected_printer_cost = (500.00 / (2 * 8760)) * total_print_hours * 1  # 1 printer
         expected_packaging = 1.00
-        expected_total = expected_filament_cost + expected_printer1_cost + expected_printer2_cost + expected_packaging
+        expected_total = expected_filament_cost + expected_printer_cost + expected_packaging
         
         assert abs(total_cogs - expected_total) < 0.01
 

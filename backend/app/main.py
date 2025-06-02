@@ -1271,21 +1271,28 @@ def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
 
     # 2. Printer Cost Component
     current_printer_cost_total = 0.0
-    for job_printer_item in job.printers:
+    
+    # Calculate total print time from all products in the job
+    total_job_print_hours = 0.0
+    for job_product_item in job.products:
+        product_model = db.get(models.Product, job_product_item.product_id)
+        if product_model:
+            product_print_time = product_model.total_print_time_hrs
+            total_job_print_hours += product_print_time * job_product_item.items_qty
+    
+    # Apply printer cost using single printer profile (now only one allowed per job)
+    if job.printers and len(job.printers) > 0:
+        job_printer_item = job.printers[0]  # Only one printer type per job now
         printer_profile_model = db.get(models.PrinterProfile, job_printer_item.printer_profile_id)
-        if not printer_profile_model:
-            logger.warning(f"Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
-            continue
-        
-        if printer_profile_model.expected_life_hours == 0:
+        if printer_profile_model and printer_profile_model.expected_life_hours > 0:
+            cost_per_hour_for_this_printer_type = printer_profile_model.price_eur / printer_profile_model.expected_life_hours
+            current_printer_cost_total = cost_per_hour_for_this_printer_type * \
+                                       total_job_print_hours * \
+                                       job_printer_item.printers_qty
+        elif printer_profile_model:
             logger.warning(f"Printer Profile {printer_profile_model.name} has 0 expected life hours. Cannot calculate cost.")
-            continue
-        
-        cost_per_hour_for_this_printer_type = printer_profile_model.price_eur / printer_profile_model.expected_life_hours
-        cost_for_this_printer_line = cost_per_hour_for_this_printer_type * \
-                                     job_printer_item.hours_each * \
-                                     job_printer_item.printers_qty
-        current_printer_cost_total += cost_for_this_printer_line
+        else:
+            logger.warning(f"Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
 
     total_cogs_for_job += current_printer_cost_total
 
@@ -1517,7 +1524,7 @@ def update_print_job(print_job_id: uuid.UUID, job_update_data: schemas.PrintJobU
         db.query(models.PrintJobProduct).filter(models.PrintJobProduct.print_job_id == db_job.id).delete()
         # Create new associations
         db.add_all([
-            models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty)
+            models.PrintJobProduct(print_job_id=db_job.id, product_id=it['product_id'], items_qty=it['items_qty'])
             for it in update_fields["products"]
         ])
 
@@ -1525,7 +1532,7 @@ def update_print_job(print_job_id: uuid.UUID, job_update_data: schemas.PrintJobU
     if "printers" in update_fields:
         db.query(models.PrintJobPrinter).filter(models.PrintJobPrinter.print_job_id == db_job.id).delete()
         db.add_all([
-            models.PrintJobPrinter(print_job_id=db_job.id, printer_profile_id=it.printer_profile_id, printers_qty=it.printers_qty, hours_each=it.hours_each)
+            models.PrintJobPrinter(print_job_id=db_job.id, printer_profile_id=it['printer_profile_id'], printers_qty=it['printers_qty'], hours_each=it.get('hours_each', 0.0))
             for it in update_fields["printers"]
         ])
 

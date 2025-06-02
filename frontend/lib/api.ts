@@ -41,7 +41,18 @@ export async function api<T = any>(
     },
   };
 
-  const res = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
+  console.log(`Making API request to: ${API_BASE_URL}${path}`);
+  console.log('Fetch options:', fetchOptions);
+  
+  let res;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, fetchOptions);
+  } catch (fetchError) {
+    console.error('Fetch failed with error:', fetchError);
+    console.error('Error type:', fetchError instanceof TypeError ? 'TypeError' : 'Other');
+    console.error('Error message:', (fetchError as Error).message);
+    throw fetchError;
+  }
 
   if (!res.ok) {
     // Handle 401 Unauthorized errors

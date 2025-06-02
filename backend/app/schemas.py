@@ -231,7 +231,7 @@ class JobProductItem(BaseModel):
 class JobPrinterItem(BaseModel):
     printer_profile_id: int
     printers_qty: int = Field(..., gt=0)
-    hours_each: float = Field(..., gt=0)
+    hours_each: float = Field(default=0.0, ge=0)  # No longer required, calculated from products
 
 
 # PrintJob Schemas (depends on ProductRead and PrinterProfileRead)
