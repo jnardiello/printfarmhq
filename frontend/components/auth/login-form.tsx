@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { useAuth } from './auth-context'
 import { useTheme } from 'next-themes'
 import { Button } from '@/components/ui/button'
@@ -81,7 +82,24 @@ export function LoginForm() {
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? 'Signing in...' : 'Sign In'}
           </Button>
+          
+          {/* Forgot Password Link */}
+          <div className="mt-4 text-center">
+            <Link href="/forgot-password" className="text-sm text-muted-foreground hover:text-primary hover:underline">
+              Forgot your password?
+            </Link>
+          </div>
         </form>
+        
+        {/* Registration Link */}
+        <div className="mt-6 text-center">
+          <p className="text-sm text-muted-foreground">
+            Don't have an account?{" "}
+            <Link href="/register" className="font-medium text-primary hover:underline">
+              Create one here
+            </Link>
+          </p>
+        </div>
       </CardContent>
     </Card>
   )

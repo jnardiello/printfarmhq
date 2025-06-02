@@ -365,6 +365,13 @@ class TenantRegistrationRequest(BaseModel):
     company_name: str = Field(..., min_length=1)
 
 
+class PublicRegistrationRequest(BaseModel):
+    """Schema for public registration - simpler than tenant registration"""
+    email: EmailStr
+    name: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8)
+
+
 class UserSelfUpdate(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
@@ -412,3 +419,35 @@ class GodUserActionResponse(BaseModel):
     """Response for god user actions"""
     message: str
     user: Optional[UserRead] = None
+
+
+# Manual Password Reset schemas (god user approval workflow)
+class PasswordResetRequestCreate(BaseModel):
+    """Schema for user requesting password reset"""
+    email: EmailStr
+
+
+class PasswordResetRequestRead(BaseModel):
+    """Schema for reading password reset requests (god dashboard)"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    email: str
+    status: str
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+    processed_by_user_id: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class PasswordResetRequestProcess(BaseModel):
+    """Schema for god user processing password reset request"""
+    action: str = Field(..., pattern="^(approve|reject)$")  # approve or reject
+    notes: Optional[str] = None
+    new_password: Optional[str] = Field(None, min_length=8)  # Required if action is approve
+
+
+class PasswordResetRequestResponse(BaseModel):
+    """Response for password reset request submission"""
+    message: str
+    request_id: int

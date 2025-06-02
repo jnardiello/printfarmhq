@@ -27,6 +27,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Menu, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { api } from "@/lib/api"
 
 export function Dashboard() {
   const router = useRouter()
@@ -36,6 +38,7 @@ export function Dashboard() {
   const { user } = useAuth()
   const isMobile = useIsMobile()
   const { theme } = useTheme()
+  const [godNotificationCount, setGodNotificationCount] = useState(0)
 
   // Set the active tab based on URL parameter on initial load
   useEffect(() => {
@@ -75,6 +78,38 @@ export function Dashboard() {
   const handleLogoClick = () => {
     handleTabChange("home")
   }
+
+  // Fetch god dashboard notifications count (for god users only)
+  useEffect(() => {
+    if (!user?.is_god_user) return
+
+    const fetchNotificationCount = async () => {
+      try {
+        const requests = await api("/god/password-reset/requests")
+        setGodNotificationCount(requests?.length || 0)
+      } catch (error) {
+        console.error("Error fetching god notification count:", error)
+        setGodNotificationCount(0)
+      }
+    }
+
+    // Fetch initially
+    fetchNotificationCount()
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchNotificationCount, 30000)
+
+    // Listen for god dashboard updates
+    const handleGodDashboardUpdate = () => {
+      fetchNotificationCount()
+    }
+    window.addEventListener('godDashboardUpdate', handleGodDashboardUpdate)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('godDashboardUpdate', handleGodDashboardUpdate)
+    }
+  }, [user?.is_god_user])
 
   const baseTabOptions = [
     { value: "home", label: "Overview" },
@@ -197,7 +232,17 @@ export function Dashboard() {
                           className={`ml-4 ${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""}`}
                           onClick={() => handleTabChange(tab.value)}
                         >
-                          {tab.label}
+                          <div className="flex items-center justify-between w-full">
+                            <span>{tab.label}</span>
+                            {godNotificationCount > 0 && (
+                              <Badge 
+                                variant="destructive" 
+                                className="h-4 w-4 rounded-full p-0 flex items-center justify-center text-xs ml-2"
+                              >
+                                {godNotificationCount}
+                              </Badge>
+                            )}
+                          </div>
                         </DropdownMenuItem>
                       ))}
                     </>
@@ -270,10 +315,18 @@ export function Dashboard() {
                 {user?.is_god_user && (
                   <Button
                     variant={activeTab === "god-dashboard" ? "default" : "ghost"}
-                    className="h-10"
+                    className="h-10 relative"
                     onClick={() => handleTabChange("god-dashboard")}
                   >
                     God Dashboard
+                    {godNotificationCount > 0 && (
+                      <Badge 
+                        variant="destructive" 
+                        className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
+                      >
+                        {godNotificationCount}
+                      </Badge>
+                    )}
                   </Button>
                 )}
               </div>

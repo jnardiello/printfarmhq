@@ -22,7 +22,12 @@ from .auth import (
     create_user,
     create_superadmin,
     create_tenant_superadmin,
+    create_public_user,
     get_password_hash,
+    create_password_reset_request,
+    get_pending_password_reset_requests,
+    get_all_password_reset_requests,
+    process_password_reset_request,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from .database import setup_required
@@ -230,6 +235,46 @@ def self_register(registration_data: schemas.TenantRegistrationRequest, db: Sess
         )
 
 
+@app.post("/auth/register", response_model=schemas.AuthResponse)
+def public_register(registration_data: schemas.PublicRegistrationRequest, db: Session = Depends(get_db)):
+    """Public registration for new organizations - anyone can register"""
+    try:
+        # Check if system is initialized
+        if setup_required(db):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="System not initialized. Please complete initial setup first."
+            )
+        
+        # Create new super-admin through public registration
+        user = create_public_user(
+            registration_data.email, 
+            registration_data.password, 
+            registration_data.name,
+            db
+        )
+        
+        # Create JWT token and auto-login
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email, "token_version": user.token_version}, 
+            db=db, 
+            expires_delta=access_token_expires
+        )
+        
+        return schemas.AuthResponse(
+            access_token=access_token,
+            user=schemas.UserRead.model_validate(user)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+
 @app.get("/auth/superadmins", response_model=List[schemas.UserRead])
 def list_superadmins_for_god_selection(db: Session = Depends(get_db)):
     """List super-admins for god user selection (only available when no god user exists)"""
@@ -292,6 +337,71 @@ def select_god_user(selection: schemas.GodUserSelectionRequest, db: Session = De
         access_token=access_token,
         user=schemas.UserRead.model_validate(user)
     )
+
+
+# ---------- Password Reset Endpoints (Manual God User Approval) ---------- #
+
+@app.post("/auth/password-reset/request", response_model=schemas.PasswordResetRequestResponse)
+def request_password_reset(request_data: schemas.PasswordResetRequestCreate, db: Session = Depends(get_db)):
+    """Submit a password reset request for manual approval by god user"""
+    try:
+        reset_request = create_password_reset_request(request_data.email, db)
+        return schemas.PasswordResetRequestResponse(
+            message="Password reset request submitted. A system administrator will review your request and contact you via email.",
+            request_id=reset_request.id
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit password reset request: {str(e)}"
+        )
+
+
+@app.get("/god/password-reset/requests", response_model=List[schemas.PasswordResetRequestRead])
+def get_password_reset_requests(
+    current_user: models.User = Depends(get_current_god_user), 
+    db: Session = Depends(get_db)
+):
+    """Get all pending password reset requests (god user only)"""
+    return get_pending_password_reset_requests(db)
+
+
+@app.post("/god/password-reset/process/{request_id}", response_model=schemas.PasswordResetRequestRead)
+def process_password_reset(
+    request_id: int,
+    process_data: schemas.PasswordResetRequestProcess,
+    current_user: models.User = Depends(get_current_god_user),
+    db: Session = Depends(get_db)
+):
+    """Process a password reset request - approve or reject (god user only)"""
+    try:
+        processed_request = process_password_reset_request(
+            request_id=request_id,
+            action=process_data.action,
+            god_user=current_user,
+            db=db,
+            new_password=process_data.new_password,
+            notes=process_data.notes
+        )
+        return schemas.PasswordResetRequestRead.model_validate(processed_request)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process password reset request: {str(e)}"
+        )
+
+
+@app.get("/god/password-reset/ledger", response_model=List[schemas.PasswordResetRequestRead])
+def get_password_reset_ledger(
+    current_user: models.User = Depends(get_current_god_user), 
+    db: Session = Depends(get_db)
+):
+    """Get all password reset requests (pending and processed) for audit ledger (god user only)"""
+    return get_all_password_reset_requests(db)
 
 
 # ---------- Alerts System ---------- #
@@ -1649,6 +1759,43 @@ def delete_printer_profile(printer_id: int, db: Session = Depends(get_db), curre
 
 
 # ---------- Private helper functions for print jobs ---------- #
+
+def _generate_sku(product_name: str, db: Session) -> str:
+    """Generate a unique SKU for a product based on name and date."""
+    import re
+    from datetime import datetime
+    
+    # Extract alphanumeric characters from product name and take first 3
+    clean_name = re.sub(r'[^a-zA-Z0-9]', '', product_name.upper())
+    prefix = clean_name[:3] if len(clean_name) >= 3 else clean_name
+    
+    # Handle case where no alphanumeric characters exist
+    if not prefix:
+        prefix = "PRD"  # Default prefix for products
+    
+    # Generate date part (YYMMDD format)
+    today = datetime.now()
+    date_part = today.strftime("%y%m%d")
+    
+    # Try to find a unique SKU by incrementing sequence number
+    sequence = 1
+    while True:
+        sequence_str = f"{sequence:03d}"  # Zero-padded 3-digit sequence
+        candidate_sku = f"{prefix}-{date_part}-{sequence_str}"
+        
+        # Check if this SKU already exists
+        existing = db.query(models.Product).filter_by(sku=candidate_sku).first()
+        if not existing:
+            return candidate_sku
+        
+        sequence += 1
+        # Safety check to prevent infinite loop
+        if sequence > 999:
+            # If we somehow reach 999 products with same prefix on same day,
+            # add a random suffix
+            import random
+            random_suffix = random.randint(1000, 9999)
+            return f"{prefix}-{date_part}-{random_suffix}"
 
 def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
     """Calculate COGS for a print job."""

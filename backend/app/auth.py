@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from jose import jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from . import models
 from .database import SessionLocal, get_jwt_secret
 
@@ -226,3 +226,147 @@ def create_tenant_superadmin(email: str, password: str, name: str, company_name:
     db.commit()
     db.refresh(tenant_admin)
     return tenant_admin
+
+
+def create_public_user(email: str, password: str, name: str, db: Session) -> models.User:
+    """Create a new super-admin through public registration"""
+    # Check if god user exists (system must be initialized first)
+    god_user = db.query(models.User).filter(models.User.is_god_user == True).first()
+    if not god_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="System not initialized. Please complete initial setup first."
+        )
+    
+    # Check if email is already in use
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new super-admin for public registration
+    hashed_password = get_password_hash(password)
+    public_user = models.User(
+        email=email,
+        name=name,  # Use name as provided, no company name appended
+        hashed_password=hashed_password,
+        is_admin=True,
+        is_superadmin=True,
+        is_god_user=False,  # Not a god user
+        created_by_user_id=None  # Super-admins are not created by anyone
+    )
+    db.add(public_user)
+    db.commit()
+    db.refresh(public_user)
+    return public_user
+
+
+def create_password_reset_request(email: str, db: Session) -> models.PasswordResetRequest:
+    """Create a password reset request for manual approval by god user."""
+    
+    # Check if email exists in the system (but don't reveal if it doesn't for security)
+    user = db.query(models.User).filter(models.User.email == email).first()
+    
+    # Always create a request regardless of whether email exists to prevent email enumeration
+    # Check if there's already a pending request for this email in the last 24 hours
+    from datetime import datetime, timedelta
+    recent_request = db.query(models.PasswordResetRequest).filter(
+        models.PasswordResetRequest.email == email,
+        models.PasswordResetRequest.status == "pending",
+        models.PasswordResetRequest.requested_at > datetime.utcnow() - timedelta(hours=24)
+    ).first()
+    
+    if recent_request:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password reset request already submitted. Please wait for processing or try again later."
+        )
+    
+    # Create new password reset request
+    reset_request = models.PasswordResetRequest(
+        email=email,
+        status="pending"
+    )
+    db.add(reset_request)
+    db.commit()
+    db.refresh(reset_request)
+    
+    return reset_request
+
+
+def get_pending_password_reset_requests(db: Session) -> List[models.PasswordResetRequest]:
+    """Get all pending password reset requests for god dashboard."""
+    return db.query(models.PasswordResetRequest).filter(
+        models.PasswordResetRequest.status == "pending"
+    ).order_by(models.PasswordResetRequest.requested_at.desc()).all()
+
+
+def process_password_reset_request(
+    request_id: int, 
+    action: str, 
+    god_user: models.User, 
+    db: Session, 
+    new_password: Optional[str] = None,
+    notes: Optional[str] = None
+) -> models.PasswordResetRequest:
+    """Process a password reset request (approve or reject)."""
+    from datetime import datetime
+    
+    # Get the request
+    reset_request = db.query(models.PasswordResetRequest).filter(
+        models.PasswordResetRequest.id == request_id,
+        models.PasswordResetRequest.status == "pending"
+    ).first()
+    
+    if not reset_request:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Password reset request not found or already processed"
+        )
+    
+    if action == "approve":
+        if not new_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="New password is required when approving a request"
+            )
+        
+        # Find the user by email
+        user = db.query(models.User).filter(models.User.email == reset_request.email).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found with this email address"
+            )
+        
+        # Reset the user's password
+        user.hashed_password = get_password_hash(new_password)
+        user.token_version += 1  # Invalidate all existing JWT tokens
+        
+        reset_request.status = "approved"
+        
+    elif action == "reject":
+        reset_request.status = "rejected"
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Action must be either 'approve' or 'reject'"
+        )
+    
+    # Update request metadata
+    reset_request.processed_at = datetime.utcnow()
+    reset_request.processed_by_user_id = god_user.id
+    reset_request.notes = notes
+    
+    db.commit()
+    db.refresh(reset_request)
+    
+    return reset_request
+
+
+def get_all_password_reset_requests(db: Session) -> List[models.PasswordResetRequest]:
+    """Get all password reset requests (pending and processed) for audit ledger"""
+    return db.query(models.PasswordResetRequest).options(
+        joinedload(models.PasswordResetRequest.processed_by)
+    ).order_by(models.PasswordResetRequest.requested_at.desc()).all()

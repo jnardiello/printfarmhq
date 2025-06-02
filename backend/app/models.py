@@ -282,4 +282,18 @@ class PrintJob(Base):
 
     products = relationship("PrintJobProduct", cascade="all, delete-orphan")
     printers = relationship("PrintJobPrinter", cascade="all, delete-orphan")
-    owner = relationship("User", foreign_keys=[owner_id]) 
+    owner = relationship("User", foreign_keys=[owner_id])
+
+
+class PasswordResetRequest(Base):
+    __tablename__ = "password_reset_requests"
+
+    id = Column(Integer, primary_key=True, index=True)
+    email = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, default="pending")  # pending, approved, rejected
+    requested_at = Column(DateTime(timezone=True), server_default=func.now())
+    processed_at = Column(DateTime(timezone=True), nullable=True)
+    processed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    notes = Column(String, nullable=True)  # Optional notes from god user
+
+    processed_by = relationship("User", foreign_keys=[processed_by_user_id]) 

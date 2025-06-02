@@ -25,12 +25,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Users, Building2, UserCheck, MoreHorizontal, Edit, Trash2, Key } from "lucide-react"
+import { Users, Building2, UserCheck, MoreHorizontal, Edit, Trash2, Key, Clock, CheckCircle, XCircle, Mail, History } from "lucide-react"
 import { toast } from "sonner"
 import { api } from "@/lib/api"
 import { EditUserModal } from "@/components/modals/edit-user-modal"
 import { DeleteUserModal } from "@/components/modals/delete-user-modal"
 import { ResetPasswordModal } from "@/components/modals/reset-password-modal"
+import { ApprovePasswordResetModal } from "@/components/modals/approve-password-reset-modal"
+import { RejectPasswordResetModal } from "@/components/modals/reject-password-reset-modal"
+import { PasswordResetLedgerModal } from "@/components/modals/password-reset-ledger-modal"
 
 interface GodDashboardStats {
   total_superadmins: number
@@ -54,16 +57,34 @@ interface GodUserHierarchy {
   team_members: UserRead[]
 }
 
+interface PasswordResetRequest {
+  id: number
+  email: string
+  status: string
+  requested_at: string
+  processed_at?: string
+  processed_by_user_id?: number
+  notes?: string
+}
+
 export function GodDashboardTab() {
   const [stats, setStats] = useState<GodDashboardStats | null>(null)
   const [userHierarchy, setUserHierarchy] = useState<GodUserHierarchy[]>([])
+  const [passwordResetRequests, setPasswordResetRequests] = useState<PasswordResetRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [processingRequest, setProcessingRequest] = useState<number | null>(null)
 
   // Modal states
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserRead | null>(null)
+  
+  // Password reset request modal states
+  const [approveModalOpen, setApproveModalOpen] = useState(false)
+  const [rejectModalOpen, setRejectModalOpen] = useState(false)
+  const [ledgerModalOpen, setLedgerModalOpen] = useState(false)
+  const [selectedPasswordRequest, setSelectedPasswordRequest] = useState<PasswordResetRequest | null>(null)
 
   useEffect(() => {
     fetchGodData()
@@ -81,6 +102,10 @@ export function GodDashboardTab() {
       const hierarchyData = await api<GodUserHierarchy[]>("/god/users")
       console.log("Fetched user hierarchy:", hierarchyData) // Debug log
       setUserHierarchy(hierarchyData)
+      
+      // Fetch password reset requests
+      const resetRequestsData = await api<PasswordResetRequest[]>("/god/password-reset/requests")
+      setPasswordResetRequests(resetRequestsData)
     } catch (error) {
       console.error("Error fetching god dashboard data:", error)
       toast.error("Failed to load god dashboard data")
@@ -107,6 +132,8 @@ export function GodDashboardTab() {
 
   const handleModalSuccess = () => {
     fetchGodData() // Refresh the data
+    // Trigger a refresh of the parent dashboard notification count
+    window.dispatchEvent(new CustomEvent('godDashboardUpdate'))
   }
 
   const closeModals = () => {
@@ -114,6 +141,86 @@ export function GodDashboardTab() {
     setDeleteModalOpen(false)
     setPasswordModalOpen(false)
     setSelectedUser(null)
+  }
+
+  const closePasswordResetModals = () => {
+    setApproveModalOpen(false)
+    setRejectModalOpen(false)
+    setLedgerModalOpen(false)
+    setSelectedPasswordRequest(null)
+  }
+
+  // Password reset request handlers
+  const handleApprovePasswordRequest = (request: PasswordResetRequest) => {
+    setSelectedPasswordRequest(request)
+    setApproveModalOpen(true)
+  }
+
+  const handleRejectPasswordRequest = (request: PasswordResetRequest) => {
+    setSelectedPasswordRequest(request)
+    setRejectModalOpen(true)
+  }
+
+  const handleApprovePasswordReset = async (requestId: number, password: string, notes?: string) => {
+    try {
+      setProcessingRequest(requestId)
+      
+      await api(`/god/password-reset/process/${requestId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "approve",
+          new_password: password,
+          notes: notes
+        })
+      })
+
+      toast.success("Password reset request approved successfully")
+      
+      fetchGodData() // Refresh the data
+      // Trigger a refresh of the parent dashboard notification count
+      window.dispatchEvent(new CustomEvent('godDashboardUpdate'))
+    } catch (error) {
+      console.error("Error approving password reset request:", error)
+      toast.error("Failed to approve password reset request")
+      throw error // Let the modal handle the error state
+    } finally {
+      setProcessingRequest(null)
+    }
+  }
+
+  const handleRejectPasswordReset = async (requestId: number, reason?: string) => {
+    try {
+      setProcessingRequest(requestId)
+      
+      await api(`/god/password-reset/process/${requestId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          action: "reject",
+          notes: reason
+        })
+      })
+
+      toast.success("Password reset request rejected successfully")
+      
+      fetchGodData() // Refresh the data
+      // Trigger a refresh of the parent dashboard notification count
+      window.dispatchEvent(new CustomEvent('godDashboardUpdate'))
+    } catch (error) {
+      console.error("Error rejecting password reset request:", error)
+      toast.error("Failed to reject password reset request")
+      throw error // Let the modal handle the error state
+    } finally {
+      setProcessingRequest(null)
+    }
+  }
+
+  const generateSecurePassword = (): string => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
+    let password = ""
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return password
   }
 
   // User actions component
@@ -327,7 +434,105 @@ export function GodDashboardTab() {
         </CardContent>
       </Card>
 
-      {/* Modals */}
+      {/* Password Reset Requests */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Mail className="h-4 w-4 text-orange-600" />
+              <CardTitle className="text-base">Password Reset Requests</CardTitle>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLedgerModalOpen(true)}
+                className="h-7 px-3 text-xs"
+              >
+                <History className="h-3 w-3 mr-1" />
+                View Ledger
+              </Button>
+              <Badge variant={passwordResetRequests.length > 0 ? "destructive" : "secondary"} className="text-xs">
+                {passwordResetRequests.length} pending
+              </Badge>
+            </div>
+          </div>
+          <CardDescription className="text-sm">
+            Manually review and approve password reset requests from users. View the complete audit ledger for security tracking.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          {passwordResetRequests.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">
+              <Mail className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              <p className="text-sm">No pending password reset requests</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {passwordResetRequests.map((request) => (
+                <div key={request.id} className="border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm">{request.email}</span>
+                        <Badge variant={request.status === "pending" ? "secondary" : "outline"} className="text-xs">
+                          {request.status}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Requested: {new Date(request.requested_at).toLocaleString()}
+                      </p>
+                    </div>
+                    
+                    {request.status === "pending" && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-3 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleRejectPasswordRequest(request)}
+                          disabled={processingRequest === request.id}
+                        >
+                          <XCircle className="h-3 w-3 mr-1" />
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
+                          onClick={() => handleApprovePasswordRequest(request)}
+                          disabled={processingRequest === request.id}
+                        >
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Approve & Generate Password
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {request.notes && (
+                    <div className="pt-2 border-t">
+                      <p className="text-xs text-muted-foreground">
+                        <strong>Notes:</strong> {request.notes}
+                      </p>
+                    </div>
+                  )}
+                  
+                  {processingRequest === request.id && (
+                    <div className="pt-2 border-t">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="animate-spin rounded-full h-3 w-3 border-b border-gray-900"></div>
+                        Processing request...
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* User Management Modals */}
       <EditUserModal
         isOpen={editModalOpen}
         onClose={closeModals}
@@ -345,6 +550,26 @@ export function GodDashboardTab() {
         onClose={closeModals}
         user={selectedUser}
         onSuccess={handleModalSuccess}
+      />
+
+      {/* Password Reset Request Modals */}
+      <ApprovePasswordResetModal
+        isOpen={approveModalOpen}
+        onClose={closePasswordResetModals}
+        request={selectedPasswordRequest}
+        onApprove={handleApprovePasswordReset}
+        isProcessing={processingRequest === selectedPasswordRequest?.id}
+      />
+      <RejectPasswordResetModal
+        isOpen={rejectModalOpen}
+        onClose={closePasswordResetModals}
+        request={selectedPasswordRequest}
+        onReject={handleRejectPasswordReset}
+        isProcessing={processingRequest === selectedPasswordRequest?.id}
+      />
+      <PasswordResetLedgerModal
+        isOpen={ledgerModalOpen}
+        onClose={closePasswordResetModals}
       />
     </div>
   )
