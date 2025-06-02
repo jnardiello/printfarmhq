@@ -10,15 +10,17 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Trash2, Plus, Settings, AlertCircle, Edit } from "lucide-react"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock } from "lucide-react"
 import { motion } from "framer-motion"
+import { toast } from "@/components/ui/use-toast"
 
 export function PrintersTab() {
   const { printers, addPrinter, updatePrinter, deletePrinter } = useData()
   const [printerToDelete, setPrinterToDelete] = useState<any>(null)
   const [editingPrinter, setEditingPrinter] = useState<any>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isAddPrinterModalOpen, setIsAddPrinterModalOpen] = useState(false)
 
   const [newPrinter, setNewPrinter] = useState({
     name: "",
@@ -39,18 +41,33 @@ export function PrintersTab() {
   const handleAddPrinter = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    await addPrinter({
-      name: newPrinter.name,
-      price_eur: Number.parseFloat(newPrinter.price_eur),
-      expected_life_hours: Number.parseInt(newPrinter.expected_life_hours),
-    })
+    try {
+      await addPrinter({
+        name: newPrinter.name,
+        price_eur: Number.parseFloat(newPrinter.price_eur),
+        expected_life_hours: Number.parseInt(newPrinter.expected_life_hours),
+      })
 
-    // Reset form
-    setNewPrinter({
-      name: "",
-      price_eur: "",
-      expected_life_hours: "",
-    })
+      // Reset form
+      setNewPrinter({
+        name: "",
+        price_eur: "",
+        expected_life_hours: "",
+      })
+      setIsAddPrinterModalOpen(false)
+
+      toast({
+        title: "Success",
+        description: "Printer profile created successfully"
+      })
+    } catch (error) {
+      console.error('Failed to create printer:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create printer profile. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleDeletePrinter = async () => {
@@ -90,89 +107,187 @@ export function PrintersTab() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="card-hover shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Settings className="h-5 w-5 text-primary" />
-              Add Printer Profile
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <form
-              onSubmit={handleAddPrinter}
-              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 items-end p-4 bg-muted/30 rounded-lg border border-muted"
-            >
-              <div>
-                <Label htmlFor="printerName" className="text-sm font-medium">
-                  Name
-                </Label>
-                <Input
-                  id="printerName"
-                  value={newPrinter.name}
-                  onChange={(e) => handlePrinterChange("name", e.target.value)}
-                  placeholder="Profile Name"
-                  required
-                  className="bg-white dark:bg-gray-800"
-                />
+    <div className="max-w-[1400px] mx-auto space-y-8">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Printers</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your printer profiles for cost calculation</p>
+        </div>
+        
+        <Dialog open={isAddPrinterModalOpen} onOpenChange={setIsAddPrinterModalOpen}>
+          <DialogTrigger asChild>
+            <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all">
+              <Plus className="mr-2 h-5 w-5" />
+              Add Printer
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-3 text-2xl">
+                <div className="p-2 bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg">
+                  <Box className="h-6 w-6 text-white" />
+                </div>
+                Add Printer Profile
+              </DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleAddPrinter} className="space-y-6 mt-6">
+              {/* Basic Information Section */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                    <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Printer Information</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Basic printer profile details</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="printerName" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Printer Name *
+                    </Label>
+                    <Input
+                      id="printerName"
+                      value={newPrinter.name}
+                      onChange={(e) => handlePrinterChange("name", e.target.value)}
+                      placeholder="e.g., Prusa i3 MK3S+, Ender 3 V2"
+                      required
+                      className="h-11"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      A descriptive name for this printer profile
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="printerCost" className="text-sm font-medium">
-                  Cost (€)
-                </Label>
-                <Input
-                  id="printerCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={newPrinter.price_eur}
-                  onChange={(e) => handlePrinterChange("price_eur", e.target.value)}
-                  placeholder="e.g. 299.90"
-                  required
-                  className="bg-white dark:bg-gray-800"
-                />
+              {/* Financial Details Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Purchase Cost */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Purchase Cost</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Initial investment</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="printerCost" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Cost (€) *
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="printerCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={newPrinter.price_eur}
+                        onChange={(e) => handlePrinterChange("price_eur", e.target.value)}
+                        placeholder="299.90"
+                        required
+                        className="h-11 pl-8"
+                      />
+                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">€</div>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Total purchase price including accessories
+                    </p>
+                  </div>
+                </div>
+
+                {/* Expected Lifetime */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Expected Lifetime</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Depreciation period</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="printerLifeHours" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Life Hours *
+                    </Label>
+                    <Input
+                      id="printerLifeHours"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={newPrinter.expected_life_hours}
+                      onChange={(e) => handlePrinterChange("expected_life_hours", e.target.value)}
+                      placeholder="26280"
+                      required
+                      className="h-11"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      3 years = 26,280 hours (3 × 365 × 24)
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      5 years = 43,800 hours (5 × 365 × 24)
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="printerLifeHours" className="text-sm font-medium">
-                  Life hours
-                </Label>
-                <Input
-                  id="printerLifeHours"
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={newPrinter.expected_life_hours}
-                  onChange={(e) => handlePrinterChange("expected_life_hours", e.target.value)}
-                  placeholder="e.g. 2000"
-                  required
-                  className="bg-white dark:bg-gray-800"
-                />
-              </div>
+              {/* Cost Preview */}
+              {newPrinter.price_eur && newPrinter.expected_life_hours && (
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-purple-200 dark:border-purple-800">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cost Preview</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Hourly depreciation rate</p>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-200 dark:border-purple-700">
+                    <div className="flex items-center justify-between">
+                      <span className="text-lg font-medium text-gray-700 dark:text-gray-300">Cost per Hour</span>
+                      <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                        €{(Number.parseFloat(newPrinter.price_eur) / Number.parseInt(newPrinter.expected_life_hours)).toFixed(3)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div className="self-end">
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary"
+              {/* Submit Button */}
+              <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
                 >
-                  <Plus className="mr-2 h-4 w-4" /> Add Printer
+                  <Plus className="mr-2 h-5 w-5" /> 
+                  Create Printer Profile
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-      </motion.div>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <Card className="card-hover shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <Settings className="h-5 w-5 text-primary" />
-              Printer Profiles
-            </CardTitle>
-          </CardHeader>
+      {/* Printers List */}
+      <Card className="card-hover shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Box className="h-5 w-5 text-primary" />
+            Printer Profiles ({printers.length})
+          </CardTitle>
+        </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               {printers.length > 0 ? (
@@ -241,70 +356,166 @@ export function PrintersTab() {
                 </Table>
               ) : (
                 <div className="text-center text-muted-foreground py-12 bg-muted/30">
-                  <Settings className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
+                  <Box className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
                   <p>No printer profiles added yet.</p>
-                  <p className="text-sm mt-1">Add your first printer profile using the form above.</p>
+                  <p className="text-sm mt-1">Click "Add Printer" to create your first printer profile.</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
-      </motion.div>
 
       {/* Edit Printer Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit className="h-5 w-5" />
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg">
+                <Edit className="h-6 w-6 text-white" />
+              </div>
               Edit Printer Profile
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleUpdatePrinter} className="space-y-4">
-            <div>
-              <Label htmlFor="edit-printer-name">Printer Name</Label>
-              <Input
-                id="edit-printer-name"
-                value={editForm.name}
-                onChange={(e) => handleEditFormChange("name", e.target.value)}
-                placeholder="e.g., Prusa i3 MK3S+"
-                required
-              />
+          
+          <form onSubmit={handleUpdatePrinter} className="space-y-6 mt-6">
+            {/* Basic Information Section */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Printer Information</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Update printer profile details</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="edit-printer-name" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Printer Name *
+                  </Label>
+                  <Input
+                    id="edit-printer-name"
+                    value={editForm.name}
+                    onChange={(e) => handleEditFormChange("name", e.target.value)}
+                    placeholder="e.g., Prusa i3 MK3S+, Ender 3 V2"
+                    required
+                    className="h-11"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="edit-printer-price">Cost € (purchase price)</Label>
-              <Input
-                id="edit-printer-price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={editForm.price_eur}
-                onChange={(e) => handleEditFormChange("price_eur", e.target.value)}
-                placeholder="750.00"
-                required
-              />
+
+            {/* Financial Details Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Purchase Cost */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                    <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Purchase Cost</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Initial investment</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-printer-price" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Cost (€) *
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="edit-printer-price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editForm.price_eur}
+                      onChange={(e) => handleEditFormChange("price_eur", e.target.value)}
+                      placeholder="750.00"
+                      required
+                      className="h-11 pl-8"
+                    />
+                    <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">€</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expected Lifetime */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Clock className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Expected Lifetime</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Depreciation period</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-printer-life" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Life Hours *
+                  </Label>
+                  <Input
+                    id="edit-printer-life"
+                    type="number"
+                    min="1"
+                    value={editForm.expected_life_hours}
+                    onChange={(e) => handleEditFormChange("expected_life_hours", e.target.value)}
+                    placeholder="26280"
+                    required
+                    className="h-11"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    3 years = 26,280 hours (3 × 365 × 24)
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    5 years = 43,800 hours (5 × 365 × 24)
+                  </p>
+                </div>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="edit-printer-life">Expected Life (hours)</Label>
-              <Input
-                id="edit-printer-life"
-                type="number"
-                min="1"
-                value={editForm.expected_life_hours}
-                onChange={(e) => handleEditFormChange("expected_life_hours", e.target.value)}
-                placeholder="26280"
-                required
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                3 years = 26,280 hours (3 × 365 × 24)
-              </p>
-            </div>
-            <DialogFooter>
+
+            {/* Cost Preview */}
+            {editForm.price_eur && editForm.expected_life_hours && (
+              <div className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-lg p-6 border border-purple-200 dark:border-purple-800">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                    <DollarSign className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Cost Preview</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Hourly depreciation rate</p>
+                  </div>
+                </div>
+                
+                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-purple-200 dark:border-purple-700">
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-medium text-gray-700 dark:text-gray-300">Cost per Hour</span>
+                    <span className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                      €{(Number.parseFloat(editForm.price_eur) / Number.parseInt(editForm.expected_life_hours)).toFixed(3)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Submit Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Update Printer</Button>
-            </DialogFooter>
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
+              >
+                <Edit className="mr-2 h-5 w-5" /> 
+                Update Printer
+              </Button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
@@ -343,6 +554,6 @@ export function PrintersTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </motion.div>
+    </div>
   )
 }

@@ -9,17 +9,18 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { CreditCard, Eye, Edit, Trash2, AlertCircle } from "lucide-react"
-import { motion } from "framer-motion"
+import { CreditCard, Eye, Edit, Trash2, AlertCircle, Plus, Info, DollarSign, Globe } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "@/components/ui/use-toast"
 
 export function SubscriptionsTab() {
   const { subscriptions, addSubscription, updateSubscription, deleteSubscription } = useData()
   const [selectedSubscription, setSelectedSubscription] = useState<any>(null)
   const [editingSubscription, setEditingSubscription] = useState<any>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isAddLicenseModalOpen, setIsAddLicenseModalOpen] = useState(false)
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<any>(null)
 
   const [newSubscription, setNewSubscription] = useState({
@@ -47,20 +48,35 @@ export function SubscriptionsTab() {
   const handleAddSubscription = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    await addSubscription({
-      name: newSubscription.name,
-      platform: newSubscription.platform as any,
-      license_uri: newSubscription.license_uri || null,
-      price_eur: newSubscription.price_eur ? Number.parseFloat(newSubscription.price_eur) : null,
-    })
+    try {
+      await addSubscription({
+        name: newSubscription.name,
+        platform: newSubscription.platform as any,
+        license_uri: newSubscription.license_uri || null,
+        price_eur: newSubscription.price_eur ? Number.parseFloat(newSubscription.price_eur) : null,
+      })
 
-    // Reset form
-    setNewSubscription({
-      name: "",
-      platform: "No Platform",
-      license_uri: "",
-      price_eur: "",
-    })
+      // Reset form
+      setNewSubscription({
+        name: "",
+        platform: "No Platform",
+        license_uri: "",
+        price_eur: "",
+      })
+      setIsAddLicenseModalOpen(false)
+
+      toast({
+        title: "Success",
+        description: "Commercial license created successfully"
+      })
+    } catch (error) {
+      console.error('Failed to create license:', error)
+      toast({
+        title: "Error",
+        description: "Failed to create commercial license. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleEditSubscription = (subscription: any) => {
@@ -97,103 +113,177 @@ export function SubscriptionsTab() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-8">
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-        <Card className="card-hover shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <CreditCard className="h-5 w-5 text-primary" />
-              Add Commercial License
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <form
-              onSubmit={handleAddSubscription}
-              className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 items-end p-4 bg-muted/30 rounded-lg border border-muted"
-            >
-              <div className="md:col-span-2">
-                <Label htmlFor="subName" className="text-sm font-medium">
-                  Name
-                </Label>
-                <Input
-                  id="subName"
-                  value={newSubscription.name}
-                  onChange={(e) => handleSubscriptionChange("name", e.target.value)}
-                  placeholder="Subscription Name"
-                  required
-                  className="bg-white dark:bg-gray-800"
-                />
+    <div className="max-w-[1400px] mx-auto space-y-8">
+      {/* Header with Add Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Commercial Licenses</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your commercial licenses and subscriptions</p>
+        </div>
+        
+        <Dialog open={isAddLicenseModalOpen} onOpenChange={setIsAddLicenseModalOpen}>
+          <DialogTrigger asChild>
+            <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all">
+              <Plus className="mr-2 h-5 w-5" />
+              Add License
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-3 text-2xl">
+                <div className="p-2 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg">
+                  <CreditCard className="h-6 w-6 text-white" />
+                </div>
+                Add Commercial License
+              </DialogTitle>
+            </DialogHeader>
+
+            <form onSubmit={handleAddSubscription} className="space-y-6 mt-6">
+              {/* License Information Section */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                    <Info className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">License Information</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Basic license details and identification</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label htmlFor="subName" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      License Name *
+                    </Label>
+                    <Input
+                      id="subName"
+                      value={newSubscription.name}
+                      onChange={(e) => handleSubscriptionChange("name", e.target.value)}
+                      placeholder="e.g., Monthly Design Pack, Creator Pro License"
+                      required
+                      className="h-11"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      A descriptive name for this license
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="subPlatform" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Platform *
+                    </Label>
+                    <Select
+                      value={newSubscription.platform}
+                      onValueChange={(v) => handleSubscriptionChange("platform", v)}
+                    >
+                      <SelectTrigger id="subPlatform" className="h-11">
+                        <SelectValue placeholder="Select Platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Thangs">Thangs</SelectItem>
+                        <SelectItem value="Patreon">Patreon</SelectItem>
+                        <SelectItem value="No Platform">No Platform</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Where this license is hosted
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <Label htmlFor="subPlatform" className="text-sm font-medium">
-                  Platform
-                </Label>
-                <Select
-                  value={newSubscription.platform}
-                  onValueChange={(v) => handleSubscriptionChange("platform", v)}
+              {/* Financial & URL Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Financial Information */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Financial Details</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Cost information</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="subPrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Price (€)
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id="subPrice"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={newSubscription.price_eur}
+                        onChange={(e) => handleSubscriptionChange("price_eur", e.target.value)}
+                        placeholder="19.99"
+                        className="h-11 pl-8"
+                      />
+                      <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">€</div>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Monthly or one-time license cost
+                    </p>
+                  </div>
+                </div>
+
+                {/* License URL */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">License Link</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">External reference</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="subLicenseUri" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      License URL
+                    </Label>
+                    <Input
+                      id="subLicenseUri"
+                      value={newSubscription.license_uri}
+                      onChange={(e) => handleSubscriptionChange("license_uri", e.target.value)}
+                      placeholder="https://example.com/license"
+                      className="h-11"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Link to license terms or subscription page
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Button */}
+              <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
                 >
-                  <SelectTrigger id="subPlatform" className="bg-white dark:bg-gray-800">
-                    <SelectValue placeholder="Select Platform" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Thangs">Thangs</SelectItem>
-                    <SelectItem value="Patreon">Patreon</SelectItem>
-                    <SelectItem value="No Platform">No Platform</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="subLicenseUri" className="text-sm font-medium">
-                  License URI
-                </Label>
-                <Input
-                  id="subLicenseUri"
-                  value={newSubscription.license_uri}
-                  onChange={(e) => handleSubscriptionChange("license_uri", e.target.value)}
-                  placeholder="https://..."
-                  className="bg-white dark:bg-gray-800"
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="subPrice" className="text-sm font-medium">
-                  Price €
-                </Label>
-                <Input
-                  id="subPrice"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={newSubscription.price_eur}
-                  onChange={(e) => handleSubscriptionChange("price_eur", e.target.value)}
-                  placeholder="e.g. 19.99"
-                  className="bg-white dark:bg-gray-800"
-                />
-              </div>
-
-              <div className="self-end md:col-start-5">
-                <Button
-                  type="submit"
-                  className="w-full bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary"
-                >
-                  Add Subscription
+                  <Plus className="mr-2 h-5 w-5" /> 
+                  Create License
                 </Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
-      </motion.div>
+          </DialogContent>
+        </Dialog>
+      </div>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-        <Card className="card-hover shadow-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl">
-              <CreditCard className="h-5 w-5 text-primary" />
-              Commercial Licenses List
-            </CardTitle>
-          </CardHeader>
+      {/* Licenses List */}
+      <Card className="card-hover shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <CreditCard className="h-5 w-5 text-primary" />
+            Commercial Licenses ({subscriptions.length})
+          </CardTitle>
+        </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               {subscriptions.length > 0 ? (
@@ -287,14 +377,13 @@ export function SubscriptionsTab() {
               ) : (
                 <div className="text-center text-muted-foreground py-12 bg-muted/30">
                   <CreditCard className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" />
-                  <p>No subscriptions added yet.</p>
-                  <p className="text-sm mt-1">Add your first subscription using the form above.</p>
+                  <p>No commercial licenses added yet.</p>
+                  <p className="text-sm mt-1">Click "Add License" to create your first commercial license.</p>
                 </div>
               )}
             </div>
           </CardContent>
         </Card>
-      </motion.div>
 
       {/* View Subscription Details Dialog */}
       <Dialog open={!!selectedSubscription} onOpenChange={() => setSelectedSubscription(null)}>
@@ -352,67 +441,140 @@ export function SubscriptionsTab() {
 
       {/* Edit Subscription Dialog */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit className="h-5 w-5 text-amber-600" />
-              Edit Subscription
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg">
+                <Edit className="h-6 w-6 text-white" />
+              </div>
+              Edit Commercial License
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleUpdateSubscription} className="space-y-4">
-            <div>
-              <Label htmlFor="edit-name">Name</Label>
-              <Input
-                id="edit-name"
-                value={editForm.name}
-                onChange={(e) => handleEditFormChange("name", e.target.value)}
-                placeholder="Subscription Name"
-                required
-              />
+          
+          <form onSubmit={handleUpdateSubscription} className="space-y-6 mt-6">
+            {/* License Information Section */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 rounded-lg">
+                  <Info className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">License Information</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Update license details</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <Label htmlFor="edit-name" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    License Name *
+                  </Label>
+                  <Input
+                    id="edit-name"
+                    value={editForm.name}
+                    onChange={(e) => handleEditFormChange("name", e.target.value)}
+                    placeholder="e.g., Monthly Design Pack, Creator Pro License"
+                    required
+                    className="h-11"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-platform" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Platform *
+                  </Label>
+                  <Select
+                    value={editForm.platform}
+                    onValueChange={(v) => handleEditFormChange("platform", v)}
+                  >
+                    <SelectTrigger id="edit-platform" className="h-11">
+                      <SelectValue placeholder="Select Platform" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Thangs">Thangs</SelectItem>
+                      <SelectItem value="Patreon">Patreon</SelectItem>
+                      <SelectItem value="No Platform">No Platform</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="edit-platform">Platform</Label>
-              <Select
-                value={editForm.platform}
-                onValueChange={(v) => handleEditFormChange("platform", v)}
-              >
-                <SelectTrigger id="edit-platform">
-                  <SelectValue placeholder="Select Platform" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Thangs">Thangs</SelectItem>
-                  <SelectItem value="Patreon">Patreon</SelectItem>
-                  <SelectItem value="No Platform">No Platform</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Financial & URL Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Financial Information */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                    <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Financial Details</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Cost information</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-price" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Price (€)
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id="edit-price"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={editForm.price_eur}
+                      onChange={(e) => handleEditFormChange("price_eur", e.target.value)}
+                      placeholder="19.99"
+                      className="h-11 pl-8"
+                    />
+                    <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">€</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* License URL */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                    <Globe className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">License Link</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">External reference</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-license-uri" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    License URL
+                  </Label>
+                  <Input
+                    id="edit-license-uri"
+                    value={editForm.license_uri}
+                    onChange={(e) => handleEditFormChange("license_uri", e.target.value)}
+                    placeholder="https://example.com/license"
+                    className="h-11"
+                  />
+                </div>
+              </div>
             </div>
-            <div>
-              <Label htmlFor="edit-license-uri">License URI</Label>
-              <Input
-                id="edit-license-uri"
-                value={editForm.license_uri}
-                onChange={(e) => handleEditFormChange("license_uri", e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
-            <div>
-              <Label htmlFor="edit-price">Price €</Label>
-              <Input
-                id="edit-price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={editForm.price_eur}
-                onChange={(e) => handleEditFormChange("price_eur", e.target.value)}
-                placeholder="e.g. 19.99"
-              />
-            </div>
-            <DialogFooter>
+
+            {/* Submit Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
               <Button type="button" variant="outline" onClick={() => setIsEditModalOpen(false)}>
                 Cancel
               </Button>
-              <Button type="submit">Update Subscription</Button>
-            </DialogFooter>
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
+              >
+                <Edit className="mr-2 h-5 w-5" /> 
+                Update License
+              </Button>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
@@ -453,6 +615,6 @@ export function SubscriptionsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </motion.div>
+    </div>
   )
 }

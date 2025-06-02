@@ -18,3 +18,16 @@ export function formatDate(dateString: string | null): string {
 export function calculateTotalSpent(purchases: any[]): number {
   return purchases.reduce((acc, p) => acc + p.quantity_kg * p.price_per_kg, 0)
 }
+
+export function formatTimeToHHMM(hours: number): string {
+  if (!hours || hours === 0) return "0h00m"
+  
+  const wholeHours = Math.floor(hours)
+  const minutes = Math.round((hours - wholeHours) * 60)
+  
+  if (minutes === 0) {
+    return `${wholeHours}h`
+  }
+  
+  return `${wholeHours}h${minutes.toString().padStart(2, '0')}m`
+}

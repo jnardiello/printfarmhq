@@ -8,16 +8,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Label } from "@/components/ui/label"
-import { Pencil, Trash2, Download, ChevronDown, ChevronUp, Eye, AlertTriangle, RefreshCw, CreditCard, Package } from "lucide-react"
+import { Pencil, Trash2, Download, Eye, AlertTriangle, RefreshCw, CreditCard, Package, Plus, DollarSign, Calendar } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatDate, calculateTotalSpent } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FilamentStats } from "@/components/filament-stats"
 import { FilamentSelect } from "@/components/filament-select"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { AlertCircle } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { api } from "@/lib/api"
@@ -46,7 +44,7 @@ export function FilamentsTab() {
     })
   }
 
-  const [purchasesOpen, setPurchasesOpen] = useState(false)
+  const [isAddPurchaseModalOpen, setIsAddPurchaseModalOpen] = useState(false)
   const [page, setPage] = useState(1)
   const pageSize = 10
 
@@ -144,7 +142,7 @@ export function FilamentsTab() {
         channel: "",
         notes: "",
       })
-      setPurchasesOpen(true)
+      setIsAddPurchaseModalOpen(false)
       
       toast({ 
         title: "Success", 
@@ -223,285 +221,346 @@ export function FilamentsTab() {
         </Card>
       )}
 
+      {/* Filament Purchases Card with Modal */}
       <Card className="card-hover shadow-md">
-        <Collapsible open={purchasesOpen} onOpenChange={setPurchasesOpen}>
-          <CollapsibleTrigger className="w-full text-left">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2 text-xl">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-xl">
             <CreditCard className="h-5 w-5 text-primary" />
             Filament Purchases
           </CardTitle>
-              {purchasesOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-            </CardHeader>
-          </CollapsibleTrigger>
+          <Dialog open={isAddPurchaseModalOpen} onOpenChange={setIsAddPurchaseModalOpen}>
+            <DialogTrigger asChild>
+              <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all">
+                <Plus className="mr-2 h-5 w-5" />
+                Add Purchase
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-3 text-2xl">
+                  <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                    <CreditCard className="h-6 w-6 text-white" />
+                  </div>
+                  Add Filament Purchase
+                </DialogTitle>
+              </DialogHeader>
 
-          <CollapsibleContent>
-            <CardContent className="pt-6">
-              <form
-                onSubmit={handleAddPurchase}
-                className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 items-end mb-6 p-4 bg-muted/30 rounded-lg border border-muted"
-              >
-                <div className="sm:col-span-2">
-                  <Label htmlFor="purchaseFilament" className="text-sm font-medium">
-                    Filament Type
-                  </Label>
-                  <FilamentSelect
-                    value={selectedFilamentId}
-                    onValueChange={(value) => setSelectedFilamentId(value.toString())}
-                    filaments={filaments}
-                    placeholder="Select filament type"
-                    required
-                  />
+              <form onSubmit={handleAddPurchase} className="space-y-6 mt-6">
+                {/* Filament Selection Section */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Filament Details</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Select the filament type and quantity</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="md:col-span-2">
+                      <Label htmlFor="purchaseFilament" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                        Filament Type *
+                      </Label>
+                      <FilamentSelect
+                        value={selectedFilamentId}
+                        onValueChange={(value) => setSelectedFilamentId(value.toString())}
+                        filaments={filaments}
+                        placeholder="Select filament type"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="purchaseQuantity" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                        Quantity (kg) *
+                      </Label>
+                      <Input
+                        id="purchaseQuantity"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        value={purchaseForm.quantity_kg}
+                        onChange={(e) => handlePurchaseChange("quantity_kg", e.target.value)}
+                        placeholder="1.00"
+                        required
+                        className="h-11"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="purchasePrice" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                        Price per kg (€) *
+                      </Label>
+                      <div className="relative">
+                        <Input
+                          id="purchasePrice"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={purchaseForm.price_per_kg}
+                          onChange={(e) => handlePurchaseChange("price_per_kg", e.target.value)}
+                          placeholder="25.00"
+                          required
+                          className="h-11 pl-8"
+                        />
+                        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">€</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="purchaseQuantity" className="text-sm font-medium">
-                    Quantity (kg)
-                  </Label>
-                  <Input
-                    id="purchaseQuantity"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={purchaseForm.quantity_kg}
-                    onChange={(e) => handlePurchaseChange("quantity_kg", e.target.value)}
-                    placeholder="Qty (kg)"
-                    required
-                    className="bg-white dark:bg-gray-800"
-                  />
+                {/* Purchase Information Section */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Purchase Details */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                        <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Purchase Information</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Transaction details</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="purchaseDate" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                          Purchase Date
+                        </Label>
+                        <Input
+                          id="purchaseDate"
+                          type="date"
+                          value={purchaseForm.purchase_date}
+                          onChange={(e) => handlePurchaseChange("purchase_date", e.target.value)}
+                          className="h-11"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="purchaseChannel" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                          Purchase Channel
+                        </Label>
+                        <Select
+                          value={purchaseForm.channel}
+                          onValueChange={(value) => handlePurchaseChange("channel", value)}
+                        >
+                          <SelectTrigger id="purchaseChannel" className="h-11">
+                            <SelectValue placeholder="Select channel" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Amazon">Amazon</SelectItem>
+                            <SelectItem value="Ebay">Ebay</SelectItem>
+                            <SelectItem value="Website">Website</SelectItem>
+                            <SelectItem value="Other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Additional Information */}
+                  <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                    <div className="flex items-center gap-3 mb-6">
+                      <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                        <Calendar className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Additional Information</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Optional details</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="purchaseNotes" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                        Notes
+                      </Label>
+                      <textarea
+                        id="purchaseNotes"
+                        value={purchaseForm.notes}
+                        onChange={(e) => handlePurchaseChange("notes", e.target.value)}
+                        placeholder="Add any relevant notes about this purchase..."
+                        className="w-full h-24 px-3 py-2 text-sm border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                      />
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        e.g., supplier details, order number, special conditions
+                      </p>
+                    </div>
+                  </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="purchasePrice" className="text-sm font-medium">
-                    Price €/kg
-                  </Label>
-                  <Input
-                    id="purchasePrice"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={purchaseForm.price_per_kg}
-                    onChange={(e) => handlePurchaseChange("price_per_kg", e.target.value)}
-                    placeholder="€/kg"
-                    required
-                    className="bg-white dark:bg-gray-800"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="purchaseDate" className="text-sm font-medium">
-                    Purchase Date
-                  </Label>
-                  <Input
-                    id="purchaseDate"
-                    type="date"
-                    value={purchaseForm.purchase_date}
-                    onChange={(e) => handlePurchaseChange("purchase_date", e.target.value)}
-                    className="bg-white dark:bg-gray-800"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="purchaseChannel" className="text-sm font-medium">
-                    Channel
-                  </Label>
-                  <Select
-                    value={purchaseForm.channel}
-                    onValueChange={(value) => handlePurchaseChange("channel", value)}
+                {/* Submit Button */}
+                <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <Button 
+                    type="submit" 
+                    size="lg" 
+                    className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
                   >
-                    <SelectTrigger id="purchaseChannel" className="bg-white dark:bg-gray-800">
-                      <SelectValue placeholder="Channel" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Amazon">Amazon</SelectItem>
-                      <SelectItem value="Ebay">Ebay</SelectItem>
-                      <SelectItem value="Website">Website</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="sm:col-span-2 md:col-span-1 lg:col-span-1">
-                  <Label htmlFor="purchaseNotes" className="text-sm font-medium">
-                    Notes
-                  </Label>
-                  <Input
-                    id="purchaseNotes"
-                    value={purchaseForm.notes}
-                    onChange={(e) => handlePurchaseChange("notes", e.target.value)}
-                    placeholder="Optional notes"
-                    className="bg-white dark:bg-gray-800"
-                  />
-                </div>
-
-                <div className="self-end">
-                  <Button type="submit" className="w-full bg-primary hover:bg-primary/90">
+                    <Plus className="mr-2 h-5 w-5" /> 
                     Add Purchase
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+        </CardHeader>
 
-              {purchases.length > 0 ? (
-                <>
-                  <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="bg-muted/50">
-                          <TableHead>Color</TableHead>
-                          <TableHead>Brand</TableHead>
-                          <TableHead>Material</TableHead>
-                          <TableHead>Qty (kg)</TableHead>
-                          <TableHead>€/kg</TableHead>
-                          <TableHead>Total €</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead className="text-center w-[100px]">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {paginatedPurchases.map((purchase) => (
-                          <TableRow key={purchase.id} className="hover:bg-muted/50 transition-colors">
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="w-3 h-3 rounded-full border border-gray-300"
-                                  style={{
-                                    backgroundColor: purchase.filament.color.toLowerCase(),
-                                    boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
-                                  }}
-                                ></div>
-                                {purchase.filament.color}
-                              </div>
-                            </TableCell>
-                            <TableCell>{purchase.filament.brand}</TableCell>
-                            <TableCell>{purchase.filament.material}</TableCell>
-                            <TableCell className="font-medium">{purchase.quantity_kg}</TableCell>
-                            <TableCell>€{purchase.price_per_kg.toFixed(2)}</TableCell>
-                            <TableCell className="font-medium">
-                              €{(purchase.quantity_kg * purchase.price_per_kg).toFixed(2)}
-                            </TableCell>
-                            <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
-                            <TableCell>
-                              <div className="flex items-center justify-center gap-1">
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                        title="View details"
-                                      >
-                                        <Eye className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="bg-white dark:bg-gray-800 p-4 shadow-xl border rounded-lg max-w-xs">
-                                      <div className="text-start space-y-2">
-                                        <div>
-                                          <span className="font-semibold text-gray-700 dark:text-gray-300">Channel:</span>{" "}
-                                          <span className="text-gray-600 dark:text-gray-400">
-                                            {purchase.channel || "n/a"}
-                                          </span>
-                                        </div>
-                                        <div>
-                                          <span className="font-semibold text-gray-700 dark:text-gray-300">Notes:</span>{" "}
-                                          <span className="text-gray-600 dark:text-gray-400">
-                                            {purchase.notes || "—"}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                        onClick={() => setPurchaseToDelete(purchase)}
-                                        title="Delete purchase"
-                                      >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p>Delete purchase</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+        <CardContent>
+          {purchases.length > 0 ? (
+            <>
+              <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead>Color</TableHead>
+                      <TableHead>Brand</TableHead>
+                      <TableHead>Material</TableHead>
+                      <TableHead>Qty (kg)</TableHead>
+                      <TableHead>€/kg</TableHead>
+                      <TableHead>Total €</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-center w-[100px]">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedPurchases.map((purchase) => (
+                      <TableRow key={purchase.id} className="hover:bg-muted/50 transition-colors">
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-3 h-3 rounded-full border border-gray-300"
+                              style={{
+                                backgroundColor: purchase.filament.color.toLowerCase(),
+                                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
+                              }}
+                            ></div>
+                            {purchase.filament.color}
+                          </div>
+                        </TableCell>
+                        <TableCell>{purchase.filament.brand}</TableCell>
+                        <TableCell>{purchase.filament.material}</TableCell>
+                        <TableCell className="font-medium">{purchase.quantity_kg}</TableCell>
+                        <TableCell>€{purchase.price_per_kg.toFixed(2)}</TableCell>
+                        <TableCell className="font-medium">
+                          €{(purchase.quantity_kg * purchase.price_per_kg).toFixed(2)}
+                        </TableCell>
+                        <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-center gap-1">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    title="View details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-white dark:bg-gray-800 p-4 shadow-xl border rounded-lg max-w-xs">
+                                  <div className="text-start space-y-2">
+                                    <div>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Channel:</span>{" "}
+                                      <span className="text-gray-600 dark:text-gray-400">
+                                        {purchase.channel || "n/a"}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Notes:</span>{" "}
+                                      <span className="text-gray-600 dark:text-gray-400">
+                                        {purchase.notes || "—"}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    onClick={() => setPurchaseToDelete(purchase)}
+                                    title="Delete purchase"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Delete purchase</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
 
-                  <div className="mt-6 flex flex-col sm:flex-row justify-between items-center">
-                    <div className="mb-4 sm:mb-0 flex items-center space-x-4">
-                      <Button
-                        onClick={exportPurchasesCSV}
-                        variant="outline"
-                        className="bg-green-600 text-white hover:bg-green-700 border-green-600"
-                      >
-                        <Download className="mr-2 h-4 w-4" /> Export CSV
-                      </Button>
-                      <div className="bg-white dark:bg-gray-800 px-4 py-2 rounded-lg shadow-sm border">
-                        <span className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Spent:</span>{" "}
-                        <span className="text-lg font-bold text-gray-800 dark:text-white">
-                          €{totalSpent.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(page - 1)}
-                        disabled={page === 1}
-                        className="h-9 px-4"
-                      >
-                        Prev
-                      </Button>
-                      <span className="text-sm bg-white dark:bg-gray-800 px-3 py-1.5 rounded-md border">
-                        Page {page} / {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(page + 1)}
-                        disabled={page === totalPages}
-                        className="h-9 px-4"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center text-muted-foreground py-12 bg-muted/30 rounded-lg border border-dashed">
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="40"
-                    height="40"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="mx-auto text-muted-foreground/50 mb-3"
+              <div className="mt-6 flex flex-col sm:flex-row justify-between items-center">
+                <div className="mb-4 sm:mb-0">
+                  <Button
+                    onClick={exportPurchasesCSV}
+                    variant="outline"
+                    className="bg-green-600 text-white hover:bg-green-700 border-green-600"
                   >
-                    <path d="M3 3v18h18"></path>
-                    <path d="m19 9-5 5-4-4-3 3"></path>
-                  </svg>
-                  <p>No purchases yet.</p>
-                  <p className="text-sm mt-1">Add your first purchase using the form above.</p>
+                    <Download className="mr-2 h-4 w-4" /> Export CSV
+                  </Button>
                 </div>
-              )}
-            </CardContent>
-          </CollapsibleContent>
-        </Collapsible>
+
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(page - 1)}
+                    disabled={page === 1}
+                    className="h-9 px-4"
+                  >
+                    Prev
+                  </Button>
+                  <span className="text-sm bg-white dark:bg-gray-800 px-3 py-1.5 rounded-md border">
+                    Page {page} / {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPage(page + 1)}
+                    disabled={page === totalPages}
+                    className="h-9 px-4"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="text-center text-muted-foreground py-12 bg-muted/30 rounded-lg border border-dashed">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="mx-auto text-muted-foreground/50 mb-3"
+              >
+                <path d="M3 3v18h18"></path>
+                <path d="m19 9-5 5-4-4-3 3"></path>
+              </svg>
+              <p>No purchases yet.</p>
+              <p className="text-sm mt-1">Click "Add Purchase" to record your first filament purchase.</p>
+            </div>
+          )}
+        </CardContent>
       </Card>
 
       <Card className="card-hover shadow-md">
