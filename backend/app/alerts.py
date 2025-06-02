@@ -68,26 +68,28 @@ def check_filament_inventory(db: Session) -> List[Alert]:
     """Check for low stock and out of stock filaments"""
     alerts = []
     
-    # Get all filaments
-    filaments = db.query(models.Filament).all()
+    # Get filaments that have purchase history (indicating they're being tracked in inventory)
+    filaments_with_purchases = db.query(models.Filament).join(
+        models.FilamentPurchase, models.Filament.id == models.FilamentPurchase.filament_id
+    ).distinct().all()
     
     out_of_stock = []
     critical_stock = []
     low_stock = []
     
-    for filament in filaments:
-        if filament.total_qty_kg <= ALERT_THRESHOLDS["filament_out_of_stock_kg"]:
-            out_of_stock.append(filament)
-        elif filament.total_qty_kg <= ALERT_THRESHOLDS["filament_critical_stock_kg"]:
-            critical_stock.append(filament)
-        elif (filament.min_filaments_kg and 
-              filament.total_qty_kg <= filament.min_filaments_kg):
-            low_stock.append(filament)
-        elif (not filament.min_filaments_kg and 
-              filament.total_qty_kg <= ALERT_THRESHOLDS["filament_low_stock_kg"]):
-            low_stock.append(filament)
+    for filament in filaments_with_purchases:
+        # Check if user has set a minimum threshold for this filament
+        if filament.min_filaments_kg is not None:
+            # Alert if current quantity is below the user-defined minimum
+            if filament.total_qty_kg <= filament.min_filaments_kg:
+                if filament.total_qty_kg == 0:
+                    out_of_stock.append(filament)
+                elif filament.total_qty_kg <= ALERT_THRESHOLDS["filament_critical_stock_kg"]:
+                    critical_stock.append(filament)
+                else:
+                    low_stock.append(filament)
     
-    # Create alerts for out of stock filaments
+    # Create alerts for out of stock filaments (0kg but with minimum threshold set)
     if out_of_stock:
         filament_names = [f"{f.color} {f.material} ({f.brand})" for f in out_of_stock[:3]]
         message = f"Out of stock: {', '.join(filament_names)}"

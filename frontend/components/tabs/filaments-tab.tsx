@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Pencil, Trash2, Download, Eye, AlertTriangle, RefreshCw, CreditCard, Package, Plus, DollarSign, Calendar } from "lucide-react"
+import { Pencil, Trash2, Download, Eye, AlertTriangle, RefreshCw, CreditCard, Package, Plus, DollarSign, Calendar, Clock, Search, Filter } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatDate, calculateTotalSpent } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { AlertCircle } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { api } from "@/lib/api"
+import { getColorHex } from "@/lib/constants/filaments"
 
 export function FilamentsTab() {
   const {
@@ -26,6 +27,7 @@ export function FilamentsTab() {
     purchases,
     loadingFilaments,
     deleteFilament,
+    clearFilamentInventory,
     updateFilament,
     addPurchase,
     deletePurchase,
@@ -45,12 +47,19 @@ export function FilamentsTab() {
   }
 
   const [isAddPurchaseModalOpen, setIsAddPurchaseModalOpen] = useState(false)
+  const [isPurchaseHistoryModalOpen, setIsPurchaseHistoryModalOpen] = useState(false)
   const [page, setPage] = useState(1)
   const pageSize = 10
 
   const [selectedFilamentId, setSelectedFilamentId] = useState<string>("")
   const [purchaseToDelete, setPurchaseToDelete] = useState<any>(null)
   const [filamentToDelete, setFilamentToDelete] = useState<any>(null)
+  
+  // Search and filter states for purchase history
+  const [searchQuery, setSearchQuery] = useState("")
+  const [dateFrom, setDateFrom] = useState("")
+  const [dateTo, setDateTo] = useState("")
+  const [channelFilter, setChannelFilter] = useState("all")
   const [purchaseForm, setPurchaseForm] = useState({
     quantity_kg: "",
     price_per_kg: "",
@@ -97,12 +106,6 @@ export function FilamentsTab() {
     await updateFilament(filament.id, { min_filaments_kg: minQty })
   }
 
-  const handleDeleteFilament = async () => {
-    if (filamentToDelete) {
-      await deleteFilament(filamentToDelete.id)
-      setFilamentToDelete(null)
-    }
-  }
 
   const handleAddPurchase = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -161,9 +164,47 @@ export function FilamentsTab() {
     }
   }
 
-  const paginatedPurchases = purchases.slice((page - 1) * pageSize, page * pageSize)
-  const totalPages = Math.max(1, Math.ceil(purchases.length / pageSize))
-  const totalSpent = calculateTotalSpent(purchases)
+  const handleDeleteFilament = async () => {
+    if (filamentToDelete) {
+      await clearFilamentInventory(filamentToDelete.id)
+      setFilamentToDelete(null)
+    }
+  }
+
+  // Filter purchases based on search and filters
+  const filteredPurchases = purchases.filter(purchase => {
+    // Search filter
+    if (searchQuery) {
+      const searchLower = searchQuery.toLowerCase()
+      const matchesSearch = 
+        purchase.filament.color.toLowerCase().includes(searchLower) ||
+        purchase.filament.brand.toLowerCase().includes(searchLower) ||
+        purchase.filament.material.toLowerCase().includes(searchLower)
+      if (!matchesSearch) return false
+    }
+    
+    // Date filters
+    if (dateFrom && purchase.purchase_date) {
+      if (new Date(purchase.purchase_date) < new Date(dateFrom)) return false
+    }
+    if (dateTo && purchase.purchase_date) {
+      if (new Date(purchase.purchase_date) > new Date(dateTo)) return false
+    }
+    
+    // Channel filter
+    if (channelFilter !== "all" && purchase.channel !== channelFilter) {
+      return false
+    }
+    
+    return true
+  })
+
+  const paginatedPurchases = filteredPurchases.slice((page - 1) * pageSize, page * pageSize)
+  const totalPages = Math.max(1, Math.ceil(filteredPurchases.length / pageSize))
+  const totalSpent = calculateTotalSpent(filteredPurchases)
+  const avgPricePerKg = filteredPurchases.length > 0 
+    ? filteredPurchases.reduce((sum, p) => sum + p.price_per_kg, 0) / filteredPurchases.length
+    : 0
 
   // Update page number when purchases change
   useEffect(() => {
@@ -221,13 +262,24 @@ export function FilamentsTab() {
         </Card>
       )}
 
-      {/* Filament Purchases Card with Modal */}
-      <Card className="card-hover shadow-md">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <CreditCard className="h-5 w-5 text-primary" />
-            Filament Purchases
-          </CardTitle>
+      {/* Header with action buttons */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Filaments</h1>
+          <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your filament inventory and purchases</p>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <Button 
+            variant="outline" 
+            size="lg" 
+            onClick={() => setIsPurchaseHistoryModalOpen(true)}
+            className="shadow-sm"
+          >
+            <Clock className="mr-2 h-5 w-5" />
+            View Purchase History
+          </Button>
+          
           <Dialog open={isAddPurchaseModalOpen} onOpenChange={setIsAddPurchaseModalOpen}>
             <DialogTrigger asChild>
               <Button size="lg" className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all">
@@ -405,163 +457,8 @@ export function FilamentsTab() {
               </form>
             </DialogContent>
           </Dialog>
-        </CardHeader>
-
-        <CardContent>
-          {purchases.length > 0 ? (
-            <>
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead>Color</TableHead>
-                      <TableHead>Brand</TableHead>
-                      <TableHead>Material</TableHead>
-                      <TableHead>Qty (kg)</TableHead>
-                      <TableHead>€/kg</TableHead>
-                      <TableHead>Total €</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-center w-[100px]">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedPurchases.map((purchase) => (
-                      <TableRow key={purchase.id} className="hover:bg-muted/50 transition-colors">
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div
-                              className="w-3 h-3 rounded-full border border-gray-300"
-                              style={{
-                                backgroundColor: purchase.filament.color.toLowerCase(),
-                                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
-                              }}
-                            ></div>
-                            {purchase.filament.color}
-                          </div>
-                        </TableCell>
-                        <TableCell>{purchase.filament.brand}</TableCell>
-                        <TableCell>{purchase.filament.material}</TableCell>
-                        <TableCell className="font-medium">{purchase.quantity_kg}</TableCell>
-                        <TableCell>€{purchase.price_per_kg.toFixed(2)}</TableCell>
-                        <TableCell className="font-medium">
-                          €{(purchase.quantity_kg * purchase.price_per_kg).toFixed(2)}
-                        </TableCell>
-                        <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center justify-center gap-1">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                                    title="View details"
-                                  >
-                                    <Eye className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent className="bg-white dark:bg-gray-800 p-4 shadow-xl border rounded-lg max-w-xs">
-                                  <div className="text-start space-y-2">
-                                    <div>
-                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Channel:</span>{" "}
-                                      <span className="text-gray-600 dark:text-gray-400">
-                                        {purchase.channel || "n/a"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <span className="font-semibold text-gray-700 dark:text-gray-300">Notes:</span>{" "}
-                                      <span className="text-gray-600 dark:text-gray-400">
-                                        {purchase.notes || "—"}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                    onClick={() => setPurchaseToDelete(purchase)}
-                                    title="Delete purchase"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>Delete purchase</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-
-              <div className="mt-6 flex flex-col sm:flex-row justify-between items-center">
-                <div className="mb-4 sm:mb-0">
-                  <Button
-                    onClick={exportPurchasesCSV}
-                    variant="outline"
-                    className="bg-green-600 text-white hover:bg-green-700 border-green-600"
-                  >
-                    <Download className="mr-2 h-4 w-4" /> Export CSV
-                  </Button>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                    className="h-9 px-4"
-                  >
-                    Prev
-                  </Button>
-                  <span className="text-sm bg-white dark:bg-gray-800 px-3 py-1.5 rounded-md border">
-                    Page {page} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === totalPages}
-                    className="h-9 px-4"
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="text-center text-muted-foreground py-12 bg-muted/30 rounded-lg border border-dashed">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="40"
-                height="40"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="mx-auto text-muted-foreground/50 mb-3"
-              >
-                <path d="M3 3v18h18"></path>
-                <path d="m19 9-5 5-4-4-3 3"></path>
-              </svg>
-              <p>No purchases yet.</p>
-              <p className="text-sm mt-1">Click "Add Purchase" to record your first filament purchase.</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       <Card className="card-hover shadow-md">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -597,12 +494,15 @@ export function FilamentsTab() {
                     <TableHead>Qty (kg)</TableHead>
                     <TableHead>Min (kg)</TableHead>
                     <TableHead>Avg €/kg</TableHead>
-                    <TableHead className="text-center w-[150px]">Actions</TableHead>
+                    <TableHead className="text-center w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {(() => {
-                    const inventoryFilaments = filaments.filter(f => f.total_qty_kg > 0)
+                    // Show filaments that have current inventory OR have had purchases (even if now 0kg)
+                    const inventoryFilaments = filaments.filter(f => 
+                      f.total_qty_kg > 0 || purchases.some(p => p.filament.id === f.id)
+                    )
                     return inventoryFilaments.length > 0 ? (
                       inventoryFilaments.map((filament) => (
                       <TableRow
@@ -617,7 +517,7 @@ export function FilamentsTab() {
                             <div
                               className="w-4 h-4 rounded-full border border-gray-300"
                               style={{
-                                backgroundColor: filament.color.toLowerCase(),
+                                backgroundColor: getColorHex(filament.color),
                                 boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
                               }}
                             ></div>
@@ -628,9 +528,18 @@ export function FilamentsTab() {
                         <TableCell>{filament.material}</TableCell>
                         <TableCell>
                           <span
-                            className={`font-medium ${filament.min_filaments_kg !== null && filament.total_qty_kg < filament.min_filaments_kg ? "text-yellow-700 dark:text-yellow-400" : ""}`}
+                            className={`font-medium ${
+                              filament.total_qty_kg === 0 
+                                ? "text-red-600 dark:text-red-400" 
+                                : filament.min_filaments_kg !== null && filament.total_qty_kg < filament.min_filaments_kg 
+                                  ? "text-yellow-700 dark:text-yellow-400" 
+                                  : ""
+                            }`}
                           >
                             {filament.total_qty_kg.toFixed(2)}
+                            {filament.total_qty_kg === 0 && (
+                              <span className="ml-1 text-xs text-red-500 dark:text-red-400">(empty)</span>
+                            )}
                           </span>
                         </TableCell>
                         <TableCell>
@@ -683,15 +592,15 @@ export function FilamentsTab() {
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                                     onClick={() => setFilamentToDelete(filament)}
-                                    title="Delete filament"
+                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    title="Delete filament from inventory"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p>Delete filament</p>
+                                  <p>Delete filament from inventory</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
@@ -719,8 +628,8 @@ export function FilamentsTab() {
                             <polyline points="3.29 7 12 12 20.71 7"></polyline>
                             <line x1="12" y1="22" x2="12" y2="12"></line>
                           </svg>
-                          <p>No filaments in inventory</p>
-                          <p className="text-sm mt-1">Add filament purchases above to track inventory.</p>
+                          <p>No filament inventory to display</p>
+                          <p className="text-sm mt-1">Add filament purchases above to start tracking inventory.</p>
                           <p className="text-xs mt-2 text-muted-foreground">Configure filament types in Administration → Filament Types</p>
                         </div>
                       </TableCell>
@@ -733,6 +642,314 @@ export function FilamentsTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Purchase History Modal */}
+      <Dialog open={isPurchaseHistoryModalOpen} onOpenChange={setIsPurchaseHistoryModalOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg">
+                <Clock className="h-6 w-6 text-white" />
+              </div>
+              Purchase History
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-6 mt-6">
+            {/* Summary Statistics */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                      <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Purchases</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{filteredPurchases.length}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20 border-green-200 dark:border-green-800">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                      <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Spent</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">€{totalSpent.toFixed(2)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20 border-purple-200 dark:border-purple-800">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                      <CreditCard className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">Avg Price/kg</p>
+                      <p className="text-2xl font-bold text-gray-900 dark:text-white">€{avgPricePerKg.toFixed(2)}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-800">
+                <CardContent className="p-4">
+                  <Button
+                    onClick={exportPurchasesCSV}
+                    className="w-full h-full bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-green-600 dark:text-green-400 border-2 border-green-500 hover:border-green-600"
+                  >
+                    <Download className="mr-2 h-5 w-5" /> 
+                    Export CSV
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Filters Section */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="search" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Search Filament
+                  </Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="search"
+                      type="text"
+                      placeholder="Color, brand, or material..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value)
+                        setPage(1) // Reset to first page on search
+                      }}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="dateFrom" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Date From
+                  </Label>
+                  <Input
+                    id="dateFrom"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value)
+                      setPage(1)
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="dateTo" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Date To
+                  </Label>
+                  <Input
+                    id="dateTo"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(e.target.value)
+                      setPage(1)
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="channel" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Channel
+                  </Label>
+                  <Select value={channelFilter} onValueChange={(value) => {
+                    setChannelFilter(value)
+                    setPage(1)
+                  }}>
+                    <SelectTrigger id="channel">
+                      <SelectValue placeholder="All channels" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Channels</SelectItem>
+                      <SelectItem value="Amazon">Amazon</SelectItem>
+                      <SelectItem value="Ebay">Ebay</SelectItem>
+                      <SelectItem value="Website">Website</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Clear Filters Button */}
+              {(searchQuery || dateFrom || dateTo || channelFilter !== "all") && (
+                <div className="mt-4 flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchQuery("")
+                      setDateFrom("")
+                      setDateTo("")
+                      setChannelFilter("all")
+                      setPage(1)
+                    }}
+                    className="text-gray-600 dark:text-gray-400"
+                  >
+                    <Filter className="h-4 w-4 mr-2" />
+                    Clear Filters
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* Purchase Table */}
+            {filteredPurchases.length > 0 ? (
+              <>
+                <div className="overflow-x-auto rounded-lg border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead>Date</TableHead>
+                        <TableHead>Filament</TableHead>
+                        <TableHead>Brand</TableHead>
+                        <TableHead>Material</TableHead>
+                        <TableHead>Quantity (kg)</TableHead>
+                        <TableHead>Price €/kg</TableHead>
+                        <TableHead>Total €</TableHead>
+                        <TableHead>Channel</TableHead>
+                        <TableHead className="text-center">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedPurchases.map((purchase) => (
+                        <TableRow key={purchase.id} className="hover:bg-muted/50 transition-colors">
+                          <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full border border-gray-300"
+                                style={{
+                                  backgroundColor: getColorHex(purchase.filament.color),
+                                  boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
+                                }}
+                              />
+                              {purchase.filament.color}
+                            </div>
+                          </TableCell>
+                          <TableCell>{purchase.filament.brand}</TableCell>
+                          <TableCell>{purchase.filament.material}</TableCell>
+                          <TableCell className="font-medium">{purchase.quantity_kg}</TableCell>
+                          <TableCell>€{purchase.price_per_kg.toFixed(2)}</TableCell>
+                          <TableCell className="font-medium">
+                            €{(purchase.quantity_kg * purchase.price_per_kg).toFixed(2)}
+                          </TableCell>
+                          <TableCell>{purchase.channel || "—"}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-center gap-1">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                      title="View notes"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="bg-white dark:bg-gray-800 p-4 shadow-xl border rounded-lg max-w-xs">
+                                    <div className="text-start">
+                                      <p className="font-semibold text-gray-700 dark:text-gray-300 mb-1">Notes:</p>
+                                      <p className="text-gray-600 dark:text-gray-400">
+                                        {purchase.notes || "No notes"}
+                                      </p>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                      onClick={() => {
+                                        setPurchaseToDelete(purchase)
+                                        setIsPurchaseHistoryModalOpen(false)
+                                      }}
+                                      title="Delete purchase"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Delete purchase</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Pagination */}
+                <div className="flex justify-center">
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page - 1)}
+                      disabled={page === 1}
+                      className="h-9 px-4"
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm bg-white dark:bg-gray-800 px-4 py-2 rounded-md border">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPage(page + 1)}
+                      disabled={page === totalPages}
+                      className="h-9 px-4"
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <div className="text-gray-400 dark:text-gray-500 mb-4">
+                  <Clock className="h-12 w-12 mx-auto opacity-50" />
+                </div>
+                <p className="text-lg text-gray-600 dark:text-gray-400 mb-2">
+                  {searchQuery || dateFrom || dateTo || channelFilter !== "all" 
+                    ? "No purchases found matching your filters"
+                    : "No purchase history yet"}
+                </p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {searchQuery || dateFrom || dateTo || channelFilter !== "all" 
+                    ? "Try adjusting your search criteria"
+                    : "Start by adding your first filament purchase"}
+                </p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Purchase Confirmation Dialog */}
       <Dialog open={!!purchaseToDelete} onOpenChange={() => setPurchaseToDelete(null)}>
@@ -775,21 +992,28 @@ export function FilamentsTab() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600">
               <AlertCircle className="h-5 w-5" />
-              Delete Filament
+              Delete Filament from Inventory
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p>
-              Are you sure you want to delete this filament?
+              Are you sure you want to delete this filament from your inventory?
             </p>
             {filamentToDelete && (
               <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
                 <p><strong>Filament:</strong> {filamentToDelete.color} {filamentToDelete.brand} {filamentToDelete.material}</p>
-                <p><strong>Current Stock:</strong> {filamentToDelete.total_qty_kg} kg</p>
+                <p><strong>Current Quantity:</strong> {filamentToDelete.total_qty_kg} kg</p>
+                <p><strong>Average Price:</strong> €{filamentToDelete.price_per_kg?.toFixed(2)}/kg</p>
               </div>
             )}
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg">
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                <strong>Note:</strong> This will only remove the filament from your inventory. 
+                The filament type will remain available for future purchases.
+              </p>
+            </div>
             <p className="text-sm text-red-600">
-              This action cannot be undone. All associated purchase history will also be deleted.
+              This action cannot be undone and will remove all purchase history for this filament.
             </p>
           </div>
           <DialogFooter>
@@ -797,11 +1021,12 @@ export function FilamentsTab() {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleDeleteFilament}>
-              Delete Filament
+              Delete from Inventory
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }

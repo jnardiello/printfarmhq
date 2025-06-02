@@ -47,6 +47,7 @@ interface DataContextType {
   addFilament: (filament: Partial<Filament>) => Promise<Filament | void>
   updateFilament: (id: number, data: Partial<Filament>) => Promise<void>
   deleteFilament: (id: number) => Promise<void>
+  clearFilamentInventory: (id: number) => Promise<void>
   addPurchase: (purchase: Partial<FilamentPurchase>) => Promise<void>
   deletePurchase: (id: number) => Promise<void>
   addProduct: (productData: FormData) => Promise<Product>
@@ -297,6 +298,34 @@ export function DataProvider({ children }: { children: ReactNode }) {
       console.error("Error deleting filament:", error)
       toast({
         title: "Error Deleting Filament",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  const clearFilamentInventory = async (id: number) => {
+    try {
+      // Get all purchases for this filament
+      const filamentPurchases = purchases.filter(p => p.filament.id === id)
+      
+      // Delete all purchases for this filament
+      for (const purchase of filamentPurchases) {
+        await api(`/filament_purchases/${purchase.id}`, { method: "DELETE" })
+      }
+      
+      // Refresh data
+      await fetchFilaments()
+      await fetchPurchases()
+      
+      toast({
+        title: "Success",
+        description: "Filament inventory cleared successfully",
+      })
+    } catch (error) {
+      console.error("Error clearing filament inventory:", error)
+      toast({
+        title: "Error",
         description: (error as Error).message,
         variant: "destructive",
       })
@@ -807,6 +836,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         addFilament,
         updateFilament,
         deleteFilament,
+        clearFilamentInventory,
         addPurchase,
         deletePurchase,
         addProduct,

@@ -17,12 +17,6 @@ export function HomePage() {
     return total + (sub.price_eur || 0)
   }, 0)
 
-  // Get low stock filaments (less than their min threshold, or less than 1kg if no threshold is set)
-  const lowStockFilaments = filaments.filter((f) => 
-    f.min_filaments_kg !== null && f.min_filaments_kg !== undefined
-      ? f.total_qty_kg < f.min_filaments_kg
-      : f.total_qty_kg < 1
-  )
 
   // Get filament stats
   const totalFilamentWeight = filaments.reduce((sum, f) => sum + f.total_qty_kg, 0)
@@ -130,51 +124,6 @@ export function HomePage() {
         </Card>
       </div>
 
-      {/* Low Stock Alert */}
-      {lowStockFilaments.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-yellow-600" />
-              Low Stock Alert
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm sm:text-base text-muted-foreground mb-4">
-              {lowStockFilaments.length} filament{lowStockFilaments.length > 1 ? "s" : ""} running low on stock
-              (below minimum threshold)
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
-              {lowStockFilaments.map((filament) => (
-                <div key={filament.id} className="flex items-start gap-3 p-2 sm:p-3 rounded-md border bg-muted/30">
-                  <div
-                    className="w-4 h-4 mt-1 rounded-full border border-border flex-shrink-0"
-                    style={{
-                      backgroundColor: filament.color.toLowerCase(),
-                      boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.1)",
-                    }}
-                  ></div>
-                  <div>
-                    <p className="font-medium text-sm sm:text-base">
-                      {filament.color} {filament.material}
-                    </p>
-                    <p className="text-xs sm:text-sm text-muted-foreground">
-                      {filament.brand} • {filament.total_qty_kg.toFixed(2)} kg remaining 
-                      {filament.min_filaments_kg !== null && filament.min_filaments_kg !== undefined && 
-                        ` / Min: ${filament.min_filaments_kg.toFixed(2)} kg`}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="mt-4">
-              <Button variant="outline" asChild className="w-full sm:w-auto">
-                <Link href="?tab=filaments">Manage Inventory</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recent Activity - Hidden until implemented */}
       {/* 
