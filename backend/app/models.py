@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Table, DateTime, Boolean
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, foreign
 from sqlalchemy.dialects.postgresql import UUID # For UUID type if using PostgreSQL
 import uuid # For generating UUIDs
 from sqlalchemy.sql import func # For server-side default timestamp
@@ -191,7 +191,7 @@ class PrinterProfile(Base):
 
     # Remove back_populates since we don't have a proper foreign key anymore
     print_jobs = relationship("PrintJobPrinter", 
-                            primaryjoin="PrinterProfile.id == PrintJobPrinter.printer_profile_id",
+                            primaryjoin="PrinterProfile.id == foreign(PrintJobPrinter.printer_profile_id)",
                             viewonly=True)
 
 
@@ -224,7 +224,7 @@ class PrintJobPrinter(Base):
 
     # Optional relationship - may be null if printer was deleted
     printer_profile = relationship("PrinterProfile", 
-                                 primaryjoin="PrintJobPrinter.printer_profile_id == PrinterProfile.id",
+                                 primaryjoin="foreign(PrintJobPrinter.printer_profile_id) == PrinterProfile.id",
                                  viewonly=True)
 
 
