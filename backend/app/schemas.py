@@ -140,6 +140,15 @@ class SubscriptionCreate(SubscriptionBase):
     pass
 
 
+class SubscriptionUpdate(BaseModel):
+    name: Optional[str] = None
+    platform: Optional[Literal["Thangs", "Patreon", "No Platform"]] = None
+    license_uri: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    price_eur: Optional[float] = None
+
+
 class SubscriptionRead(SubscriptionBase):
     model_config = ConfigDict(from_attributes=True)
     

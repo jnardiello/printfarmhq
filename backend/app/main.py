@@ -1180,6 +1180,31 @@ def list_subscriptions(db: Session = Depends(get_db), current_user: models.User 
     return db.query(models.Subscription).all()
 
 
+@app.patch("/subscriptions/{subscription_id}", response_model=schemas.SubscriptionRead)
+def update_subscription(subscription_id: int, sub_update: schemas.SubscriptionUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    
+    update_data = sub_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_sub, field, value)
+    
+    db.commit()
+    db.refresh(db_sub)
+    return db_sub
+
+
+@app.delete("/subscriptions/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_subscription(subscription_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
+    if not db_sub:
+        raise HTTPException(status_code=404, detail="Subscription not found")
+    
+    db.delete(db_sub)
+    db.commit()
+
+
 # ---------- Printer Profiles ---------- #
 
 @app.post("/printer_profiles", response_model=schemas.PrinterProfileRead, status_code=status.HTTP_201_CREATED)

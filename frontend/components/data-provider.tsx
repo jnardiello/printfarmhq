@@ -61,6 +61,8 @@ interface DataContextType {
   updatePrinter: (id: number, data: Partial<Printer>) => Promise<void>
   deletePrinter: (id: number) => Promise<void>
   addSubscription: (subscription: Partial<Subscription>) => Promise<void>
+  updateSubscription: (id: number, data: Partial<Subscription>) => Promise<void>
+  deleteSubscription: (id: number) => Promise<void>
   addPrintJob: (printJob: Partial<PrintJob>) => Promise<void>
   updatePrintJob: (id: string, data: Partial<PrintJob>) => Promise<void>
   deletePrintJob: (id: string) => Promise<void>
@@ -570,6 +572,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const updateSubscription = async (id: number, data: Partial<Subscription>) => {
+    try {
+      await api(`/subscriptions/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      })
+      await fetchSubscriptions()
+      toast({
+        title: "Success",
+        description: "Subscription updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating subscription:", error)
+      toast({
+        title: "Error Updating Subscription",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  const deleteSubscription = async (id: number) => {
+    try {
+      await api(`/subscriptions/${id}`, { method: "DELETE" })
+      await fetchSubscriptions()
+      toast({
+        title: "Success",
+        description: "Subscription deleted successfully",
+      })
+    } catch (error) {
+      console.error("Error deleting subscription:", error)
+      toast({
+        title: "Error Deleting Subscription",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
   const addPrintJob = async (printJob: Partial<PrintJob>) => {
     try {
       await api("/print_jobs", {
@@ -779,6 +820,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updatePrinter,
         deletePrinter,
         addSubscription,
+        updateSubscription,
+        deleteSubscription,
         addPrintJob,
         updatePrintJob,
         deletePrintJob,
