@@ -27,9 +27,24 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     is_superadmin = Column(Boolean, default=False)
+    is_god_user = Column(Boolean, default=False)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     token_version = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Self-referential relationship for team members
+    created_by = relationship("User", remote_side=[id], backref="team_members")
+    
+    @property
+    def owner_id(self):
+        """Get the owner_id for this user (super-admin who owns the data)"""
+        if self.is_god_user:
+            return None  # God user has no owner
+        elif self.is_superadmin:
+            return self.id  # Super-admin owns their own data
+        else:
+            return self.created_by_user_id  # Team member's data belongs to their super-admin
 
 
 class Filament(Base):
@@ -42,6 +57,7 @@ class Filament(Base):
     price_per_kg = Column(Float, nullable=False, default=0.0)  # weighted average EUR/kg
     total_qty_kg = Column(Float, nullable=False, default=0.0)
     min_filaments_kg = Column(Float, nullable=True)  # Minimum threshold for low stock alert
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     products = relationship("Product", secondary="filament_usages", viewonly=True)
     purchases = relationship(
@@ -49,6 +65,7 @@ class Filament(Base):
         back_populates="filament",
         cascade="all, delete-orphan",
     )
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class Product(Base):
@@ -66,12 +83,14 @@ class Product(Base):
 
     license_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
     file_path = Column(String, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Legacy relationship - will be removed after migration
     filament_usages = relationship("FilamentUsage", back_populates="product", cascade="all, delete-orphan")
     
     # New plate-based relationship
     plates = relationship("Plate", back_populates="product", cascade="all, delete-orphan")
+    owner = relationship("User", foreign_keys=[owner_id])
 
     @property
     def cop(self) -> float:
@@ -111,9 +130,11 @@ class Plate(Base):
     print_time_hrs = Column(Float, nullable=False, default=0.0)  # Print time for this plate
     file_path = Column(String, nullable=True)  # Optional STL/3MF file for this plate
     gcode_path = Column(String, nullable=True)  # Optional G-code file for this plate
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     product = relationship("Product", back_populates="plates")
     filament_usages = relationship("PlateFilamentUsage", back_populates="plate", cascade="all, delete-orphan")
+    owner = relationship("User", foreign_keys=[owner_id])
 
     @property
     def cost(self) -> float:
@@ -136,6 +157,9 @@ class Subscription(Base):
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)  # nullable when ongoing
     price_eur = Column(Float, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class FilamentPurchase(Base):
@@ -148,8 +172,10 @@ class FilamentPurchase(Base):
     purchase_date = Column(Date, nullable=True)
     channel = Column(String, nullable=True)
     notes = Column(String, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     filament = relationship("Filament", back_populates="purchases")
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 # Association table for multi-filament usage per product
@@ -162,9 +188,11 @@ class FilamentUsage(Base):
     product_id = Column(Integer, ForeignKey("products.id"))
     filament_id = Column(Integer, ForeignKey("filaments.id"))
     grams_used = Column(Float, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     product = relationship("Product", back_populates="filament_usages")
     filament = relationship("Filament")
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class PlateFilamentUsage(Base):
@@ -174,9 +202,11 @@ class PlateFilamentUsage(Base):
     plate_id = Column(Integer, ForeignKey("plates.id"), nullable=False)
     filament_id = Column(Integer, ForeignKey("filaments.id"), nullable=False)
     grams_used = Column(Float, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     plate = relationship("Plate", back_populates="filament_usages")
     filament = relationship("Filament")
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class PrinterProfile(Base):
@@ -188,11 +218,13 @@ class PrinterProfile(Base):
     model = Column(String, nullable=True)  # New field for printer model
     price_eur = Column(Float, nullable=False)
     expected_life_hours = Column(Float, nullable=False)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Remove back_populates since we don't have a proper foreign key anymore
     print_jobs = relationship("PrintJobPrinter", 
                             primaryjoin="PrinterProfile.id == foreign(PrintJobPrinter.printer_profile_id)",
                             viewonly=True)
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class PrintJobProduct(Base):
@@ -202,8 +234,10 @@ class PrintJobProduct(Base):
     print_job_id = Column(UUID(as_uuid=True), ForeignKey("print_jobs.id"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     items_qty = Column(Integer, nullable=False, default=1)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     product = relationship("Product")
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class PrintJobPrinter(Base):
@@ -221,11 +255,13 @@ class PrintJobPrinter(Base):
     printer_model = Column(String, nullable=True)
     printer_price_eur = Column(Float, nullable=True)
     printer_expected_life_hours = Column(Float, nullable=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Optional relationship - may be null if printer was deleted
     printer_profile = relationship("PrinterProfile", 
                                  primaryjoin="foreign(PrintJobPrinter.printer_profile_id) == PrinterProfile.id",
                                  viewonly=True)
+    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class PrintJob(Base):
@@ -242,6 +278,8 @@ class PrintJob(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     products = relationship("PrintJobProduct", cascade="all, delete-orphan")
-    printers = relationship("PrintJobPrinter", cascade="all, delete-orphan") 
+    printers = relationship("PrintJobPrinter", cascade="all, delete-orphan")
+    owner = relationship("User", foreign_keys=[owner_id]) 

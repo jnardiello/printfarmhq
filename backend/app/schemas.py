@@ -27,6 +27,12 @@ class FilamentRead(FilamentBase):
     min_filaments_kg: Optional[float] = None
 
 
+class FilamentStatistics(BaseModel):
+    filament: FilamentRead
+    products_using: int
+    purchases_count: int
+
+
 # FilamentUsage nested (depends on FilamentRead)
 class FilamentUsageCreate(BaseModel):
     filament_id: int
@@ -181,6 +187,16 @@ class FilamentPurchaseRead(FilamentPurchaseCreate):
     filament: FilamentMini
 
 
+class FilamentPurchaseUpdate(BaseModel):
+    """Update schema for filament purchases"""
+    filament_id: Optional[int] = None
+    quantity_kg: Optional[float] = Field(None, gt=0)
+    price_per_kg: Optional[float] = Field(None, gt=0)
+    purchase_date: Optional[date] = None
+    channel: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class FilamentPurchaseData(BaseModel):
     """Purchase data for flexible filament creation"""
     quantity_kg: float = Field(..., gt=0)
@@ -235,6 +251,15 @@ class PrinterProfileRead(PrinterProfileBase):
     id: int
 
 
+class PrinterProfileUpdate(BaseModel):
+    """Update schema for printer profiles"""
+    name: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    price_eur: Optional[float] = Field(None, ge=0)
+    expected_life_hours: Optional[float] = Field(None, gt=0)
+
+
 class JobProductItem(BaseModel):
     product_id: int
     items_qty: int = Field(..., gt=0)
@@ -276,6 +301,11 @@ class PrintJobRead(PrintJobBase):
     updated_at: Optional[datetime] = None
 
 
+class PrintJobStatusUpdate(BaseModel):
+    """Update schema for print job status only"""
+    status: str = Field(..., examples=["pending", "in_progress", "completed", "failed"])
+
+
 # User and Auth schemas
 class UserRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -286,6 +316,7 @@ class UserRead(BaseModel):
     is_active: bool
     is_admin: bool
     is_superadmin: bool
+    is_god_user: bool
     created_at: datetime
 
 
@@ -324,9 +355,60 @@ class SetupRequest(BaseModel):
 
 class SetupStatusResponse(BaseModel):
     setup_required: bool
+    god_user_required: bool = False
+
+
+class TenantRegistrationRequest(BaseModel):
+    email: EmailStr
+    name: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8)
+    company_name: str = Field(..., min_length=1)
 
 
 class UserSelfUpdate(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
     password: Optional[str] = None
+
+
+# God Dashboard schemas
+class GodDashboardStats(BaseModel):
+    total_superadmins: int
+    total_users: int
+    total_team_members: int
+
+
+class GodUserHierarchy(BaseModel):
+    superadmin: UserRead
+    team_members: List[UserRead]
+
+
+class GodUserSelectionRequest(BaseModel):
+    user_id: int
+
+
+# God User Management schemas
+class GodUserUpdate(BaseModel):
+    """Schema for god user to update any user"""
+    name: Optional[str] = Field(None, min_length=1)
+    email: Optional[EmailStr] = None
+    is_active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+    is_superadmin: Optional[bool] = None
+
+
+class GodPasswordReset(BaseModel):
+    """Schema for god user to reset user password"""
+    new_password: str = Field(..., min_length=8, description="New password for the user")
+
+
+class GodPasswordResetResponse(BaseModel):
+    """Response for password reset"""
+    message: str
+    temporary_password: Optional[str] = None
+
+
+class GodUserActionResponse(BaseModel):
+    """Response for god user actions"""
+    message: str
+    user: Optional[UserRead] = None

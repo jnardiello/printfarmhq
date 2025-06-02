@@ -2,7 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, F
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional, List, Union
-from datetime import timedelta
+from datetime import timedelta, datetime
 import json
 import os
 import shutil
@@ -16,10 +16,13 @@ from .auth import (
     get_current_user, 
     get_current_admin_user,
     get_current_superadmin_user,
+    get_current_god_user,
     create_access_token, 
     authenticate_user,
     create_user,
     create_superadmin,
+    create_tenant_superadmin,
+    get_password_hash,
     ACCESS_TOKEN_EXPIRE_MINUTES
 )
 from .database import setup_required
@@ -62,6 +65,16 @@ def get_db():
         db.close()
 
 
+def get_owner_id(user: models.User) -> Optional[int]:
+    """Get the owner_id for filtering data based on the user's role"""
+    if user.is_god_user:
+        return None  # God user sees all data
+    elif user.is_superadmin:
+        return user.id  # Super-admin owns their data
+    else:
+        return user.created_by_user_id  # Team member's data belongs to their super-admin
+
+
 # ---------- Health Check ---------- #
 
 @app.get("/")
@@ -98,14 +111,14 @@ def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Registration failed: {str(e)}"
+            detail=f"User registration failed: {str(e)}"
         )
 
 
 @app.post("/auth/login", response_model=schemas.AuthResponse)
-def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
-    """Login with email and password"""
-    user = authenticate_user(user_data.email, user_data.password, db)
+def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    """Login user"""
+    user = authenticate_user(credentials.email, credentials.password, db)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -126,14 +139,29 @@ def login(user_data: schemas.UserLogin, db: Session = Depends(get_db)):
 
 @app.get("/auth/me", response_model=schemas.UserRead)
 def get_current_user_info(current_user: models.User = Depends(get_current_user)):
-    """Get current authenticated user information"""
+    """Get current user info"""
     return schemas.UserRead.model_validate(current_user)
+
+
+@app.get("/auth/validate")
+def validate_token(current_user: models.User = Depends(get_current_user)):
+    """Validate current token"""
+    return {"valid": True, "user_id": current_user.id}
 
 
 @app.get("/auth/setup-status", response_model=schemas.SetupStatusResponse)
 def get_setup_status(db: Session = Depends(get_db)):
     """Check if initial setup is required"""
-    return schemas.SetupStatusResponse(setup_required=setup_required(db))
+    # Check if any super-admin exists
+    has_superadmin = db.query(models.User).filter(models.User.is_superadmin == True).first() is not None
+    
+    # Check if god user exists
+    has_god_user = db.query(models.User).filter(models.User.is_god_user == True).first() is not None
+    
+    return schemas.SetupStatusResponse(
+        setup_required=not has_superadmin,
+        god_user_required=has_superadmin and not has_god_user
+    )
 
 
 @app.post("/auth/setup", response_model=schemas.AuthResponse)
@@ -161,6 +189,111 @@ def setup_application(setup_data: schemas.SetupRequest, db: Session = Depends(ge
         )
 
 
+@app.post("/auth/self-register", response_model=schemas.AuthResponse)
+def self_register(registration_data: schemas.TenantRegistrationRequest, db: Session = Depends(get_db)):
+    """Self-registration for new tenant super-admins"""
+    try:
+        # Check if system is initialized
+        if setup_required(db):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="System not initialized. Please complete initial setup first."
+            )
+        
+        # Create new tenant super-admin
+        user = create_tenant_superadmin(
+            registration_data.email, 
+            registration_data.password, 
+            registration_data.name, 
+            registration_data.company_name,
+            db
+        )
+        
+        # Create JWT token
+        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": user.email, "token_version": user.token_version}, 
+            db=db, 
+            expires_delta=access_token_expires
+        )
+        
+        return schemas.AuthResponse(
+            access_token=access_token,
+            user=schemas.UserRead.model_validate(user)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+
+@app.get("/auth/superadmins", response_model=List[schemas.UserRead])
+def list_superadmins_for_god_selection(db: Session = Depends(get_db)):
+    """List super-admins for god user selection (only available when no god user exists)"""
+    # Check if god user already exists
+    god_user_exists = db.query(models.User).filter(models.User.is_god_user == True).first() is not None
+    if god_user_exists:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="God user already exists"
+        )
+    
+    # Return all super-admins
+    superadmins = db.query(models.User).filter(
+        models.User.is_superadmin == True
+    ).all()
+    
+    return [schemas.UserRead.model_validate(user) for user in superadmins]
+
+
+@app.post("/auth/select-god-user", response_model=schemas.AuthResponse)
+def select_god_user(selection: schemas.GodUserSelectionRequest, db: Session = Depends(get_db)):
+    """Select a super-admin to be the god user (only available when no god user exists)"""
+    # Check if god user already exists
+    existing_god_user = db.query(models.User).filter(models.User.is_god_user == True).first()
+    if existing_god_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="God user already exists"
+        )
+    
+    # Get the selected user
+    user = db.get(models.User, selection.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Verify the user is a super-admin
+    if not user.is_superadmin:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Selected user must be a super-admin"
+        )
+    
+    # Set as god user
+    user.is_god_user = True
+    db.commit()
+    db.refresh(user)
+    
+    # Create JWT token for the god user
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email, "token_version": user.token_version}, 
+        db=db, 
+        expires_delta=access_token_expires
+    )
+    
+    return schemas.AuthResponse(
+        access_token=access_token,
+        user=schemas.UserRead.model_validate(user)
+    )
+
+
 # ---------- Alerts System ---------- #
 
 @app.get("/alerts")
@@ -181,8 +314,23 @@ def dismiss_alert(alert_id: str, current_user: models.User = Depends(get_current
 
 @app.get("/users", response_model=List[schemas.UserRead])
 def list_users(db: Session = Depends(get_db), admin_user: models.User = Depends(get_current_admin_user)):
-    """List all users (admin only)"""
-    return db.query(models.User).all()
+    """List all users (admin only) - filtered by team"""
+    if admin_user.is_god_user:
+        # God user sees all users
+        return db.query(models.User).all()
+    elif admin_user.is_superadmin:
+        # Super-admin sees self and their team members
+        return db.query(models.User).filter(
+            (models.User.id == admin_user.id) | 
+            (models.User.created_by_user_id == admin_user.id)
+        ).all()
+    else:
+        # Regular admin sees only users in their team
+        owner_id = admin_user.created_by_user_id
+        return db.query(models.User).filter(
+            (models.User.id == owner_id) |  # The super-admin
+            (models.User.created_by_user_id == owner_id)  # Other team members
+        ).all()
 
 
 @app.post("/users", response_model=schemas.UserRead, status_code=status.HTTP_201_CREATED)
@@ -193,7 +341,27 @@ def create_user_admin(user_data: schemas.UserCreate, db: Session = Depends(get_d
         if user_data.is_superadmin and not admin_user.is_superadmin:
             raise HTTPException(status_code=403, detail="Only superadmin can create superadmin users")
         
-        user = create_user(user_data.email, user_data.password, user_data.name, db, user_data.is_admin, user_data.is_superadmin)
+        # Determine created_by_user_id
+        # - For super-admins: None (they are independent)
+        # - For regular users created by super-admin: super-admin's id
+        # - For regular users created by team member: inherit the team member's owner_id
+        created_by_user_id = None
+        if not user_data.is_superadmin:  # Only set created_by for non-superadmins
+            if admin_user.is_superadmin:
+                created_by_user_id = admin_user.id
+            else:
+                # Team member creating another user - inherit the same super-admin
+                created_by_user_id = admin_user.created_by_user_id
+        
+        user = create_user(
+            user_data.email, 
+            user_data.password, 
+            user_data.name, 
+            db, 
+            user_data.is_admin, 
+            user_data.is_superadmin,
+            created_by_user_id
+        )
         return schemas.UserRead.model_validate(user)
     except HTTPException:
         raise
@@ -297,27 +465,26 @@ def update_current_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    update_data = user_data.model_dump(exclude_unset=True)
+    # Update fields if provided
+    credentials_changed = False
     
-    if "email" in update_data:
-        # Check if new email is already in use by another user
-        existing_user = db.query(models.User).filter(
-            models.User.email == update_data["email"],
-            models.User.id != user.id
-        ).first()
+    if user_data.email is not None and user_data.email != user.email:
+        # Check if email is already taken
+        existing_user = db.query(models.User).filter(models.User.email == user_data.email).first()
         if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Email already registered"
-            )
-        user.email = update_data["email"]
+            raise HTTPException(status_code=400, detail="Email already registered")
+        user.email = user_data.email
+        credentials_changed = True
+        
+    if user_data.name is not None:
+        user.name = user_data.name
+        
+    if user_data.password is not None:
+        user.hashed_password = get_password_hash(user_data.password)
+        credentials_changed = True
     
-    if "name" in update_data:
-        user.name = update_data["name"]
-    
-    if "password" in update_data:
-        user.hashed_password = get_password_hash(update_data["password"])
-        # Increment token version to invalidate existing tokens
+    # Increment token version if credentials were changed
+    if credentials_changed:
         user.token_version += 1
     
     db.commit()
@@ -325,9 +492,76 @@ def update_current_user(
     return schemas.UserRead.model_validate(user)
 
 
+# Helper function to check if a filament with given properties already exists
+def _get_or_create_filament(db: Session, color: str, brand: str, material: str) -> models.Filament:
+    """Get an existing filament or create a new one if it doesn't exist."""
+    # Check if filament already exists
+    existing_filament = db.query(models.Filament).filter(
+        models.Filament.color == color,
+        models.Filament.brand == brand,
+        models.Filament.material == material
+    ).first()
+    
+    if existing_filament:
+        return existing_filament
+    
+    # Create new filament
+    new_filament = models.Filament(
+        color=color,
+        brand=brand,
+        material=material,
+        price_per_kg=0.0,  # Will be updated when purchases are added
+        total_qty_kg=0.0   # Will be updated when purchases are added
+    )
+    db.add(new_filament)
+    db.flush()  # Flush to get the ID without committing
+    return new_filament
+
+@app.post("/products/upload/{product_id}", response_model=schemas.ProductRead)
+async def upload_product_file(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Upload a file for an existing product."""
+    # Get the product
+    db_product = db.get(models.Product, product_id)
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Validate file extension
+    if not file.filename.lower().endswith(('.stl', '.3mf')):
+        raise HTTPException(
+            status_code=400,
+            detail="Only STL and 3MF files are supported"
+        )
+    
+    # Save the file
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{db_product.sku}_{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save file: {str(e)}"
+        )
+    
+    # Update product with file path
+    db_product.file_path = f"uploads/product_models/{unique_filename}"
+    db.commit()
+    db.refresh(db_product)
+    
+    return db_product
+
+
 # ---------- Filament Helpers ---------- #
 
-def check_existing_filament(db: Session, color: str, brand: str, material: str) -> Optional[models.Filament]:
+def check_existing_filament(db: Session, color: str, brand: str, material: str, current_user: Optional[models.User] = None) -> Optional[models.Filament]:
     """Check if a filament with the same color, brand, and material already exists (case-insensitive)."""
     from sqlalchemy import func
     
@@ -335,11 +569,19 @@ def check_existing_filament(db: Session, color: str, brand: str, material: str) 
     brand_normalized = brand.strip().lower()
     material_normalized = material.strip()
     
-    return db.query(models.Filament).filter(
+    query = db.query(models.Filament).filter(
         func.lower(func.trim(models.Filament.color)) == color_normalized,
         func.lower(func.trim(models.Filament.brand)) == brand_normalized,
         func.trim(models.Filament.material) == material_normalized
-    ).first()
+    )
+    
+    # Filter by owner for multi-tenancy
+    if current_user:
+        owner_id = get_owner_id(current_user)
+        if owner_id is not None:
+            query = query.filter(models.Filament.owner_id == owner_id)
+    
+    return query.first()
 
 
 # ---------- Filaments ---------- #
@@ -348,6 +590,7 @@ def check_existing_filament(db: Session, color: str, brand: str, material: str) 
 def create_filament(filament: schemas.FilamentCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Create a new filament type (any authenticated user can create filament types)"""
     db_filament = models.Filament(**filament.model_dump())
+    db_filament.owner_id = get_owner_id(current_user)
     db.add(db_filament)
     db.commit()
     db.refresh(db_filament)
@@ -356,8 +599,12 @@ def create_filament(filament: schemas.FilamentCreate, db: Session = Depends(get_
 
 @app.get("/filaments", response_model=list[schemas.FilamentRead])
 def list_filaments(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """List all filament types (any authenticated user can view filament types)"""
-    return db.query(models.Filament).all()
+    """List all filament types (filtered by owner for multi-tenancy)"""
+    owner_id = get_owner_id(current_user)
+    query = db.query(models.Filament)
+    if owner_id is not None:
+        query = query.filter(models.Filament.owner_id == owner_id)
+    return query.all()
 
 
 @app.get("/filaments/{filament_id}", response_model=schemas.FilamentRead)
@@ -365,6 +612,12 @@ def get_filament(filament_id: int, db: Session = Depends(get_db), current_user: 
     filament = db.get(models.Filament, filament_id)
     if not filament:
         raise HTTPException(status_code=404, detail="Filament not found")
+    
+    # Check ownership
+    owner_id = get_owner_id(current_user)
+    if owner_id is not None and filament.owner_id != owner_id:
+        raise HTTPException(status_code=404, detail="Filament not found")
+    
     return filament
 
 
@@ -398,14 +651,15 @@ def delete_filament(filament_id: int, db: Session = Depends(get_db), current_use
 
 
 @app.patch("/filaments/{filament_id}", response_model=schemas.FilamentRead)
-def update_filament(filament_id: int, upd: schemas.FilamentUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Update a filament type (any authenticated user can update filament types)"""
+def update_filament(filament_id: int, filament_update: schemas.FilamentUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     filament = db.get(models.Filament, filament_id)
     if not filament:
         raise HTTPException(status_code=404, detail="Filament not found")
-    update_data = upd.model_dump(exclude_unset=True)
-    for k, v in update_data.items():
-        setattr(filament, k, v)
+    
+    update_data = filament_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(filament, field, value)
+    
     db.commit()
     db.refresh(filament)
     return filament
@@ -427,7 +681,7 @@ def create_filament_flexible(
     try:
         # Check for existing filament first (case-insensitive)
         existing_filament = check_existing_filament(
-            db, filament_data.color, filament_data.brand, filament_data.material
+            db, filament_data.color, filament_data.brand, filament_data.material, current_user
         )
         
         if existing_filament:
@@ -447,7 +701,8 @@ def create_filament_flexible(
             material=filament_data.material.strip(),
             price_per_kg=filament_data.estimated_cost_per_kg,  # Use estimated cost initially
             total_qty_kg=0.0,  # No inventory by default
-            min_filaments_kg=None  # User can set this later
+            min_filaments_kg=None,  # User can set this later
+            owner_id=get_owner_id(current_user)  # Set owner for multi-tenancy
         )
         
         warnings = []
@@ -469,7 +724,8 @@ def create_filament_flexible(
                 price_per_kg=filament_data.purchase_data.price_per_kg,
                 purchase_date=filament_data.purchase_data.purchase_date or date.today(),
                 channel=filament_data.purchase_data.purchase_channel,
-                notes=filament_data.purchase_data.notes
+                notes=filament_data.purchase_data.notes,
+                owner_id=get_owner_id(current_user)  # Set owner for multi-tenancy
             )
             db.add(db_purchase)
         else:
@@ -479,393 +735,571 @@ def create_filament_flexible(
         
         # Commit transaction
         db.commit()
-        
-        # Refresh to get all fields
         db.refresh(db_filament)
-        if db_purchase:
-            db.refresh(db_purchase)
         
-        return schemas.FilamentFlexibleResponse(
+        # Prepare response
+        response = schemas.FilamentFlexibleResponse(
             filament=schemas.FilamentRead.model_validate(db_filament),
-            purchase=schemas.FilamentPurchaseRead.model_validate(db_purchase) if db_purchase else None,
-            message="Filament created successfully" + (" with initial inventory" if db_purchase else ""),
             warnings=warnings
         )
         
+        if db_purchase:
+            db.refresh(db_purchase)
+            response.purchase = schemas.FilamentPurchaseRead.model_validate(db_purchase)
+            
+        return response
+        
     except HTTPException:
-        # Re-raise HTTPException without catching it
-        db.rollback()
+        # Re-raise HTTP exceptions
         raise
     except IntegrityError as e:
         db.rollback()
-        # This could happen if another request created the same filament concurrently
-        # Try to fetch the existing filament (case-insensitive)
-        existing_filament = check_existing_filament(
-            db, filament_data.color, filament_data.brand, filament_data.material
+        logger.error(f"Database integrity error: {str(e)}")
+        raise HTTPException(
+            status_code=409,
+            detail="A database constraint was violated. This filament may already exist."
         )
-        
-        if existing_filament:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "message": "Filament was created by another process",
-                    "existing_filament": schemas.FilamentRead.model_validate(existing_filament).model_dump()
-                }
-            )
-        else:
-            # Some other integrity error
-            logger.error(f"Integrity error creating filament: {str(e)}")
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to create filament due to data integrity error"
-            )
-            
     except SQLAlchemyError as e:
         db.rollback()
-        logger.error(f"Database error creating filament with purchase: {str(e)}")
+        logger.error(f"Database error: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="Failed to create filament with purchase. Transaction rolled back."
+            detail="A database error occurred while creating the filament."
         )
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error creating filament with purchase: {str(e)}")
+        logger.error(f"Unexpected error: {str(e)}")
         raise HTTPException(
             status_code=500,
-            detail="An unexpected error occurred"
+            detail=f"An unexpected error occurred: {str(e)}"
         )
+
+
+@app.get("/filaments/statistics", response_model=list[schemas.FilamentStatistics])
+def get_filament_statistics(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Get statistics for all filament types (any authenticated user can view statistics)"""
+    # Get all filaments with their usages
+    filaments = db.query(models.Filament).all()
+    
+    statistics = []
+    for filament in filaments:
+        # Count products using this filament through both legacy and plate-based relationships
+        legacy_products = db.query(models.Product).join(models.FilamentUsage).filter(
+            models.FilamentUsage.filament_id == filament.id
+        ).distinct().count()
+        
+        plate_products = db.query(models.Product).join(models.Plate).join(models.PlateFilamentUsage).filter(
+            models.PlateFilamentUsage.filament_id == filament.id
+        ).distinct().count()
+        
+        # Use set to avoid counting same product twice if it uses both systems
+        product_ids = set()
+        
+        # Get products through legacy system
+        legacy_product_ids = db.query(models.Product.id).join(models.FilamentUsage).filter(
+            models.FilamentUsage.filament_id == filament.id
+        ).distinct().all()
+        product_ids.update([p[0] for p in legacy_product_ids])
+        
+        # Get products through plate system
+        plate_product_ids = db.query(models.Product.id).join(models.Plate).join(models.PlateFilamentUsage).filter(
+            models.PlateFilamentUsage.filament_id == filament.id
+        ).distinct().all()
+        product_ids.update([p[0] for p in plate_product_ids])
+        
+        products_using = len(product_ids)
+        
+        # Count purchases
+        purchases_count = db.query(models.FilamentPurchase).filter(
+            models.FilamentPurchase.filament_id == filament.id
+        ).count()
+        
+        statistics.append(schemas.FilamentStatistics(
+            filament=schemas.FilamentRead.model_validate(filament),
+            products_using=products_using,
+            purchases_count=purchases_count
+        ))
+    
+    return statistics
 
 
 # ---------- Filament Purchases ---------- #
 
 @app.post("/filament_purchases", response_model=schemas.FilamentPurchaseRead, status_code=status.HTTP_201_CREATED)
 def create_filament_purchase(purchase: schemas.FilamentPurchaseCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Record a new filament purchase (any authenticated user can record purchases)"""
+    # Verify filament exists
     filament = db.get(models.Filament, purchase.filament_id)
     if not filament:
-        raise HTTPException(status_code=400, detail="Filament not found")
-
+        raise HTTPException(status_code=404, detail="Filament not found")
+    
+    # Create purchase record
     db_purchase = models.FilamentPurchase(**purchase.model_dump())
     db.add(db_purchase)
-
-    # update aggregates
-    total_before = filament.total_qty_kg
-    avg_before = filament.price_per_kg
-
-    new_total = total_before + purchase.quantity_kg
-    if new_total == 0:
-        filament.price_per_kg = 0.0
-    else:
-        filament.price_per_kg = (
-            (avg_before * total_before) + (purchase.price_per_kg * purchase.quantity_kg)
-        ) / new_total
-    filament.total_qty_kg = new_total
-
+    
+    # Update filament inventory and weighted average price
+    old_total_value = filament.total_qty_kg * filament.price_per_kg
+    new_value = purchase.quantity_kg * purchase.price_per_kg
+    new_total_qty = filament.total_qty_kg + purchase.quantity_kg
+    
+    if new_total_qty > 0:
+        filament.price_per_kg = (old_total_value + new_value) / new_total_qty
+    filament.total_qty_kg = new_total_qty
+    
     db.commit()
     db.refresh(db_purchase)
     return db_purchase
 
 
 @app.get("/filament_purchases", response_model=list[schemas.FilamentPurchaseRead])
-def list_filament_purchases(filament_id: Union[int, None] = None, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def list_filament_purchases(
+    skip: int = 0,
+    limit: int = 100,
+    filament_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """List all filament purchases with optional filtering (any authenticated user can view purchases)"""
     query = db.query(models.FilamentPurchase)
+    
     if filament_id:
         query = query.filter(models.FilamentPurchase.filament_id == filament_id)
-    return query.all()
+    
+    purchases = query.order_by(models.FilamentPurchase.purchase_date.desc()).offset(skip).limit(limit).all()
+    return purchases
 
 
-@app.delete("/filament_purchases/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_filament_purchase(purchase_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+@app.patch("/filament_purchases/{purchase_id}", response_model=schemas.FilamentPurchaseRead)
+def update_filament_purchase(
+    purchase_id: int,
+    purchase_update: schemas.FilamentPurchaseUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Update a filament purchase record (any authenticated user can update purchases)"""
     purchase = db.get(models.FilamentPurchase, purchase_id)
     if not purchase:
         raise HTTPException(status_code=404, detail="Purchase not found")
+    
+    # Note: This simplified version doesn't recalculate weighted average prices
+    # In production, you might want to track the original values and adjust accordingly
+    
+    update_data = purchase_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(purchase, field, value)
+    
+    db.commit()
+    db.refresh(purchase)
+    return purchase
 
-    filament = purchase.filament
-    # update aggregates (remove qty)
-    if filament and purchase.quantity_kg:
-        new_total = max(0.0, filament.total_qty_kg - purchase.quantity_kg)
-        filament.total_qty_kg = new_total
-        # Recompute average if we have other purchases
-        # Simplistic: recalc from remaining purchases
-        others = (
-            db.query(models.FilamentPurchase)
-            .filter(models.FilamentPurchase.filament_id == filament.id, models.FilamentPurchase.id != purchase_id)
-            .all()
+
+@app.get("/filament_purchases/export")
+def export_filament_purchases(
+    format: str = "csv",
+    filament_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Export filament purchases in CSV or JSON format (any authenticated user can export)"""
+    query = db.query(models.FilamentPurchase)
+    
+    if filament_id:
+        query = query.filter(models.FilamentPurchase.filament_id == filament_id)
+    
+    purchases = query.order_by(models.FilamentPurchase.purchase_date.desc()).all()
+    
+    if format == "json":
+        return [
+            {
+                "id": p.id,
+                "filament_id": p.filament_id,
+                "quantity_kg": p.quantity_kg,
+                "price_per_kg": p.price_per_kg,
+                "purchase_date": p.purchase_date.isoformat() if p.purchase_date else None,
+                "channel": p.channel,
+                "notes": p.notes
+            }
+            for p in purchases
+        ]
+    else:  # CSV format
+        from fastapi.responses import StreamingResponse
+        import csv
+        import io
+        
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow(["ID", "Filament ID", "Quantity (kg)", "Price per kg", "Purchase Date", "Channel", "Notes"])
+        
+        # Write data
+        for p in purchases:
+            writer.writerow([
+                p.id,
+                p.filament_id,
+                p.quantity_kg,
+                p.price_per_kg,
+                p.purchase_date.isoformat() if p.purchase_date else "",
+                p.channel or "",
+                p.notes or ""
+            ])
+        
+        output.seek(0)
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode()),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=filament_purchases.csv"}
         )
-        if others:
-            total_qty = sum(p.quantity_kg for p in others)
-            total_cost = sum(p.quantity_kg * p.price_per_kg for p in others)
-            filament.price_per_kg = total_cost / total_qty if total_qty else 0.0
-        else:
-            filament.price_per_kg = 0.0
 
+
+@app.delete("/filament_purchases/{purchase_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_filament_purchase(
+    purchase_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Delete a filament purchase and adjust inventory (any authenticated user can delete purchases)"""
+    purchase = db.get(models.FilamentPurchase, purchase_id)
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+    
+    # Get the associated filament
+    filament = db.get(models.Filament, purchase.filament_id)
+    if filament:
+        # Reduce inventory
+        filament.total_qty_kg = max(0, filament.total_qty_kg - purchase.quantity_kg)
+        
+        # Note: We don't adjust the weighted average price when deleting
+        # This is a simplification - in production you might want to track this differently
+    
     db.delete(purchase)
     db.commit()
     return
 
 
-from fastapi.responses import StreamingResponse
-import csv, io, datetime
-
-
-@app.get("/filament_purchases/export")
-def export_filament_purchases(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    purchases = (
-        db.query(models.FilamentPurchase)
-        .join(models.Filament)
-        .order_by(models.FilamentPurchase.purchase_date.desc().nullslast(), models.FilamentPurchase.id.desc())
-        .all()
-    )
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow([
-        "ID",
-        "Color",
-        "Brand",
-        "Material",
-        "Quantity_kg",
-        "Price_per_kg",
-        "Purchase_date",
-        "Channel",
-        "Notes",
-    ])
-    for p in purchases:
-        writer.writerow(
-            [
-                p.id,
-                p.filament.color,
-                p.filament.brand,
-                p.filament.material,
-                p.quantity_kg,
-                p.price_per_kg,
-                p.purchase_date or "",
-                p.channel or "",
-                p.notes or "",
-            ]
-        )
-
-    output.seek(0)
-    filename = f"filament_purchases_{datetime.date.today()}.csv"
-    return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
-
-
 # ---------- Products ---------- #
 
-@app.post("/products", response_model=schemas.ProductRead)
-async def create_product(
+@app.post("/products", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED)
+def create_product(
+    sku: str = Form(...),
     name: str = Form(...),
-    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
-    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
-    additional_parts_cost: Optional[float] = Form(0.0),
+    print_time: str = Form(...),  # HH:MM:SS or MM:SS format
+    # plate data
+    plate_names: str = Form(None),  # JSON string of plate names
+    plate_quantities: str = Form(None),  # JSON string of plate quantities
+    plate_print_times: str = Form(None),  # JSON string of plate print times
+    plate_filament_ids: str = Form(None),  # JSON string of arrays of filament IDs per plate
+    plate_grams_used: str = Form(None),  # JSON string of arrays of grams used per plate
+    # legacy data (backwards compatibility)
+    filament_ids: str = Form(None),  # JSON string of filament IDs for legacy single product
+    grams_used_list: str = Form(None),  # JSON string of grams used for legacy single product
+    additional_parts_cost: float = Form(0.0),
     license_id: Optional[int] = Form(None),
-    filament_usages_str: str = Form(..., alias="filament_usages"),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    # Handle time format conversion
-    actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
+    """Create a new product with plate-based or legacy filament usage"""
+    # Parse time string
+    total_seconds = parse_time_from_form(print_time)
+    print_time_hrs = total_seconds / 3600
     
-    saved_model_file_path: Optional[str] = None
-    if file and file.filename:
-        original_filename = file.filename
-        safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
-        file_extension = os.path.splitext(original_filename)[1].lower()
-        if file_extension not in ['.stl', '.3mf']:
-            raise HTTPException(status_code=400, detail="Invalid model file type. Only STL and 3MF are allowed.")
-        unique_filename = f"{safe_filename_base}_{uuid.uuid4().hex[:8]}{file_extension}"
+    # Determine if using plates or legacy
+    using_plates = plate_names is not None
+    
+    # Create product
+    db_product = models.Product(
+        sku=sku,
+        name=name,
+        print_time_hrs=print_time_hrs,
+        additional_parts_cost=additional_parts_cost,
+        license_id=license_id if license_id else None
+    )
+    
+    # Handle file upload if provided
+    if file:
+        if not file.filename.lower().endswith(('.stl', '.3mf')):
+            raise HTTPException(
+                status_code=400,
+                detail="Only STL and 3MF files are supported"
+            )
+        
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{sku}_{uuid.uuid4()}{file_extension}"
         file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+        
         try:
             with open(file_path, "wb") as buffer:
-                await file.seek(0)
                 shutil.copyfileobj(file.file, buffer)
-            saved_model_file_path = unique_filename
+            db_product.file_path = f"uploads/product_models/{unique_filename}"
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save model file: {str(e)}")
-        finally:
-            if file: await file.close()
-
-    try:
-        filament_usages_data = json.loads(filament_usages_str)
-        if not isinstance(filament_usages_data, list): raise ValueError("filament_usages should be a list")
-        for usage_item in filament_usages_data:
-            if not all(k in usage_item for k in ["filament_id", "grams_used"]):
-                raise ValueError("Each filament usage must have filament_id and grams_used")
-    except (json.JSONDecodeError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid filament_usages format: {str(e)}")
-
-    skl = _generate_sku(name, db)
-    db_product_data = {
-        "name": name, "sku": skl,
-        "print_time_hrs": actual_print_time_hrs,
-        "additional_parts_cost": additional_parts_cost or 0.0,
-        "license_id": license_id, "file_path": saved_model_file_path,
-        "filament_weight_g": 0.0,
-    }
-    db_product = models.Product(**db_product_data)
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to save file: {str(e)}"
+            )
+    
     db.add(db_product)
-    db.flush()
-
-    usages_to_add = []
-    for fu_data in filament_usages_data:
-        fila = db.get(models.Filament, fu_data["filament_id"])
-        if not fila: raise HTTPException(status_code=400, detail=f"Filament with id {fu_data['filament_id']} not found")
-        usages_to_add.append(models.FilamentUsage(product_id=db_product.id, filament_id=fila.id, grams_used=fu_data["grams_used"]))
-    db.add_all(usages_to_add)
+    db.flush()  # Get the product ID
+    
+    if using_plates:
+        # Parse plate data
+        try:
+            names = json.loads(plate_names) if plate_names else []
+            quantities = json.loads(plate_quantities) if plate_quantities else []
+            times = json.loads(plate_print_times) if plate_print_times else []
+            filament_ids_list = json.loads(plate_filament_ids) if plate_filament_ids else []
+            grams_list = json.loads(plate_grams_used) if plate_grams_used else []
+            
+            # Create plates
+            for i, name in enumerate(names):
+                plate_time_str = times[i] if i < len(times) else "00:00:00"
+                plate_seconds = parse_time_from_form(plate_time_str)
+                
+                db_plate = models.Plate(
+                    product_id=db_product.id,
+                    name=name,
+                    quantity=quantities[i] if i < len(quantities) else 1,
+                    print_time_hrs=plate_seconds / 3600
+                )
+                db.add(db_plate)
+                db.flush()
+                
+                # Add filament usages for this plate
+                plate_filament_ids = filament_ids_list[i] if i < len(filament_ids_list) else []
+                plate_grams = grams_list[i] if i < len(grams_list) else []
+                
+                for j, fid in enumerate(plate_filament_ids):
+                    if fid and j < len(plate_grams):
+                        usage = models.PlateFilamentUsage(
+                            plate_id=db_plate.id,
+                            filament_id=fid,
+                            grams_used=plate_grams[j]
+                        )
+                        db.add(usage)
+        except json.JSONDecodeError as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in plate data: {str(e)}")
+    else:
+        # Legacy single-product filament usage
+        if filament_ids and grams_used_list:
+            try:
+                filament_ids_parsed = json.loads(filament_ids)
+                grams_used_parsed = json.loads(grams_used_list)
+                
+                for fid, grams in zip(filament_ids_parsed, grams_used_parsed):
+                    if fid and grams:
+                        usage = models.FilamentUsage(
+                            product_id=db_product.id,
+                            filament_id=fid,
+                            grams_used=grams
+                        )
+                        db.add(usage)
+            except json.JSONDecodeError as e:
+                db.rollback()
+                raise HTTPException(status_code=400, detail=f"Invalid JSON in filament data: {str(e)}")
+    
     db.commit()
     db.refresh(db_product)
-    
-    return schemas.ProductRead.model_validate(db_product)
+    return db_product
 
 
 @app.get("/products", response_model=list[schemas.ProductRead])
-def list_products(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    products_db = db.query(models.Product).options(
+def list_products(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """List all products (any authenticated user can view products)"""
+    products = db.query(models.Product).offset(skip).limit(limit).all()
+    return products
+
+
+@app.get("/products/{product_id}", response_model=schemas.ProductRead)
+def get_product(product_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    product = db.query(models.Product).options(
         joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament),
         joinedload(models.Product.plates).joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
-    ).all()
-    return [schemas.ProductRead.model_validate(p) for p in products_db]
-
-
-@app.get("/products/{product_id}/cop", response_model=float)
-def get_product_cop(product_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    product = db.get(models.Product, product_id)
+    ).filter(models.Product.id == product_id).first()
+    
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return product.cop
+    return product
 
 
 @app.patch("/products/{product_id}", response_model=schemas.ProductRead)
-async def update_product_endpoint(
+def update_product(product_id: int, product_update: schemas.ProductUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    product = db.get(models.Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    update_data = product_update.model_dump(exclude_unset=True)
+    
+    # Handle print_time conversion if provided
+    if "print_time" in update_data and update_data["print_time"]:
+        total_seconds = parse_time_from_form(update_data["print_time"])
+        update_data["print_time_hrs"] = total_seconds / 3600
+        del update_data["print_time"]
+    
+    for field, value in update_data.items():
+        setattr(product, field, value)
+    
+    db.commit()
+    db.refresh(product)
+    return product
+
+
+@app.put("/products/{product_id}", response_model=schemas.ProductRead)
+def update_product_full(
     product_id: int,
-    name: Optional[str] = Form(None),
-    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
-    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
-    additional_parts_cost: Optional[float] = Form(None),
-    license_id: Optional[str] = Form(None),
-    filament_usages_str: Optional[str] = Form(None, alias="filament_usages"),
+    sku: str = Form(...),
+    name: str = Form(...),
+    print_time: str = Form(...),  # HH:MM:SS or MM:SS format
+    # plate data
+    plate_names: str = Form(None),  # JSON string of plate names
+    plate_quantities: str = Form(None),  # JSON string of plate quantities
+    plate_print_times: str = Form(None),  # JSON string of plate print times
+    plate_filament_ids: str = Form(None),  # JSON string of arrays of filament IDs per plate
+    plate_grams_used: str = Form(None),  # JSON string of arrays of grams used per plate
+    # legacy data (backwards compatibility)
+    filament_ids: str = Form(None),  # JSON string of filament IDs for legacy single product
+    grams_used_list: str = Form(None),  # JSON string of grams used for legacy single product
+    additional_parts_cost: float = Form(0.0),
+    license_id: Optional[int] = Form(None),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    product = db.get(models.Product, product_id)
-    if not product:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
-
-    update_data_dict = {}
-    if name is not None: update_data_dict["name"] = name
-    if additional_parts_cost is not None: update_data_dict["additional_parts_cost"] = additional_parts_cost
+    """Update a product with its filament usage"""
+    # Get existing product
+    db_product = db.get(models.Product, product_id)
+    if not db_product:
+        raise HTTPException(status_code=404, detail="Product not found")
     
-    # Handle time format conversion (same as create endpoint)
-    if print_time is not None or print_time_hrs is not None:
-        actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
-        update_data_dict["print_time_hrs"] = actual_print_time_hrs
+    # Parse time string
+    total_seconds = parse_time_from_form(print_time)
+    print_time_hrs = total_seconds / 3600
     
-    if license_id is not None:
-        if license_id == "":
-            update_data_dict["license_id"] = None
-        else:
-            try:
-                update_data_dict["license_id"] = int(license_id)
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid license_id format")
-
-    for key, value in update_data_dict.items():
-        setattr(product, key, value)
-
-    if file and file.filename:
-        if product.file_path:
-            old_file_path = os.path.join(UPLOAD_DIRECTORY, product.file_path)
-            if os.path.exists(old_file_path):
-                try: os.remove(old_file_path)
-                except OSError as e: logger.error(f"Error deleting old model file {old_file_path}: {e}")
+    # Determine if using plates or legacy
+    using_plates = plate_names is not None
+    
+    # Update basic product info
+    db_product.sku = sku
+    db_product.name = name
+    db_product.print_time_hrs = print_time_hrs
+    db_product.additional_parts_cost = additional_parts_cost
+    db_product.license_id = license_id if license_id else None
+    
+    # Handle file upload if provided
+    if file:
+        if not file.filename.lower().endswith(('.stl', '.3mf')):
+            raise HTTPException(
+                status_code=400,
+                detail="Only STL and 3MF files are supported"
+            )
         
-        original_filename = file.filename
-        safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
-        file_extension = os.path.splitext(original_filename)[1].lower()
-        if file_extension not in ['.stl', '.3mf']:
-            raise HTTPException(status_code=400, detail="Invalid model file type.")
-        unique_filename = f"{safe_filename_base}_{uuid.uuid4().hex[:8]}{file_extension}"
-        new_file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"{sku}_{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
+        
         try:
-            with open(new_file_path, "wb") as buffer:
-                await file.seek(0)
+            with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
-            product.file_path = unique_filename
+            db_product.file_path = f"uploads/product_models/{unique_filename}"
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save new model file: {str(e)}")
-        finally:
-            if file: await file.close()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to save file: {str(e)}"
+            )
     
-    if filament_usages_str is not None:
+    if using_plates:
+        # Delete existing plates and their filament usages (cascade)
+        db.query(models.Plate).filter(models.Plate.product_id == product_id).delete()
+        
+        # Parse and create new plates
         try:
-            filament_usages_data = json.loads(filament_usages_str)
-            if not isinstance(filament_usages_data, list): raise ValueError("filament_usages list expected")
-            for usage_item in filament_usages_data:
-                if not all(k in usage_item for k in ["filament_id", "grams_used"]):
-                    raise ValueError("Each filament usage needs filament_id and grams_used")
+            names = json.loads(plate_names) if plate_names else []
+            quantities = json.loads(plate_quantities) if plate_quantities else []
+            times = json.loads(plate_print_times) if plate_print_times else []
+            filament_ids_list = json.loads(plate_filament_ids) if plate_filament_ids else []
+            grams_list = json.loads(plate_grams_used) if plate_grams_used else []
             
-            db.query(models.FilamentUsage).filter(models.FilamentUsage.product_id == product_id).delete()
-            new_usages = []
-            for fu_data in filament_usages_data:
-                fila = db.get(models.Filament, fu_data["filament_id"])
-                if not fila: raise HTTPException(status_code=400, detail=f"Filament id {fu_data['filament_id']} not found.")
-                new_usages.append(models.FilamentUsage(product_id=product.id, filament_id=fila.id, grams_used=fu_data["grams_used"]))
-            db.add_all(new_usages)
-        except (json.JSONDecodeError, ValueError) as e:
-            raise HTTPException(status_code=400, detail=f"Invalid filament_usages: {str(e)}")
-
+            for i, name in enumerate(names):
+                plate_time_str = times[i] if i < len(times) else "00:00:00"
+                plate_seconds = parse_time_from_form(plate_time_str)
+                
+                db_plate = models.Plate(
+                    product_id=db_product.id,
+                    name=name,
+                    quantity=quantities[i] if i < len(quantities) else 1,
+                    print_time_hrs=plate_seconds / 3600
+                )
+                db.add(db_plate)
+                db.flush()
+                
+                # Add filament usages for this plate
+                plate_filament_ids = filament_ids_list[i] if i < len(filament_ids_list) else []
+                plate_grams = grams_list[i] if i < len(grams_list) else []
+                
+                for j, fid in enumerate(plate_filament_ids):
+                    if fid and j < len(plate_grams):
+                        usage = models.PlateFilamentUsage(
+                            plate_id=db_plate.id,
+                            filament_id=fid,
+                            grams_used=plate_grams[j]
+                        )
+                        db.add(usage)
+        except json.JSONDecodeError as e:
+            db.rollback()
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in plate data: {str(e)}")
+    else:
+        # Legacy: Delete existing filament usages and create new ones
+        db.query(models.FilamentUsage).filter(models.FilamentUsage.product_id == product_id).delete()
+        
+        if filament_ids and grams_used_list:
+            try:
+                filament_ids_parsed = json.loads(filament_ids)
+                grams_used_parsed = json.loads(grams_used_list)
+                
+                for fid, grams in zip(filament_ids_parsed, grams_used_parsed):
+                    if fid and grams:
+                        usage = models.FilamentUsage(
+                            product_id=db_product.id,
+                            filament_id=fid,
+                            grams_used=grams
+                        )
+                        db.add(usage)
+            except json.JSONDecodeError as e:
+                db.rollback()
+                raise HTTPException(status_code=400, detail=f"Invalid JSON in filament data: {str(e)}")
+    
     db.commit()
-    db.refresh(product)
-    return schemas.ProductRead.model_validate(product)
+    db.refresh(db_product)
+    return db_product
 
 
 @app.delete("/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(product_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Delete a product and all its associated data"""
+    """Delete a product (any authenticated user can delete products)"""
     product = db.get(models.Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Delete all print job products that reference this product
-    # This will allow deletion of products even if they're used in print jobs
-    print_job_products = db.query(models.PrintJobProduct).filter(models.PrintJobProduct.product_id == product_id).all()
-    for pjp in print_job_products:
-        db.delete(pjp)
+    # Check if product is used in any print jobs
+    product_in_jobs = db.query(models.PrintJobProduct).filter(
+        models.PrintJobProduct.product_id == product_id
+    ).first()
     
-    # Commit the deletion of print job products before deleting the product
-    db.commit()
+    if product_in_jobs:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete product that has been used in print jobs. Archive it instead."
+        )
     
-    # Delete model file if exists
+    # Delete associated file if exists
     if product.file_path:
-        file_path = os.path.join(UPLOAD_DIRECTORY, product.file_path)
-        if os.path.exists(file_path):
+        file_full_path = os.path.join(os.getcwd(), product.file_path)
+        if os.path.exists(file_full_path):
             try:
-                os.remove(file_path)
-            except OSError as e:
-                logger.error(f"Error deleting product file {file_path}: {e}")
+                os.remove(file_full_path)
+            except Exception as e:
+                logger.warning(f"Failed to delete file {file_full_path}: {str(e)}")
     
-    # Delete plates and their files
-    plates = db.query(models.Plate).filter(models.Plate.product_id == product_id).all()
-    for plate in plates:
-        # Delete plate model file if exists
-        if plate.file_path:
-            plate_file_path = os.path.join(UPLOAD_DIRECTORY, plate.file_path)
-            if os.path.exists(plate_file_path):
-                try:
-                    os.remove(plate_file_path)
-                except OSError as e:
-                    logger.error(f"Error deleting plate file {plate_file_path}: {e}")
-        
-        # Delete plate G-code file if exists
-        if plate.gcode_path:
-            gcode_file_path = os.path.join(UPLOAD_DIRECTORY, plate.gcode_path)
-            if os.path.exists(gcode_file_path):
-                try:
-                    os.remove(gcode_file_path)
-                except OSError as e:
-                    logger.error(f"Error deleting G-code file {gcode_file_path}: {e}")
-    
-    # Delete the product (cascading will handle FilamentUsage, Plates, and PlateFilamentUsage)
     db.delete(product)
     db.commit()
     return
@@ -873,128 +1307,65 @@ def delete_product(product_id: int, db: Session = Depends(get_db), current_user:
 
 # ---------- Plates ---------- #
 
-@app.post("/products/{product_id}/plates", response_model=schemas.PlateRead)
-async def create_plate(
+@app.post("/products/{product_id}/plates", response_model=schemas.PlateRead, status_code=status.HTTP_201_CREATED)
+def create_plate(
     product_id: int,
-    name: str = Form(...),
-    quantity: int = Form(...),
-    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
-    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
-    filament_usages_str: str = Form(..., alias="filament_usages"),
-    file: Optional[UploadFile] = File(None),
-    gcode_file: Optional[UploadFile] = File(None),
+    plate: schemas.PlateCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    """Create a new plate for a product"""
     # Verify product exists
     product = db.get(models.Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Handle time format conversion
-    actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
-    
-    # Handle file upload
-    saved_file_path: Optional[str] = None
-    if file and file.filename:
-        original_filename = file.filename
-        safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
-        file_extension = os.path.splitext(original_filename)[1].lower()
-        if file_extension not in ['.stl', '.3mf']:
-            raise HTTPException(status_code=400, detail="Invalid model file type. Only STL and 3MF are allowed.")
-        unique_filename = f"plate_{safe_filename_base}_{uuid.uuid4().hex[:8]}{file_extension}"
-        file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
-        try:
-            with open(file_path, "wb") as buffer:
-                await file.seek(0)
-                shutil.copyfileobj(file.file, buffer)
-            saved_file_path = unique_filename
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save model file: {str(e)}")
-        finally:
-            if file: await file.close()
-
-    # Handle G-code file upload
-    saved_gcode_path: Optional[str] = None
-    if gcode_file and gcode_file.filename:
-        original_gcode_filename = gcode_file.filename
-        safe_gcode_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_gcode_filename)[0])
-        gcode_extension = os.path.splitext(original_gcode_filename)[1].lower()
-        if gcode_extension not in ['.gcode', '.g', '.gc']:
-            raise HTTPException(status_code=400, detail="Invalid G-code file type. Only .gcode, .g, and .gc are allowed.")
-        unique_gcode_filename = f"gcode_{safe_gcode_base}_{uuid.uuid4().hex[:8]}{gcode_extension}"
-        gcode_file_path = os.path.join(UPLOAD_DIRECTORY, unique_gcode_filename)
-        try:
-            with open(gcode_file_path, "wb") as buffer:
-                await gcode_file.seek(0)
-                shutil.copyfileobj(gcode_file.file, buffer)
-            saved_gcode_path = unique_gcode_filename
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save G-code file: {str(e)}")
-        finally:
-            if gcode_file: await gcode_file.close()
-
-    # Parse filament usages
-    try:
-        filament_usages_data = json.loads(filament_usages_str)
-        if not isinstance(filament_usages_data, list):
-            raise ValueError("filament_usages should be a list")
-        for usage_item in filament_usages_data:
-            if not all(k in usage_item for k in ["filament_id", "grams_used"]):
-                raise ValueError("Each filament usage must have filament_id and grams_used")
-    except (json.JSONDecodeError, ValueError) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid filament_usages format: {str(e)}")
-
     # Create plate
     db_plate = models.Plate(
         product_id=product_id,
-        name=name,
-        quantity=quantity,
-        print_time_hrs=actual_print_time_hrs,
-        file_path=saved_file_path,
-        gcode_path=saved_gcode_path
+        name=plate.name,
+        quantity=plate.quantity,
+        print_time_hrs=plate.print_time_hrs,
+        file_path=plate.file_path,
+        gcode_path=plate.gcode_path
     )
     db.add(db_plate)
     db.flush()
-
-    # Create filament usages for the plate
-    usages_to_add = []
-    for fu_data in filament_usages_data:
-        filament = db.get(models.Filament, fu_data["filament_id"])
-        if not filament:
-            raise HTTPException(status_code=400, detail=f"Filament with id {fu_data['filament_id']} not found")
-        usages_to_add.append(models.PlateFilamentUsage(
-            plate_id=db_plate.id,
-            filament_id=filament.id,
-            grams_used=fu_data["grams_used"]
-        ))
     
-    db.add_all(usages_to_add)
+    # Add filament usages
+    if plate.filament_usages:
+        for usage in plate.filament_usages:
+            db_usage = models.PlateFilamentUsage(
+                plate_id=db_plate.id,
+                filament_id=usage.filament_id,
+                grams_used=usage.grams_used
+            )
+            db.add(db_usage)
+    
     db.commit()
-    
-    # Reload the plate with all relationships
-    db_plate = db.query(models.Plate).filter(models.Plate.id == db_plate.id)\
-                 .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
-                 .first()
-    
-    return schemas.PlateRead.model_validate(db_plate)
+    db.refresh(db_plate)
+    return db_plate
 
 
-@app.get("/products/{product_id}/plates", response_model=list[schemas.PlateRead])
+@app.get("/products/{product_id}/plates", response_model=List[schemas.PlateRead])
 def list_plates(
     product_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    """List all plates for a product"""
+    # Verify product exists
     product = db.get(models.Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    plates = db.query(models.Plate).filter(models.Plate.product_id == product_id)\
-               .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
-               .all()
+    plates = db.query(models.Plate).filter(
+        models.Plate.product_id == product_id
+    ).options(
+        joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
+    ).all()
     
-    return [schemas.PlateRead.model_validate(plate) for plate in plates]
+    return plates
 
 
 @app.get("/plates/{plate_id}", response_model=schemas.PlateRead)
@@ -1003,570 +1374,489 @@ def get_plate(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    plate = db.query(models.Plate).filter(models.Plate.id == plate_id)\
-              .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
-              .first()
+    """Get a specific plate"""
+    plate = db.query(models.Plate).options(
+        joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
+    ).filter(models.Plate.id == plate_id).first()
     
     if not plate:
         raise HTTPException(status_code=404, detail="Plate not found")
     
-    return schemas.PlateRead.model_validate(plate)
+    return plate
 
 
-@app.patch("/plates/{plate_id}", response_model=schemas.PlateRead)
-async def update_plate(
+@app.put("/plates/{plate_id}", response_model=schemas.PlateRead)
+def update_plate(
     plate_id: int,
-    name: Optional[str] = Form(None),
-    quantity: Optional[int] = Form(None),
-    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
-    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
-    filament_usages_str: Optional[str] = Form(None, alias="filament_usages"),
-    file: Optional[UploadFile] = File(None),
-    gcode_file: Optional[UploadFile] = File(None),
+    plate_update: schemas.PlateUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    plate = db.get(models.Plate, plate_id)
-    if not plate:
+    """Update a plate"""
+    db_plate = db.get(models.Plate, plate_id)
+    if not db_plate:
         raise HTTPException(status_code=404, detail="Plate not found")
     
-    # Handle time format conversion (optional for updates)
-    actual_print_time_hrs = None
-    if print_time is not None or print_time_hrs is not None:
-        actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
-
     # Update basic fields
-    if name is not None:
-        plate.name = name
-    if quantity is not None:
-        plate.quantity = quantity
-    if actual_print_time_hrs is not None:
-        plate.print_time_hrs = actual_print_time_hrs
-
-    # Handle file update
-    if file and file.filename:
-        # Remove old file if exists
-        if plate.file_path:
-            old_file_path = os.path.join(UPLOAD_DIRECTORY, plate.file_path)
-            if os.path.exists(old_file_path):
-                try:
-                    os.remove(old_file_path)
-                except OSError as e:
-                    logger.error(f"Error deleting old plate file {old_file_path}: {e}")
-        
-        # Save new file
-        original_filename = file.filename
-        safe_filename_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_filename)[0])
-        file_extension = os.path.splitext(original_filename)[1].lower()
-        if file_extension not in ['.stl', '.3mf']:
-            raise HTTPException(status_code=400, detail="Invalid model file type.")
-        unique_filename = f"plate_{safe_filename_base}_{uuid.uuid4().hex[:8]}{file_extension}"
-        new_file_path = os.path.join(UPLOAD_DIRECTORY, unique_filename)
-        try:
-            with open(new_file_path, "wb") as buffer:
-                await file.seek(0)
-                shutil.copyfileobj(file.file, buffer)
-            plate.file_path = unique_filename
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save new model file: {str(e)}")
-        finally:
-            await file.close()
-
-    # Handle G-code file update
-    if gcode_file and gcode_file.filename:
-        # Remove old G-code file if exists
-        if plate.gcode_path:
-            old_gcode_path = os.path.join(UPLOAD_DIRECTORY, plate.gcode_path)
-            if os.path.exists(old_gcode_path):
-                try:
-                    os.remove(old_gcode_path)
-                except OSError as e:
-                    logger.error(f"Error deleting old G-code file {old_gcode_path}: {e}")
-        
-        # Save new G-code file
-        original_gcode_filename = gcode_file.filename
-        safe_gcode_base = "".join(c if c.isalnum() or c in ('-', '_') else '_' for c in os.path.splitext(original_gcode_filename)[0])
-        gcode_extension = os.path.splitext(original_gcode_filename)[1].lower()
-        if gcode_extension not in ['.gcode', '.g', '.gc']:
-            raise HTTPException(status_code=400, detail="Invalid G-code file type. Only .gcode, .g, and .gc are allowed.")
-        unique_gcode_filename = f"gcode_{safe_gcode_base}_{uuid.uuid4().hex[:8]}{gcode_extension}"
-        new_gcode_path = os.path.join(UPLOAD_DIRECTORY, unique_gcode_filename)
-        try:
-            with open(new_gcode_path, "wb") as buffer:
-                await gcode_file.seek(0)
-                shutil.copyfileobj(gcode_file.file, buffer)
-            plate.gcode_path = unique_gcode_filename
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not save new G-code file: {str(e)}")
-        finally:
-            await gcode_file.close()
-
+    update_data = plate_update.model_dump(exclude={'filament_usages'}, exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(db_plate, field, value)
+    
     # Update filament usages if provided
-    if filament_usages_str is not None:
-        try:
-            filament_usages_data = json.loads(filament_usages_str)
-            if not isinstance(filament_usages_data, list):
-                raise ValueError("filament_usages should be a list")
-            for usage_item in filament_usages_data:
-                if not all(k in usage_item for k in ["filament_id", "grams_used"]):
-                    raise ValueError("Each filament usage needs filament_id and grams_used")
-            
-            # Delete existing usages and create new ones
-            db.query(models.PlateFilamentUsage).filter(models.PlateFilamentUsage.plate_id == plate_id).delete()
-            new_usages = []
-            for fu_data in filament_usages_data:
-                filament = db.get(models.Filament, fu_data["filament_id"])
-                if not filament:
-                    raise HTTPException(status_code=400, detail=f"Filament id {fu_data['filament_id']} not found.")
-                new_usages.append(models.PlateFilamentUsage(
-                    plate_id=plate.id,
-                    filament_id=filament.id,
-                    grams_used=fu_data["grams_used"]
-                ))
-            db.add_all(new_usages)
-        except (json.JSONDecodeError, ValueError) as e:
-            raise HTTPException(status_code=400, detail=f"Invalid filament_usages: {str(e)}")
-
+    if plate_update.filament_usages is not None:
+        # Delete existing usages
+        db.query(models.PlateFilamentUsage).filter(
+            models.PlateFilamentUsage.plate_id == plate_id
+        ).delete()
+        
+        # Add new usages
+        for usage in plate_update.filament_usages:
+            db_usage = models.PlateFilamentUsage(
+                plate_id=plate_id,
+                filament_id=usage.filament_id,
+                grams_used=usage.grams_used
+            )
+            db.add(db_usage)
+    
     db.commit()
-    
-    # Reload the plate with all relationships
-    plate = db.query(models.Plate).filter(models.Plate.id == plate_id)\
-              .options(joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament))\
-              .first()
-    
-    return schemas.PlateRead.model_validate(plate)
+    db.refresh(db_plate)
+    return db_plate
 
 
-@app.delete("/plates/{plate_id}")
+@app.delete("/plates/{plate_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_plate(
     plate_id: int,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
+    """Delete a plate"""
     plate = db.get(models.Plate, plate_id)
     if not plate:
         raise HTTPException(status_code=404, detail="Plate not found")
     
-    # Check if this is the last plate for the product
-    plate_count = db.query(models.Plate).filter(models.Plate.product_id == plate.product_id).count()
-    if plate_count <= 1:
-        raise HTTPException(status_code=400, detail="Cannot delete the last plate. Products must have at least one plate.")
-    
-    # Remove model file if exists
-    if plate.file_path:
-        file_path = os.path.join(UPLOAD_DIRECTORY, plate.file_path)
-        if os.path.exists(file_path):
-            try:
-                os.remove(file_path)
-            except OSError as e:
-                logger.error(f"Error deleting plate file {file_path}: {e}")
-    
-    # Remove G-code file if exists
-    if plate.gcode_path:
-        gcode_path = os.path.join(UPLOAD_DIRECTORY, plate.gcode_path)
-        if os.path.exists(gcode_path):
-            try:
-                os.remove(gcode_path)
-            except OSError as e:
-                logger.error(f"Error deleting G-code file {gcode_path}: {e}")
+    # Delete associated files if they exist
+    for file_path in [plate.file_path, plate.gcode_path]:
+        if file_path:
+            full_path = os.path.join(os.getcwd(), file_path)
+            if os.path.exists(full_path):
+                try:
+                    os.remove(full_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete file {full_path}: {str(e)}")
     
     db.delete(plate)
     db.commit()
+    return
+
+
+@app.post("/plates/{plate_id}/upload/{file_type}", response_model=schemas.PlateRead)
+async def upload_plate_file(
+    plate_id: int,
+    file_type: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Upload a file for a plate (stl/3mf or gcode)"""
+    # Validate file type
+    if file_type not in ["model", "gcode"]:
+        raise HTTPException(status_code=400, detail="file_type must be 'model' or 'gcode'")
     
-    return {"message": "Plate deleted successfully"}
+    # Get the plate
+    db_plate = db.get(models.Plate, plate_id)
+    if not db_plate:
+        raise HTTPException(status_code=404, detail="Plate not found")
+    
+    # Get the product for SKU
+    product = db.get(models.Product, db_plate.product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    # Validate file extension
+    if file_type == "model":
+        if not file.filename.lower().endswith(('.stl', '.3mf')):
+            raise HTTPException(
+                status_code=400,
+                detail="Only STL and 3MF files are supported for models"
+            )
+        upload_dir = "uploads/plate_models"
+    else:  # gcode
+        if not file.filename.lower().endswith('.gcode'):
+            raise HTTPException(
+                status_code=400,
+                detail="Only GCODE files are supported"
+            )
+        upload_dir = "uploads/plate_gcodes"
+    
+    # Create directory if it doesn't exist
+    full_upload_dir = os.path.join(os.getcwd(), upload_dir)
+    os.makedirs(full_upload_dir, exist_ok=True)
+    
+    # Save the file
+    file_extension = os.path.splitext(file.filename)[1]
+    unique_filename = f"{product.sku}_plate_{plate_id}_{uuid.uuid4()}{file_extension}"
+    file_path = os.path.join(full_upload_dir, unique_filename)
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to save file: {str(e)}"
+        )
+    
+    # Update plate with file path
+    relative_path = f"{upload_dir}/{unique_filename}"
+    if file_type == "model":
+        # Delete old file if exists
+        if db_plate.file_path:
+            old_path = os.path.join(os.getcwd(), db_plate.file_path)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete old file {old_path}: {str(e)}")
+        db_plate.file_path = relative_path
+    else:  # gcode
+        # Delete old file if exists
+        if db_plate.gcode_path:
+            old_path = os.path.join(os.getcwd(), db_plate.gcode_path)
+            if os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception as e:
+                    logger.warning(f"Failed to delete old file {old_path}: {str(e)}")
+        db_plate.gcode_path = relative_path
+    
+    db.commit()
+    db.refresh(db_plate)
+    
+    return db_plate
 
 
 # ---------- Subscriptions ---------- #
 
-@app.post("/subscriptions", response_model=schemas.SubscriptionRead)
-def create_subscription(sub: schemas.SubscriptionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    db_sub = models.Subscription(**sub.model_dump())
-    db.add(db_sub)
+@app.post("/subscriptions", response_model=schemas.SubscriptionRead, status_code=status.HTTP_201_CREATED)
+def create_subscription(subscription: schemas.SubscriptionCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Create a new subscription/license (any authenticated user can create subscriptions)"""
+    db_subscription = models.Subscription(**subscription.model_dump())
+    db.add(db_subscription)
     db.commit()
-    db.refresh(db_sub)
-    return db_sub
+    db.refresh(db_subscription)
+    return db_subscription
 
 
 @app.get("/subscriptions", response_model=list[schemas.SubscriptionRead])
-def list_subscriptions(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.Subscription).all()
+def list_subscriptions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """List all subscriptions (any authenticated user can view subscriptions)"""
+    subscriptions = db.query(models.Subscription).offset(skip).limit(limit).all()
+    return subscriptions
 
 
-@app.patch("/subscriptions/{subscription_id}", response_model=schemas.SubscriptionRead)
-def update_subscription(subscription_id: int, sub_update: schemas.SubscriptionUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
-    if not db_sub:
+@app.put("/subscriptions/{subscription_id}", response_model=schemas.SubscriptionRead)
+def update_subscription(
+    subscription_id: int,
+    subscription_update: schemas.SubscriptionUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Update a subscription"""
+    subscription = db.get(models.Subscription, subscription_id)
+    if not subscription:
         raise HTTPException(status_code=404, detail="Subscription not found")
     
-    update_data = sub_update.model_dump(exclude_unset=True)
+    update_data = subscription_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(db_sub, field, value)
+        setattr(subscription, field, value)
     
     db.commit()
-    db.refresh(db_sub)
-    return db_sub
+    db.refresh(subscription)
+    return subscription
 
 
 @app.delete("/subscriptions/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_subscription(subscription_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    db_sub = db.query(models.Subscription).filter(models.Subscription.id == subscription_id).first()
-    if not db_sub:
+    """Delete a subscription (any authenticated user can delete subscriptions)"""
+    subscription = db.get(models.Subscription, subscription_id)
+    if not subscription:
         raise HTTPException(status_code=404, detail="Subscription not found")
-    
-    db.delete(db_sub)
+    db.delete(subscription)
     db.commit()
+    return
 
 
 # ---------- Printer Profiles ---------- #
 
 @app.post("/printer_profiles", response_model=schemas.PrinterProfileRead, status_code=status.HTTP_201_CREATED)
-def create_printer_profile(profile: schemas.PrinterProfileCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    db_prof = models.PrinterProfile(**profile.model_dump())
-    db.add(db_prof)
+def create_printer_profile(printer: schemas.PrinterProfileCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Create a new printer profile (any authenticated user can create printer profiles)"""
+    db_printer = models.PrinterProfile(**printer.model_dump())
+    db.add(db_printer)
     db.commit()
-    db.refresh(db_prof)
-    return db_prof
+    db.refresh(db_printer)
+    return db_printer
 
 
 @app.get("/printer_profiles", response_model=list[schemas.PrinterProfileRead])
-def list_printer_profiles(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    return db.query(models.PrinterProfile).all()
+def list_printer_profiles(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """List all printer profiles (any authenticated user can view printer profiles)"""
+    printers = db.query(models.PrinterProfile).offset(skip).limit(limit).all()
+    return printers
 
 
-@app.delete("/printer_profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_printer_profile(profile_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    prof = db.get(models.PrinterProfile, profile_id)
-    if not prof:
-        raise HTTPException(status_code=404, detail="Profile not found")
+@app.get("/printer_profiles/{printer_id}", response_model=schemas.PrinterProfileRead)
+def get_printer_profile(printer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Get a specific printer profile"""
+    printer = db.get(models.PrinterProfile, printer_id)
+    if not printer:
+        raise HTTPException(status_code=404, detail="Printer profile not found")
+    return printer
+
+
+@app.put("/printer_profiles/{printer_id}", response_model=schemas.PrinterProfileRead)
+def update_printer_profile(
+    printer_id: int,
+    printer_update: schemas.PrinterProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Update a printer profile"""
+    printer = db.get(models.PrinterProfile, printer_id)
+    if not printer:
+        raise HTTPException(status_code=404, detail="Printer profile not found")
     
-    # No longer check if in use - printer data is stored in print jobs
-    db.delete(prof)
+    update_data = printer_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(printer, field, value)
+    
+    db.commit()
+    db.refresh(printer)
+    return printer
+
+
+@app.delete("/printer_profiles/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_printer_profile(printer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Delete a printer profile (any authenticated user can delete printer profiles)"""
+    printer = db.get(models.PrinterProfile, printer_id)
+    if not printer:
+        raise HTTPException(status_code=404, detail="Printer profile not found")
+    
+    # No constraint check needed - print jobs store printer data directly
+    db.delete(printer)
     db.commit()
     return
 
 
-@app.put("/printer_profiles/{profile_id}", response_model=schemas.PrinterProfileRead)
-def update_printer_profile(
-    profile_id: int,
-    profile_update: schemas.PrinterProfileCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    prof = db.get(models.PrinterProfile, profile_id)
-    if not prof:
-        raise HTTPException(status_code=404, detail="Profile not found")
-    
-    # Update fields
-    prof.name = profile_update.name
-    prof.manufacturer = profile_update.manufacturer
-    prof.model = profile_update.model
-    prof.price_eur = profile_update.price_eur
-    prof.expected_life_hours = profile_update.expected_life_hours
-    
-    db.commit()
-    db.refresh(prof)
-    return prof
+# ---------- Private helper functions for print jobs ---------- #
 
-
-# Utility SKU generator
-
-def _generate_sku(name: str, db: Session) -> str:
-    base = "".join(ch for ch in name.upper() if ch.isalnum())[:3]
-    from datetime import date
-    today = date.today().strftime("%y%m%d")
-    seq = 1
-    while True:
-        sku = f"{base}-{today}-{seq:03d}"
-        if not db.query(models.Product).filter_by(sku=sku).first():
-            return sku
-        seq += 1
-
-
-# Helper function to calculate COGS for a Print Job
 def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
-    total_cogs_for_job = 0.0
-
-    # 1. Filament Cost Component
-    current_filament_cost_total = 0.0
-    for job_product_item in job.products:
-        product_model = db.get(models.Product, job_product_item.product_id)
-        if not product_model:
-            logger.warning(f"Product ID {job_product_item.product_id} not found for job product item ID {job_product_item.id}")
-            continue
-
-        cost_of_filaments_for_one_product_unit = 0.0
-        
-        # Use plate-based calculation if plates exist, otherwise fall back to legacy
-        if product_model.plates:
-            # New plate-based calculation
-            for plate in product_model.plates:
-                plate_cost = 0.0
-                for plate_filament_usage in plate.filament_usages:
-                    if plate_filament_usage.filament:
-                        individual_filament_cost = (plate_filament_usage.grams_used / 1000.0) * plate_filament_usage.filament.price_per_kg
-                        plate_cost += individual_filament_cost
-                    else:
-                        logger.warning(f"Filament details not found for plate filament usage id {plate_filament_usage.id} in plate {plate.name}")
-                
-                # Multiply by plate quantity
-                cost_of_filaments_for_one_product_unit += plate_cost * plate.quantity
-        else:
-            # Legacy calculation for backward compatibility
-            if not product_model.filament_usages:
-                logger.debug(f"Product {product_model.name} has no filament usages or plates defined.")
-            for filament_usage in product_model.filament_usages:
-                if filament_usage.filament:
-                    individual_filament_cost = (filament_usage.grams_used / 1000.0) * filament_usage.filament.price_per_kg
-                    cost_of_filaments_for_one_product_unit += individual_filament_cost
-                else:
-                    logger.warning(f"Filament details not found for filament_usage id {filament_usage.id} in product {product_model.name}")
-            
-        line_filament_cost = cost_of_filaments_for_one_product_unit * job_product_item.items_qty
-        current_filament_cost_total += line_filament_cost
+    """Calculate COGS for a print job."""
+    total_cogs = 0.0
     
-    total_cogs_for_job += current_filament_cost_total
-
-    # 2. Printer Cost Component
-    current_printer_cost_total = 0.0
+    # Products cost
+    for pjp in job.products:
+        if pjp.product:
+            total_cogs += pjp.product.cop * pjp.items_qty
     
-    # Calculate total print time from all products in the job
-    total_job_print_hours = 0.0
-    for job_product_item in job.products:
-        product_model = db.get(models.Product, job_product_item.product_id)
-        if product_model:
-            product_print_time = product_model.total_print_time_hrs
-            total_job_print_hours += product_print_time * job_product_item.items_qty
-    
-    # Apply printer cost using stored printer data
-    if job.printers and len(job.printers) > 0:
-        job_printer_item = job.printers[0]  # Only one printer type per job now
-        
+    # Printers cost  
+    for pjp in job.printers:
         # Use stored printer data if available
-        if job_printer_item.printer_price_eur is not None and job_printer_item.printer_expected_life_hours:
-            if job_printer_item.printer_expected_life_hours > 0:
-                cost_per_hour_for_this_printer_type = job_printer_item.printer_price_eur / job_printer_item.printer_expected_life_hours
-                current_printer_cost_total = cost_per_hour_for_this_printer_type * \
-                                           total_job_print_hours * \
-                                           job_printer_item.printers_qty
-            else:
-                logger.warning(f"Printer {job_printer_item.printer_name} has 0 expected life hours. Cannot calculate cost.")
-        # Fallback to looking up printer profile for backward compatibility
-        elif job_printer_item.printer_profile_id:
-            printer_profile_model = db.get(models.PrinterProfile, job_printer_item.printer_profile_id)
-            if printer_profile_model and printer_profile_model.expected_life_hours > 0:
-                cost_per_hour_for_this_printer_type = printer_profile_model.price_eur / printer_profile_model.expected_life_hours
-                current_printer_cost_total = cost_per_hour_for_this_printer_type * \
-                                           total_job_print_hours * \
-                                           job_printer_item.printers_qty
-            elif printer_profile_model:
-                logger.warning(f"Printer Profile {printer_profile_model.name} has 0 expected life hours. Cannot calculate cost.")
-            else:
-                logger.warning(f"Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
-
-    total_cogs_for_job += current_printer_cost_total
-
-    # 3. Packaging Cost Component
-    packaging_c = job.packaging_cost_eur or 0.0
-    total_cogs_for_job += packaging_c
+        if pjp.printer_price_eur is not None and pjp.printer_expected_life_hours is not None:
+            if pjp.printer_expected_life_hours > 0:
+                hourly_cost = pjp.printer_price_eur / pjp.printer_expected_life_hours
+                total_cogs += hourly_cost * pjp.hours_each * pjp.printers_qty
+        elif pjp.printer_profile:
+            # Fallback to current printer profile if stored data not available
+            if pjp.printer_profile.expected_life_hours > 0:
+                hourly_cost = pjp.printer_profile.price_eur / pjp.printer_profile.expected_life_hours
+                total_cogs += hourly_cost * pjp.hours_each * pjp.printers_qty
     
-    final_cogs = round(total_cogs_for_job, 2)
-    return final_cogs
+    # Packaging
+    total_cogs += job.packaging_cost_eur
+    
+    return round(total_cogs, 2)
 
 
-# Helper function to deduct filament inventory for a print job
 def _deduct_filament_for_print_job(job: models.PrintJob, db: Session) -> dict:
     """
-    Deducts the filament used for a print job from the inventory.
-    Returns a dictionary with information about updated filaments.
+    Deduct filament inventory for all products in a print job.
+    Returns dict with success status and any errors.
     """
-    result = {
-        "success": True,
-        "updated_filaments": [],
-        "errors": []
-    }
+    errors = []
+    filament_deductions = {}  # Track total deductions per filament
     
-    # Track filament usage across all products in the job
-    filament_usage_by_id = {}  # {filament_id: total_kg_used}
-    
-    for job_product_item in job.products:
-        product = db.get(models.Product, job_product_item.product_id)
+    # Calculate total filament needed across all products
+    for pjp in job.products:
+        product = pjp.product
         if not product:
-            result["errors"].append(f"Product ID {job_product_item.product_id} not found")
             continue
+            
+        items_qty = pjp.items_qty
         
-        # Use plate-based calculation if plates exist, otherwise fall back to legacy
+        # Check if product uses plates (new system)
         if product.plates:
-            # New plate-based calculation
+            # Iterate through plates
             for plate in product.plates:
-                for plate_filament_usage in plate.filament_usages:
-                    filament_id = plate_filament_usage.filament_id
-                    # Convert grams to kg, multiply by plate quantity and number of items in this job
-                    kg_used = (plate_filament_usage.grams_used / 1000.0) * plate.quantity * job_product_item.items_qty
-                    
-                    if filament_id in filament_usage_by_id:
-                        filament_usage_by_id[filament_id] += kg_used
-                    else:
-                        filament_usage_by_id[filament_id] = kg_used
-        else:
-            # Legacy calculation for backward compatibility
-            for filament_usage in product.filament_usages:
-                filament_id = filament_usage.filament_id
-                # Convert grams to kg and multiply by number of items in this job
-                kg_used = (filament_usage.grams_used / 1000.0) * job_product_item.items_qty
+                plate_qty_per_product = plate.quantity
+                total_plate_qty = plate_qty_per_product * items_qty
                 
-                if filament_id in filament_usage_by_id:
-                    filament_usage_by_id[filament_id] += kg_used
-                else:
-                    filament_usage_by_id[filament_id] = kg_used
+                # Iterate through filaments used in this plate
+                for usage in plate.filament_usages:
+                    filament_id = usage.filament_id
+                    grams_per_plate = usage.grams_used
+                    total_grams = grams_per_plate * total_plate_qty
+                    
+                    if filament_id not in filament_deductions:
+                        filament_deductions[filament_id] = 0
+                    filament_deductions[filament_id] += total_grams
+        else:
+            # Legacy system - single product with multiple filaments
+            for usage in product.filament_usages:
+                filament_id = usage.filament_id
+                grams_per_item = usage.grams_used
+                total_grams = grams_per_item * items_qty
+                
+                if filament_id not in filament_deductions:
+                    filament_deductions[filament_id] = 0
+                filament_deductions[filament_id] += total_grams
     
-    # Now update each filament's inventory
-    for filament_id, kg_used in filament_usage_by_id.items():
+    # Check availability and deduct
+    for filament_id, total_grams_needed in filament_deductions.items():
         filament = db.get(models.Filament, filament_id)
         if not filament:
-            result["errors"].append(f"Filament ID {filament_id} not found")
+            errors.append(f"Filament ID {filament_id} not found")
             continue
             
-        # Check if we have enough inventory
-        if filament.total_qty_kg < kg_used:
-            result["errors"].append(f"Insufficient inventory for filament {filament.color} {filament.material} (ID: {filament_id}). " +
-                                   f"Required: {kg_used:.3f}kg, Available: {filament.total_qty_kg:.3f}kg")
-            result["success"] = False
-            continue
-            
-        # Update the inventory
-        old_qty = filament.total_qty_kg
-        filament.total_qty_kg = max(0, old_qty - kg_used)  # Ensure we don't go below zero
+        kg_needed = total_grams_needed / 1000.0
         
-        result["updated_filaments"].append({
-            "id": filament_id,
-            "color": filament.color,
-            "material": filament.material,
-            "previous_qty": old_qty,
-            "kg_used": kg_used,
-            "new_qty": filament.total_qty_kg
-        })
-    
-    return result
-
-
-# Helper function to return filament to inventory
-def _return_filament_to_inventory(job: models.PrintJob, db: Session) -> dict:
-    """
-    Returns the filament used by a print job back to inventory.
-    Used when updating or deleting a print job.
-    """
-    result = {
-        "success": True,
-        "updated_filaments": [],
-        "errors": []
-    }
-    
-    # Track filament usage across all products in the job
-    filament_usage_by_id = {}  # {filament_id: total_kg_used}
-    
-    for job_product_item in job.products:
-        product = db.get(models.Product, job_product_item.product_id)
-        if not product:
-            result["errors"].append(f"Product ID {job_product_item.product_id} not found")
-            continue
-        
-        # Use plate-based calculation if plates exist, otherwise fall back to legacy
-        if product.plates:
-            # New plate-based calculation
-            for plate in product.plates:
-                for plate_filament_usage in plate.filament_usages:
-                    filament_id = plate_filament_usage.filament_id
-                    # Convert grams to kg, multiply by plate quantity and number of items in this job
-                    kg_used = (plate_filament_usage.grams_used / 1000.0) * plate.quantity * job_product_item.items_qty
-                    
-                    if filament_id in filament_usage_by_id:
-                        filament_usage_by_id[filament_id] += kg_used
-                    else:
-                        filament_usage_by_id[filament_id] = kg_used
+        if filament.total_qty_kg < kg_needed:
+            errors.append(
+                f"{filament.color} {filament.brand} {filament.material}: "
+                f"Need {kg_needed:.2f}kg but only have {filament.total_qty_kg:.2f}kg"
+            )
         else:
-            # Legacy calculation for backward compatibility
-            for filament_usage in product.filament_usages:
-                filament_id = filament_usage.filament_id
-                # Convert grams to kg and multiply by number of items in this job
-                kg_used = (filament_usage.grams_used / 1000.0) * job_product_item.items_qty
-                
-                if filament_id in filament_usage_by_id:
-                    filament_usage_by_id[filament_id] += kg_used
-                else:
-                    filament_usage_by_id[filament_id] = kg_used
+            # Deduct inventory
+            filament.total_qty_kg -= kg_needed
     
-    # Now update each filament's inventory
-    for filament_id, kg_used in filament_usage_by_id.items():
-        filament = db.get(models.Filament, filament_id)
-        if not filament:
-            result["errors"].append(f"Filament ID {filament_id} not found")
+    if errors:
+        return {"success": False, "errors": errors}
+    
+    return {"success": True, "errors": []}
+
+
+def _return_filament_to_inventory(job: models.PrintJob, db: Session):
+    """
+    Return filament to inventory when a print job is deleted or modified.
+    This reverses the deduction made when the job was created.
+    """
+    filament_returns = {}  # Track total returns per filament
+    
+    # Calculate total filament to return across all products
+    for pjp in job.products:
+        product = pjp.product
+        if not product:
             continue
             
-        # Add the quantity back to inventory
-        old_qty = filament.total_qty_kg
-        filament.total_qty_kg = old_qty + kg_used
+        items_qty = pjp.items_qty
         
-        result["updated_filaments"].append({
-            "id": filament_id,
-            "color": filament.color,
-            "material": filament.material,
-            "previous_qty": old_qty,
-            "kg_returned": kg_used,
-            "new_qty": filament.total_qty_kg
-        })
+        # Check if product uses plates (new system)
+        if product.plates:
+            # Iterate through plates
+            for plate in product.plates:
+                plate_qty_per_product = plate.quantity
+                total_plate_qty = plate_qty_per_product * items_qty
+                
+                # Iterate through filaments used in this plate
+                for usage in plate.filament_usages:
+                    filament_id = usage.filament_id
+                    grams_per_plate = usage.grams_used
+                    total_grams = grams_per_plate * total_plate_qty
+                    
+                    if filament_id not in filament_returns:
+                        filament_returns[filament_id] = 0
+                    filament_returns[filament_id] += total_grams
+        else:
+            # Legacy system - single product with multiple filaments
+            for usage in product.filament_usages:
+                filament_id = usage.filament_id
+                grams_per_item = usage.grams_used
+                total_grams = grams_per_item * items_qty
+                
+                if filament_id not in filament_returns:
+                    filament_returns[filament_id] = 0
+                filament_returns[filament_id] += total_grams
     
-    return result
+    # Return filament to inventory
+    for filament_id, total_grams_return in filament_returns.items():
+        filament = db.get(models.Filament, filament_id)
+        if filament:
+            kg_return = total_grams_return / 1000.0
+            filament.total_qty_kg += kg_return
 
 
 # ---------- Print Jobs ---------- #
 
 @app.post("/print_jobs", response_model=schemas.PrintJobRead, status_code=status.HTTP_201_CREATED)
-def create_print_job(job_data: schemas.PrintJobCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    # Create print job object but don't commit yet
-    db_job = models.PrintJob(name=job_data.name, packaging_cost_eur=job_data.packaging_cost_eur, status=job_data.status)
+def create_print_job(job: schemas.PrintJobCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Create base job
+    db_job = models.PrintJob(
+        name=job.name,
+        packaging_cost_eur=job.packaging_cost_eur,
+        status=job.status
+    )
     db.add(db_job)
-    db.flush()  # This gives us the job ID but doesn't commit the transaction
+    db.flush()  # Get the ID without committing
     
-    # add associations
-    assoc_products = [models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty) for it in job_data.products]
-    
-    # Create printer associations with stored printer data
-    assoc_printers = []
-    for printer_item in job_data.printers:
-        # Look up printer profile to copy its data
-        printer_profile = db.get(models.PrinterProfile, printer_item.printer_profile_id)
-        if printer_profile:
-            printer_assoc = models.PrintJobPrinter(
-                print_job_id=db_job.id,
-                printer_profile_id=printer_item.printer_profile_id,
-                printers_qty=printer_item.printers_qty,
-                hours_each=printer_item.hours_each,
-                # Store printer data at time of job creation
-                printer_name=printer_profile.name,
-                printer_manufacturer=printer_profile.manufacturer,
-                printer_model=printer_profile.model,
-                printer_price_eur=printer_profile.price_eur,
-                printer_expected_life_hours=printer_profile.expected_life_hours
+    # Add products
+    for product_data in job.products:
+        # Verify product exists
+        product = db.get(models.Product, product_data.product_id)
+        if not product:
+            db.rollback()
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Product with ID {product_data.product_id} not found"
             )
-            assoc_printers.append(printer_assoc)
-        else:
-            # Handle case where printer profile doesn't exist
-            logger.warning(f"Printer profile {printer_item.printer_profile_id} not found when creating print job")
-            printer_assoc = models.PrintJobPrinter(
-                print_job_id=db_job.id,
-                printer_profile_id=printer_item.printer_profile_id,
-                printers_qty=printer_item.printers_qty,
-                hours_each=printer_item.hours_each
-            )
-            assoc_printers.append(printer_assoc)
+        
+        db_product_job = models.PrintJobProduct(
+            print_job_id=db_job.id,
+            product_id=product_data.product_id,
+            items_qty=product_data.items_qty
+        )
+        db.add(db_product_job)
     
-    db.add_all(assoc_products + assoc_printers)
-    db.flush()  # This makes the associations available without committing
+    # Add printers with stored printer data
+    for printer_data in job.printers:
+        db_printer_job = models.PrintJobPrinter(
+            print_job_id=db_job.id,
+            printer_profile_id=printer_data.printer_profile_id,
+            printers_qty=printer_data.printers_qty,
+            hours_each=printer_data.hours_each
+        )
+        
+        # Store printer data at time of job creation
+        if printer_data.printer_profile_id:
+            printer_profile = db.get(models.PrinterProfile, printer_data.printer_profile_id)
+            if printer_profile:
+                db_printer_job.printer_name = printer_profile.name
+                db_printer_job.printer_manufacturer = printer_profile.manufacturer
+                db_printer_job.printer_model = printer_profile.model
+                db_printer_job.printer_price_eur = printer_profile.price_eur
+                db_printer_job.printer_expected_life_hours = printer_profile.expected_life_hours
+        
+        db.add(db_printer_job)
     
-    # Check and deduct filament inventory
+    # Flush to ensure all relationships are established
+    db.flush()
+    
+    # Reload the job with all relationships
+    db.refresh(db_job)
+    
+    # Deduct filament inventory
     filament_result = _deduct_filament_for_print_job(db_job, db)
     if not filament_result["success"]:
-        # If we don't have enough inventory, abort the transaction and return error
+        # Roll back the transaction if insufficient inventory
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -1611,54 +1901,83 @@ def delete_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), cur
     ).filter(models.PrintJob.id == print_job_id).first()
     
     if not job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Print Job not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Print Job with ID {print_job_id} not found"
+        )
     
-    # Return used filament to inventory
+    # Return filament to inventory before deleting
     _return_filament_to_inventory(job, db)
     
-    # Delete the job
+    # Delete the job (cascades to PrintJobProduct and PrintJobPrinter)
     db.delete(job)
     db.commit()
     return
 
+@app.patch("/print_jobs/{print_job_id}/status", response_model=schemas.PrintJobRead)
+def update_print_job_status(print_job_id: uuid.UUID, status_update: schemas.PrintJobStatusUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Update the status of a print job."""
+    job = db.get(models.PrintJob, print_job_id)
+    if not job:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Print Job with ID {print_job_id} not found")
+    
+    job.status = status_update.status
+    db.commit()
+    db.refresh(job)
+    return job
+
 @app.patch("/print_jobs/{print_job_id}", response_model=schemas.PrintJobRead)
-def update_print_job(print_job_id: uuid.UUID, job_update_data: schemas.PrintJobUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    db_job = db.get(models.PrintJob, print_job_id)
+def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Update a print job."""
+    # Get the job with all relationships loaded
+    db_job = db.query(models.PrintJob).options(
+        joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
+        joinedload(models.PrintJob.printers)
+    ).filter(models.PrintJob.id == print_job_id).first()
+    
     if not db_job:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Print Job not found")
-
-    # Save original product associations for inventory adjustments
-    original_products = []
-    if "products" in job_update_data.model_dump(exclude_unset=True):
-        # Capture original product associations for inventory calculation
-        original_products = [
-            {"product_id": item.product_id, "items_qty": item.items_qty}
-            for item in db_job.products
-        ]
-
-    update_fields = job_update_data.model_dump(exclude_unset=True)
-
-    if "name" in update_fields:
-        db_job.name = update_fields["name"]
-    if "packaging_cost_eur" in update_fields:
-        db_job.packaging_cost_eur = update_fields["packaging_cost_eur"]
-    if "status" in update_fields:
-        db_job.status = update_fields["status"]
-
-    # If products array supplied, replace rows
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Print Job with ID {print_job_id} not found")
+    
+    # Store original products for inventory adjustment if needed
+    original_products = None
     new_products_data = None
+    
+    # Extract update data
+    update_fields = job_update.model_dump(exclude_unset=True)
+    
+    # Handle products update if provided
     if "products" in update_fields:
-        new_products_data = update_fields["products"]
-        # Delete old associations but don't commit yet
+        new_products_data = update_fields.pop("products")
+        # Store original state for inventory adjustment
+        original_products = [
+            {"product_id": pjp.product_id, "items_qty": pjp.items_qty}
+            for pjp in db_job.products
+        ]
+        
+        # Delete existing product associations
         db.query(models.PrintJobProduct).filter(models.PrintJobProduct.print_job_id == db_job.id).delete()
-        # Create new associations
-        db.add_all([
-            models.PrintJobProduct(print_job_id=db_job.id, product_id=it['product_id'], items_qty=it['items_qty'])
-            for it in update_fields["products"]
-        ])
-
-    # printers array
+        
+        # Add new product associations
+        for product_data in new_products_data:
+            # Verify product exists
+            product = db.get(models.Product, product_data["product_id"])
+            if not product:
+                db.rollback()
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Product with ID {product_data['product_id']} not found"
+                )
+            
+            db_product_job = models.PrintJobProduct(
+                print_job_id=db_job.id,
+                product_id=product_data["product_id"],
+                items_qty=product_data["items_qty"]
+            )
+            db.add(db_product_job)
+    
+    # Handle printers update if provided
     if "printers" in update_fields:
+        # Delete existing printer associations
         db.query(models.PrintJobPrinter).filter(models.PrintJobPrinter.print_job_id == db_job.id).delete()
         db.add_all([
             models.PrintJobPrinter(print_job_id=db_job.id, printer_profile_id=it['printer_profile_id'], printers_qty=it['printers_qty'], hours_each=it.get('hours_each', 0.0))
@@ -1708,4 +2027,173 @@ def update_print_job(print_job_id: uuid.UUID, job_update_data: schemas.PrintJobU
     db_job.calculated_cogs_eur = _calculate_print_job_cogs(db_job, db)
     db.commit()
     db.refresh(db_job)
-    return db_job 
+    return db_job
+
+
+# ---------- God Dashboard (God User Only) ---------- #
+
+@app.get("/god/stats", response_model=schemas.GodDashboardStats)
+def get_god_stats(db: Session = Depends(get_db), god_user: models.User = Depends(get_current_god_user)):
+    """Get statistics for god dashboard (god user only)"""
+    # Count super-admin users (including god user, since each super-admin represents an organization)
+    superadmin_count = db.query(models.User).filter(
+        models.User.is_superadmin == True
+    ).count()
+    
+    # Count total users
+    total_users = db.query(models.User).count()
+    
+    # Count team members (non-superadmin users)
+    team_members_count = db.query(models.User).filter(
+        models.User.is_superadmin == False
+    ).count()
+    
+    return schemas.GodDashboardStats(
+        total_superadmins=superadmin_count,
+        total_users=total_users,
+        total_team_members=team_members_count
+    )
+
+
+@app.get("/god/users", response_model=List[schemas.GodUserHierarchy])
+def get_god_users_hierarchy(db: Session = Depends(get_db), god_user: models.User = Depends(get_current_god_user)):
+    """Get hierarchical view of all users (god user only)"""
+    # Get all super-admin users (including god user)
+    superadmins = db.query(models.User).filter(
+        models.User.is_superadmin == True
+    ).all()
+    
+    result = []
+    
+    # For each super-admin, get their team members
+    for superadmin in superadmins:
+        # Get team members created by this super-admin
+        team_members = db.query(models.User).filter(
+            models.User.created_by_user_id == superadmin.id
+        ).all()
+        
+        # Create hierarchy entry
+        hierarchy = schemas.GodUserHierarchy(
+            superadmin=schemas.UserRead.model_validate(superadmin),
+            team_members=[schemas.UserRead.model_validate(member) for member in team_members]
+        )
+        result.append(hierarchy)
+    
+    return result
+
+
+@app.patch("/god/users/{user_id}", response_model=schemas.GodUserActionResponse)
+def god_update_user(
+    user_id: int,
+    user_update: schemas.GodUserUpdate,
+    db: Session = Depends(get_db),
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Update any user as god user"""
+    # Get the target user
+    target_user = db.get(models.User, user_id)
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found"
+        )
+    
+    # Security check: Prevent god user from demoting themselves
+    if target_user.id == god_user.id and user_update.is_superadmin == False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="God user cannot demote their own super-admin status"
+        )
+    
+    # Security check: Prevent god user from deactivating themselves
+    if target_user.id == god_user.id and user_update.is_active == False:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="God user cannot deactivate their own account"
+        )
+    
+    # Update user fields
+    update_data = user_update.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(target_user, field, value)
+    
+    # Special handling: If promoting to superadmin, ensure they remain active
+    if user_update.is_superadmin == True:
+        target_user.is_active = True
+    
+    target_user.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(target_user)
+    
+    return schemas.GodUserActionResponse(
+        message=f"User {target_user.name} updated successfully",
+        user=schemas.UserRead.model_validate(target_user)
+    )
+
+
+@app.delete("/god/users/{user_id}", response_model=schemas.GodUserActionResponse)
+def god_delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Delete any user as god user"""
+    # Get the target user
+    target_user = db.get(models.User, user_id)
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found"
+        )
+    
+    # Security check: Prevent god user from deleting themselves
+    if target_user.id == god_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="God user cannot delete their own account"
+        )
+    
+    # Security check: Prevent deleting other god users
+    if target_user.is_god_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete another god user"
+        )
+    
+    user_name = target_user.name
+    user_email = target_user.email
+    
+    # Delete the user
+    db.delete(target_user)
+    db.commit()
+    
+    return schemas.GodUserActionResponse(
+        message=f"User {user_name} ({user_email}) deleted successfully"
+    )
+
+
+@app.post("/god/users/{user_id}/reset-password", response_model=schemas.GodPasswordResetResponse)
+def god_reset_user_password(
+    user_id: int,
+    password_reset: schemas.GodPasswordReset,
+    db: Session = Depends(get_db),
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Reset any user's password as god user"""
+    # Get the target user
+    target_user = db.get(models.User, user_id)
+    if not target_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"User with ID {user_id} not found"
+        )
+    
+    # Hash the new password
+    target_user.hashed_password = get_password_hash(password_reset.new_password)
+    target_user.updated_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return schemas.GodPasswordResetResponse(
+        message=f"Password reset successfully for user {target_user.name}"
+    )

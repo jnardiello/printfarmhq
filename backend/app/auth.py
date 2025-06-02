@@ -106,7 +106,7 @@ def get_current_user(
     return user
 
 
-def create_user(email: str, password: str, name: str, db: Session, is_admin: bool = False, is_superadmin: bool = False) -> models.User:
+def create_user(email: str, password: str, name: str, db: Session, is_admin: bool = False, is_superadmin: bool = False, created_by_user_id: Optional[int] = None) -> models.User:
     """Create a new user"""
     # Check if user already exists
     if db.query(models.User).filter(models.User.email == email).first():
@@ -122,7 +122,8 @@ def create_user(email: str, password: str, name: str, db: Session, is_admin: boo
         name=name,
         hashed_password=hashed_password,
         is_admin=is_admin,
-        is_superadmin=is_superadmin
+        is_superadmin=is_superadmin,
+        created_by_user_id=created_by_user_id
     )
     db.add(user)
     db.commit()
@@ -150,8 +151,18 @@ def get_current_superadmin_user(current_user: models.User = Depends(get_current_
     return current_user
 
 
+def get_current_god_user(current_user: models.User = Depends(get_current_user)) -> models.User:
+    """Get current user and verify god user privileges"""
+    if not current_user.is_god_user:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions. God user access required."
+        )
+    return current_user
+
+
 def create_superadmin(email: str, password: str, name: str, db: Session) -> models.User:
-    """Create initial superadmin user during setup"""
+    """Create initial superadmin user during setup - this will be the god user"""
     # Check if any superadmin already exists
     existing_superadmin = db.query(models.User).filter(models.User.is_superadmin == True).first()
     if existing_superadmin:
@@ -167,16 +178,51 @@ def create_superadmin(email: str, password: str, name: str, db: Session) -> mode
             detail="Email already registered"
         )
     
-    # Create superadmin user
+    # Create god user (first superadmin)
     hashed_password = get_password_hash(password)
     superadmin = models.User(
         email=email,
         name=name,
         hashed_password=hashed_password,
         is_admin=True,
-        is_superadmin=True
+        is_superadmin=True,
+        is_god_user=True  # First superadmin is the god user
     )
     db.add(superadmin)
     db.commit()
     db.refresh(superadmin)
     return superadmin
+
+
+def create_tenant_superadmin(email: str, password: str, name: str, company_name: str, db: Session) -> models.User:
+    """Create a new tenant super-admin through self-registration"""
+    # Check if god user exists (system must be initialized first)
+    god_user = db.query(models.User).filter(models.User.is_god_user == True).first()
+    if not god_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="System not initialized. Please complete initial setup first."
+        )
+    
+    # Check if email is already in use
+    if db.query(models.User).filter(models.User.email == email).first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Create new super-admin for the tenant
+    hashed_password = get_password_hash(password)
+    tenant_admin = models.User(
+        email=email,
+        name=f"{name} ({company_name})",  # Include company name for clarity
+        hashed_password=hashed_password,
+        is_admin=True,
+        is_superadmin=True,
+        is_god_user=False,  # Not a god user
+        created_by_user_id=None  # Super-admins are not created by anyone
+    )
+    db.add(tenant_admin)
+    db.commit()
+    db.refresh(tenant_admin)
+    return tenant_admin
