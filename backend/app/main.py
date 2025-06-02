@@ -1361,16 +1361,31 @@ def _deduct_filament_for_print_job(job: models.PrintJob, db: Session) -> dict:
         if not product:
             result["errors"].append(f"Product ID {job_product_item.product_id} not found")
             continue
-            
-        for filament_usage in product.filament_usages:
-            filament_id = filament_usage.filament_id
-            # Convert grams to kg and multiply by number of items in this job
-            kg_used = (filament_usage.grams_used / 1000.0) * job_product_item.items_qty
-            
-            if filament_id in filament_usage_by_id:
-                filament_usage_by_id[filament_id] += kg_used
-            else:
-                filament_usage_by_id[filament_id] = kg_used
+        
+        # Use plate-based calculation if plates exist, otherwise fall back to legacy
+        if product.plates:
+            # New plate-based calculation
+            for plate in product.plates:
+                for plate_filament_usage in plate.filament_usages:
+                    filament_id = plate_filament_usage.filament_id
+                    # Convert grams to kg, multiply by plate quantity and number of items in this job
+                    kg_used = (plate_filament_usage.grams_used / 1000.0) * plate.quantity * job_product_item.items_qty
+                    
+                    if filament_id in filament_usage_by_id:
+                        filament_usage_by_id[filament_id] += kg_used
+                    else:
+                        filament_usage_by_id[filament_id] = kg_used
+        else:
+            # Legacy calculation for backward compatibility
+            for filament_usage in product.filament_usages:
+                filament_id = filament_usage.filament_id
+                # Convert grams to kg and multiply by number of items in this job
+                kg_used = (filament_usage.grams_used / 1000.0) * job_product_item.items_qty
+                
+                if filament_id in filament_usage_by_id:
+                    filament_usage_by_id[filament_id] += kg_used
+                else:
+                    filament_usage_by_id[filament_id] = kg_used
     
     # Now update each filament's inventory
     for filament_id, kg_used in filament_usage_by_id.items():
@@ -1422,16 +1437,31 @@ def _return_filament_to_inventory(job: models.PrintJob, db: Session) -> dict:
         if not product:
             result["errors"].append(f"Product ID {job_product_item.product_id} not found")
             continue
-            
-        for filament_usage in product.filament_usages:
-            filament_id = filament_usage.filament_id
-            # Convert grams to kg and multiply by number of items in this job
-            kg_used = (filament_usage.grams_used / 1000.0) * job_product_item.items_qty
-            
-            if filament_id in filament_usage_by_id:
-                filament_usage_by_id[filament_id] += kg_used
-            else:
-                filament_usage_by_id[filament_id] = kg_used
+        
+        # Use plate-based calculation if plates exist, otherwise fall back to legacy
+        if product.plates:
+            # New plate-based calculation
+            for plate in product.plates:
+                for plate_filament_usage in plate.filament_usages:
+                    filament_id = plate_filament_usage.filament_id
+                    # Convert grams to kg, multiply by plate quantity and number of items in this job
+                    kg_used = (plate_filament_usage.grams_used / 1000.0) * plate.quantity * job_product_item.items_qty
+                    
+                    if filament_id in filament_usage_by_id:
+                        filament_usage_by_id[filament_id] += kg_used
+                    else:
+                        filament_usage_by_id[filament_id] = kg_used
+        else:
+            # Legacy calculation for backward compatibility
+            for filament_usage in product.filament_usages:
+                filament_id = filament_usage.filament_id
+                # Convert grams to kg and multiply by number of items in this job
+                kg_used = (filament_usage.grams_used / 1000.0) * job_product_item.items_qty
+                
+                if filament_id in filament_usage_by_id:
+                    filament_usage_by_id[filament_id] += kg_used
+                else:
+                    filament_usage_by_id[filament_id] = kg_used
     
     # Now update each filament's inventory
     for filament_id, kg_used in filament_usage_by_id.items():
