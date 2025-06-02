@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock } from "lucide-react"
+import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock, Copy } from "lucide-react"
 import { motion } from "framer-motion"
 import { toast } from "@/components/ui/use-toast"
 
@@ -21,6 +21,9 @@ export function PrintersTab() {
   const [editingPrinter, setEditingPrinter] = useState<any>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isAddPrinterModalOpen, setIsAddPrinterModalOpen] = useState(false)
+  const [printerToClone, setPrinterToClone] = useState<any>(null)
+  const [isCloneModalOpen, setIsCloneModalOpen] = useState(false)
+  const [cloneName, setCloneName] = useState("")
 
   const [newPrinter, setNewPrinter] = useState({
     name: "",
@@ -110,6 +113,42 @@ export function PrintersTab() {
 
   const handleEditFormChange = (field: string, value: string) => {
     setEditForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleClonePrinter = (printer: any) => {
+    setPrinterToClone(printer)
+    setCloneName("")
+    setIsCloneModalOpen(true)
+  }
+
+  const handleConfirmClone = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!printerToClone || !cloneName.trim()) return
+
+    try {
+      await addPrinter({
+        name: cloneName,
+        manufacturer: printerToClone.manufacturer,
+        price_eur: printerToClone.price_eur,
+        expected_life_hours: printerToClone.expected_life_hours,
+      })
+
+      setIsCloneModalOpen(false)
+      setPrinterToClone(null)
+      setCloneName("")
+
+      toast({
+        title: "Success",
+        description: "Printer cloned successfully"
+      })
+    } catch (error) {
+      console.error('Failed to clone printer:', error)
+      toast({
+        title: "Error",
+        description: "Failed to clone printer. Please try again.",
+        variant: "destructive"
+      })
+    }
   }
 
   return (
@@ -321,7 +360,7 @@ export function PrintersTab() {
                       <TableHead>Cost €</TableHead>
                       <TableHead>Life hrs</TableHead>
                       <TableHead>Cost/hr €</TableHead>
-                      <TableHead className="text-center w-[120px]">Actions</TableHead>
+                      <TableHead className="text-center w-[150px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -353,6 +392,22 @@ export function PrintersTab() {
                                 </TooltipTrigger>
                                 <TooltipContent>
                                   <p>Edit printer</p>
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    onClick={() => handleClonePrinter(printer)}
+                                    title="Clone printer"
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Clone printer</p>
                                 </TooltipContent>
                               </Tooltip>
                               <Tooltip>
@@ -596,6 +651,73 @@ export function PrintersTab() {
               Delete Printer
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Clone Printer Dialog */}
+      <Dialog open={isCloneModalOpen} onOpenChange={(open) => {
+        setIsCloneModalOpen(open)
+        if (!open) {
+          setPrinterToClone(null)
+          setCloneName("")
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                <Copy className="h-6 w-6 text-white" />
+              </div>
+              Clone Printer
+            </DialogTitle>
+          </DialogHeader>
+          
+          {printerToClone && (
+            <form onSubmit={handleConfirmClone} className="space-y-4 mt-4">
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4">
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                  Creating a copy of <strong>{printerToClone.name}</strong>
+                </p>
+                <div className="space-y-2 text-sm">
+                  <p><strong>Manufacturer:</strong> {printerToClone.manufacturer || "—"}</p>
+                  <p><strong>Cost:</strong> €{printerToClone.price_eur.toFixed(2)}</p>
+                  <p><strong>Expected Life:</strong> {printerToClone.expected_life_hours} hours</p>
+                  <p><strong>Cost per Hour:</strong> €{(printerToClone.price_eur / printerToClone.expected_life_hours).toFixed(3)}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="cloneName" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                  New Printer Name *
+                </Label>
+                <Input
+                  id="cloneName"
+                  value={cloneName}
+                  onChange={(e) => setCloneName(e.target.value)}
+                  placeholder="e.g., X1 Carbon Copy, MK4 v2"
+                  required
+                  autoFocus
+                  className="h-11"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Enter a unique name for the cloned printer
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <Button type="button" variant="outline" onClick={() => setIsCloneModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="bg-primary hover:bg-primary/90 text-white"
+                >
+                  <Copy className="mr-2 h-4 w-4" /> 
+                  Clone Printer
+                </Button>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
