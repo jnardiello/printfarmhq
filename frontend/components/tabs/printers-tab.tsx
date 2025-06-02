@@ -28,6 +28,7 @@ export function PrintersTab() {
   const [newPrinter, setNewPrinter] = useState({
     name: "",
     manufacturer: "",
+    model: "",
     price_eur: "",
     expected_life_hours: "",
   })
@@ -35,6 +36,7 @@ export function PrintersTab() {
   const [editForm, setEditForm] = useState({
     name: "",
     manufacturer: "",
+    model: "",
     price_eur: "",
     expected_life_hours: "",
   })
@@ -50,6 +52,7 @@ export function PrintersTab() {
       await addPrinter({
         name: newPrinter.name,
         manufacturer: newPrinter.manufacturer || null,
+        model: newPrinter.model || null,
         price_eur: Number.parseFloat(newPrinter.price_eur),
         expected_life_hours: Number.parseInt(newPrinter.expected_life_hours),
       })
@@ -58,6 +61,7 @@ export function PrintersTab() {
       setNewPrinter({
         name: "",
         manufacturer: "",
+        model: "",
         price_eur: "",
         expected_life_hours: "",
       })
@@ -89,6 +93,7 @@ export function PrintersTab() {
     setEditForm({
       name: printer.name,
       manufacturer: printer.manufacturer || "",
+      model: printer.model || "",
       price_eur: printer.price_eur.toString(),
       expected_life_hours: printer.expected_life_hours.toString(),
     })
@@ -102,13 +107,14 @@ export function PrintersTab() {
     await updatePrinter(editingPrinter.id, {
       name: editForm.name,
       manufacturer: editForm.manufacturer || null,
+      model: editForm.model || null,
       price_eur: Number.parseFloat(editForm.price_eur),
       expected_life_hours: Number.parseInt(editForm.expected_life_hours),
     })
 
     setIsEditModalOpen(false)
     setEditingPrinter(null)
-    setEditForm({ name: "", manufacturer: "", price_eur: "", expected_life_hours: "" })
+    setEditForm({ name: "", manufacturer: "", model: "", price_eur: "", expected_life_hours: "" })
   }
 
   const handleEditFormChange = (field: string, value: string) => {
@@ -129,6 +135,7 @@ export function PrintersTab() {
       await addPrinter({
         name: cloneName,
         manufacturer: printerToClone.manufacturer,
+        model: printerToClone.model,
         price_eur: printerToClone.price_eur,
         expected_life_hours: printerToClone.expected_life_hours,
       })
@@ -199,12 +206,12 @@ export function PrintersTab() {
                       id="printerName"
                       value={newPrinter.name}
                       onChange={(e) => handlePrinterChange("name", e.target.value)}
-                      placeholder="e.g., X1 Carbon, MK4"
+                      placeholder="e.g., Office Printer 1, Bedroom Printer"
                       required
                       className="h-11"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Model name or identifier for this printer
+                      A descriptive name to identify this printer
                     </p>
                   </div>
 
@@ -221,6 +228,22 @@ export function PrintersTab() {
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Brand or company that makes this printer
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="model" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Model
+                    </Label>
+                    <Input
+                      id="model"
+                      value={newPrinter.model}
+                      onChange={(e) => handlePrinterChange("model", e.target.value)}
+                      placeholder="e.g., X1 Carbon, MK4, Ender 3 V2"
+                      className="h-11"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Specific model name or number
                     </p>
                   </div>
                 </div>
@@ -357,6 +380,7 @@ export function PrintersTab() {
                     <TableRow className="bg-muted/50">
                       <TableHead>Name</TableHead>
                       <TableHead>Manufacturer</TableHead>
+                      <TableHead>Model</TableHead>
                       <TableHead>Cost €</TableHead>
                       <TableHead>Life hrs</TableHead>
                       <TableHead>Cost/hr €</TableHead>
@@ -368,6 +392,7 @@ export function PrintersTab() {
                       <TableRow key={printer.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{printer.name}</TableCell>
                         <TableCell className="text-gray-600 dark:text-gray-400">{printer.manufacturer || "—"}</TableCell>
+                        <TableCell className="text-gray-600 dark:text-gray-400">{printer.model || "—"}</TableCell>
                         <TableCell>€{printer.price_eur.toFixed(2)}</TableCell>
                         <TableCell>{printer.expected_life_hours}</TableCell>
                         <TableCell>
@@ -478,12 +503,12 @@ export function PrintersTab() {
                     id="edit-printer-name"
                     value={editForm.name}
                     onChange={(e) => handleEditFormChange("name", e.target.value)}
-                    placeholder="e.g., X1 Carbon, MK4"
+                    placeholder="e.g., Office Printer 1, Bedroom Printer"
                     required
                     className="h-11"
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Model name or identifier for this printer
+                    A descriptive name to identify this printer
                   </p>
                 </div>
 
@@ -500,6 +525,22 @@ export function PrintersTab() {
                   />
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                     Brand or company that makes this printer
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-model" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Model
+                  </Label>
+                  <Input
+                    id="edit-model"
+                    value={editForm.model}
+                    onChange={(e) => handleEditFormChange("model", e.target.value)}
+                    placeholder="e.g., X1 Carbon, MK4, Ender 3 V2"
+                    className="h-11"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Specific model name or number
                   </p>
                 </div>
               </div>
@@ -635,6 +676,7 @@ export function PrintersTab() {
               <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
                 <p><strong>Name:</strong> {printerToDelete.name}</p>
                 <p><strong>Manufacturer:</strong> {printerToDelete.manufacturer || "—"}</p>
+                <p><strong>Model:</strong> {printerToDelete.model || "—"}</p>
                 <p><strong>Cost:</strong> €{printerToDelete.price_eur}</p>
                 <p><strong>Expected Life:</strong> {printerToDelete.expected_life_hours} hours</p>
               </div>
@@ -680,6 +722,7 @@ export function PrintersTab() {
                 </p>
                 <div className="space-y-2 text-sm">
                   <p><strong>Manufacturer:</strong> {printerToClone.manufacturer || "—"}</p>
+                  <p><strong>Model:</strong> {printerToClone.model || "—"}</p>
                   <p><strong>Cost:</strong> €{printerToClone.price_eur.toFixed(2)}</p>
                   <p><strong>Expected Life:</strong> {printerToClone.expected_life_hours} hours</p>
                   <p><strong>Cost per Hour:</strong> €{(printerToClone.price_eur / printerToClone.expected_life_hours).toFixed(3)}</p>

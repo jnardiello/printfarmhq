@@ -1262,6 +1262,7 @@ def update_printer_profile(
     # Update fields
     prof.name = profile_update.name
     prof.manufacturer = profile_update.manufacturer
+    prof.model = profile_update.model
     prof.price_eur = profile_update.price_eur
     prof.expected_life_hours = profile_update.expected_life_hours
     

@@ -185,6 +185,7 @@ class PrinterProfile(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
     manufacturer = Column(String, nullable=True)  # New field for printer manufacturer/brand
+    model = Column(String, nullable=True)  # New field for printer model
     price_eur = Column(Float, nullable=False)
     expected_life_hours = Column(Float, nullable=False)
 

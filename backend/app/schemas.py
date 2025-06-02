@@ -220,6 +220,7 @@ class FilamentUpdate(BaseModel):
 class PrinterProfileBase(BaseModel):
     name: str
     manufacturer: Optional[str] = None
+    model: Optional[str] = None
     price_eur: float = Field(..., ge=0)
     expected_life_hours: float = Field(..., gt=0)
 
