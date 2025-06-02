@@ -58,9 +58,11 @@ interface DataContextType {
   updatePlate: (plateId: number, plateData: FormData) => Promise<void>
   deletePlate: (plateId: number) => Promise<void>
   addPrinter: (printer: Partial<Printer>) => Promise<void>
+  updatePrinter: (id: number, data: Partial<Printer>) => Promise<void>
   deletePrinter: (id: number) => Promise<void>
   addSubscription: (subscription: Partial<Subscription>) => Promise<void>
   addPrintJob: (printJob: Partial<PrintJob>) => Promise<void>
+  updatePrintJob: (id: string, data: Partial<PrintJob>) => Promise<void>
   deletePrintJob: (id: string) => Promise<void>
   exportPurchasesCSV: () => Promise<void>
   setCurrentTab: (tab: string) => void
@@ -508,6 +510,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const updatePrinter = async (id: number, data: Partial<Printer>) => {
+    try {
+      await api(`/printer_profiles/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      })
+      await fetchPrinters()
+      toast({
+        title: "Success",
+        description: "Printer profile updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating printer:", error)
+      toast({
+        title: "Error Updating Printer",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
   const deletePrinter = async (id: number) => {
     try {
       await api(`/printer_profiles/${id}`, { method: "DELETE" })
@@ -583,6 +606,65 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+    }
+  }
+
+  const updatePrintJob = async (id: string, data: Partial<PrintJob>) => {
+    try {
+      console.log("updatePrintJob called with:");
+      console.log("ID:", id);
+      console.log("Data:", data);
+      console.log("API URL:", `${API_BASE_URL}/print_jobs/${id}`);
+      
+      // First, let's test if we can GET the specific job (to test CORS in general)
+      try {
+        console.log("Testing GET request first...");
+        const testGet = await api(`/print_jobs/${id}`, {
+          method: "GET",
+        });
+        console.log("GET request succeeded:", testGet);
+      } catch (getError) {
+        console.error("Even GET request failed:", getError);
+      }
+      
+      // Now try the PATCH
+      const response = await api(`/print_jobs/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      })
+      console.log("Update response:", response);
+      
+      await fetchPrintJobs()
+      toast({
+        title: "Success",
+        description: "Print job updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating print job:", error)
+      console.error("Full error object:", error);
+      
+      // If PUT fails, let's try a workaround: delete and recreate
+      // This is not ideal but might work if PATCH/PUT are blocked
+      /*
+      try {
+        console.log("PATCH/PUT failed, trying delete and recreate workaround...");
+        const jobToUpdate = printJobs.find(j => j.id === id);
+        if (jobToUpdate) {
+          await deletePrintJob(id);
+          await addPrintJob({...jobToUpdate, ...data});
+          return;
+        }
+      } catch (workaroundError) {
+        console.error("Workaround also failed:", workaroundError);
+      }
+      */
+      
+      toast({
+        title: "Error Updating Print Job",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+      throw error; // Re-throw to allow component to handle it
     }
   }
 
@@ -694,9 +776,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
         updatePlate,
         deletePlate,
         addPrinter,
+        updatePrinter,
         deletePrinter,
         addSubscription,
         addPrintJob,
+        updatePrintJob,
         deletePrintJob,
         exportPurchasesCSV,
         setCurrentTab,

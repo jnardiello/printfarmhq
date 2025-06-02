@@ -10,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Trash2, UserPlus, Shield, User as UserIcon, Edit, Crown } from "lucide-react"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { Trash2, UserPlus, Shield, User as UserIcon, Edit, Crown, AlertCircle } from "lucide-react"
 import { api } from "@/lib/api"
 import { toast } from "@/components/ui/use-toast"
 import type { User } from "@/lib/auth"
@@ -25,6 +26,7 @@ export function UsersTab() {
   const [isProfileDialogOpen, setIsProfileDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [isDeleting, setIsDeleting] = useState<number | null>(null)
+  const [userToDelete, setUserToDelete] = useState<any>(null)
   
   // Form state
   const [formData, setFormData] = useState({
@@ -210,15 +212,18 @@ export function UsersTab() {
     }
   }
 
-  const handleDeleteUser = async (userId: number) => {
-    setIsDeleting(userId)
+  const handleDeleteUser = async () => {
+    if (!userToDelete) return
+    
+    setIsDeleting(userToDelete.id)
     try {
-      await api(`/users/${userId}`, { method: "DELETE" })
+      await api(`/users/${userToDelete.id}`, { method: "DELETE" })
       toast({
         title: "Success",
         description: "User deleted successfully",
       })
       fetchUsers()
+      setUserToDelete(null)
     } catch (error) {
       toast({
         title: "Error",
@@ -487,7 +492,10 @@ export function UsersTab() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Users</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <UserIcon className="h-5 w-5 text-primary" />
+            Users
+          </CardTitle>
           <CardDescription>
             {users.length} user{users.length !== 1 ? 's' : ''} in the system
           </CardDescription>
@@ -549,24 +557,42 @@ export function UsersTab() {
                         </Button>
                       </div>
                     ) : !user.is_superadmin ? (
-                      <div className="flex items-center space-x-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditUser(user)}
-                          title="Edit user"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeleteUser(user.id)}
-                          disabled={isDeleting === user.id}
-                          title="Delete user"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                      <div className="flex items-center justify-center gap-1">
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditUser(user)}
+                                className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                title="Edit user"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit user</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setUserToDelete(user)}
+                                disabled={isDeleting === user.id}
+                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title="Delete user"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete user</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     ) : null}
                   </TableCell>
@@ -576,6 +602,45 @@ export function UsersTab() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog open={!!userToDelete} onOpenChange={() => setUserToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Delete User
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to delete this user?
+            </p>
+            {userToDelete && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
+                <p><strong>Name:</strong> {userToDelete.name}</p>
+                <p><strong>Email:</strong> {userToDelete.email}</p>
+                <p><strong>Role:</strong> {userToDelete.is_superadmin ? "Super Admin" : userToDelete.is_admin ? "Admin" : "User"}</p>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
+              This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUserToDelete(null)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteUser}
+              disabled={isDeleting === userToDelete?.id}
+            >
+              Delete User
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

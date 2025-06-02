@@ -10,13 +10,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Label } from "@/components/ui/label"
-import { Pencil, Trash2, Download, ChevronDown, ChevronUp, Info, AlertTriangle, RefreshCw } from "lucide-react"
+import { Pencil, Trash2, Download, ChevronDown, ChevronUp, Eye, AlertTriangle, RefreshCw, CreditCard, Package } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatDate, calculateTotalSpent } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FilamentStats } from "@/components/filament-stats"
 import { FilamentSelect } from "@/components/filament-select"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { AlertCircle } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { api } from "@/lib/api"
 
@@ -49,6 +51,8 @@ export function FilamentsTab() {
   const pageSize = 10
 
   const [selectedFilamentId, setSelectedFilamentId] = useState<string>("")
+  const [purchaseToDelete, setPurchaseToDelete] = useState<any>(null)
+  const [filamentToDelete, setFilamentToDelete] = useState<any>(null)
   const [purchaseForm, setPurchaseForm] = useState({
     quantity_kg: "",
     price_per_kg: "",
@@ -95,9 +99,10 @@ export function FilamentsTab() {
     await updateFilament(filament.id, { min_filaments_kg: minQty })
   }
 
-  const handleDeleteFilament = async (id: number) => {
-    if (confirm(`Are you sure you want to delete filament #${id}? This action cannot be undone.`)) {
-      await deleteFilament(id)
+  const handleDeleteFilament = async () => {
+    if (filamentToDelete) {
+      await deleteFilament(filamentToDelete.id)
+      setFilamentToDelete(null)
     }
   }
 
@@ -151,9 +156,10 @@ export function FilamentsTab() {
     }
   }
 
-  const handleDeletePurchase = async (id: number) => {
-    if (confirm(`Are you sure you want to delete purchase #${id}?`)) {
-      await deletePurchase(id)
+  const handleDeletePurchase = async () => {
+    if (purchaseToDelete) {
+      await deletePurchase(purchaseToDelete.id)
+      setPurchaseToDelete(null)
     }
   }
 
@@ -221,7 +227,10 @@ export function FilamentsTab() {
         <Collapsible open={purchasesOpen} onOpenChange={setPurchasesOpen}>
           <CollapsibleTrigger className="w-full text-left">
             <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-xl">Filament Purchases</CardTitle>
+              <CardTitle className="flex items-center gap-2 text-xl">
+            <CreditCard className="h-5 w-5 text-primary" />
+            Filament Purchases
+          </CardTitle>
               {purchasesOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
             </CardHeader>
           </CollapsibleTrigger>
@@ -345,7 +354,7 @@ export function FilamentsTab() {
                           <TableHead>€/kg</TableHead>
                           <TableHead>Total €</TableHead>
                           <TableHead>Date</TableHead>
-                          <TableHead></TableHead>
+                          <TableHead className="text-center w-[100px]">Actions</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -371,44 +380,55 @@ export function FilamentsTab() {
                               €{(purchase.quantity_kg * purchase.price_per_kg).toFixed(2)}
                             </TableCell>
                             <TableCell>{formatDate(purchase.purchase_date)}</TableCell>
-                            <TableCell className="space-x-2">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-8 w-8 text-gray-500 hover:text-primary"
-                                    >
-                                      <Info className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="bg-white dark:bg-gray-800 p-4 shadow-xl border rounded-lg max-w-xs">
-                                    <div className="text-start space-y-2">
-                                      <div>
-                                        <span className="font-semibold text-gray-700 dark:text-gray-300">Channel:</span>{" "}
-                                        <span className="text-gray-600 dark:text-gray-400">
-                                          {purchase.channel || "n/a"}
-                                        </span>
+                            <TableCell>
+                              <div className="flex items-center justify-center gap-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                        title="View details"
+                                      >
+                                        <Eye className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="bg-white dark:bg-gray-800 p-4 shadow-xl border rounded-lg max-w-xs">
+                                      <div className="text-start space-y-2">
+                                        <div>
+                                          <span className="font-semibold text-gray-700 dark:text-gray-300">Channel:</span>{" "}
+                                          <span className="text-gray-600 dark:text-gray-400">
+                                            {purchase.channel || "n/a"}
+                                          </span>
+                                        </div>
+                                        <div>
+                                          <span className="font-semibold text-gray-700 dark:text-gray-300">Notes:</span>{" "}
+                                          <span className="text-gray-600 dark:text-gray-400">
+                                            {purchase.notes || "—"}
+                                          </span>
+                                        </div>
                                       </div>
-                                      <div>
-                                        <span className="font-semibold text-gray-700 dark:text-gray-300">Notes:</span>{" "}
-                                        <span className="text-gray-600 dark:text-gray-400">
-                                          {purchase.notes || "—"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-gray-500 hover:text-red-600"
-                                onClick={() => handleDeletePurchase(purchase.id)}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                        onClick={() => setPurchaseToDelete(purchase)}
+                                        title="Delete purchase"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p>Delete purchase</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -486,7 +506,10 @@ export function FilamentsTab() {
 
       <Card className="card-hover shadow-md">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-xl">Filament Inventory</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Package className="h-5 w-5 text-primary" />
+            Filament Inventory
+          </CardTitle>
           <Button 
             variant="outline" 
             size="sm" 
@@ -515,7 +538,7 @@ export function FilamentsTab() {
                     <TableHead>Qty (kg)</TableHead>
                     <TableHead>Min (kg)</TableHead>
                     <TableHead>Avg €/kg</TableHead>
-                    <TableHead></TableHead>
+                    <TableHead className="text-center w-[150px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -561,58 +584,59 @@ export function FilamentsTab() {
                             €{filament.price_per_kg.toFixed(2)}
                           </span>
                         </TableCell>
-                        <TableCell className="space-x-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditQuantity(filament)}
-                            className="h-8 w-8 text-gray-500 hover:text-primary"
-                          >
+                        <TableCell>
+                          <div className="flex items-center justify-center gap-1">
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Pencil className="h-4 w-4" />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleEditQuantity(filament)}
+                                    className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                    title="Edit filament"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  Edit filament quantity
+                                  <p>Edit filament quantity</p>
                                 </TooltipContent>
                               </Tooltip>
-                            </TooltipProvider>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleSetMinFilaments(filament)}
-                            className="h-8 w-8 text-gray-500 hover:text-yellow-600"
-                          >
-                            <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <AlertTriangle className="h-4 w-4" />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleSetMinFilaments(filament)}
+                                    className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                                    title="Set minimum stock"
+                                  >
+                                    <AlertTriangle className="h-4 w-4" />
+                                  </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  Set minimum threshold for low stock alert
+                                  <p>Set minimum stock alert</p>
                                 </TooltipContent>
                               </Tooltip>
-                            </TooltipProvider>
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-gray-500 hover:text-red-600"
-                            onClick={() => handleDeleteFilament(filament.id)}
-                          >
-                            <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Trash2 className="h-4 w-4" />
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                    onClick={() => setFilamentToDelete(filament)}
+                                    title="Delete filament"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  Delete filament
+                                  <p>Delete filament</p>
                                 </TooltipContent>
                               </Tooltip>
                             </TooltipProvider>
-                          </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -650,6 +674,75 @@ export function FilamentsTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Delete Purchase Confirmation Dialog */}
+      <Dialog open={!!purchaseToDelete} onOpenChange={() => setPurchaseToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Delete Purchase
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to delete this purchase?
+            </p>
+            {purchaseToDelete && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
+                <p><strong>Filament:</strong> {purchaseToDelete.filament?.color} {purchaseToDelete.filament?.brand} {purchaseToDelete.filament?.material}</p>
+                <p><strong>Quantity:</strong> {purchaseToDelete.quantity_kg} kg</p>
+                <p><strong>Price:</strong> €{purchaseToDelete.price_per_kg}/kg</p>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
+              This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPurchaseToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeletePurchase}>
+              Delete Purchase
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Filament Confirmation Dialog */}
+      <Dialog open={!!filamentToDelete} onOpenChange={() => setFilamentToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Delete Filament
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to delete this filament?
+            </p>
+            {filamentToDelete && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
+                <p><strong>Filament:</strong> {filamentToDelete.color} {filamentToDelete.brand} {filamentToDelete.material}</p>
+                <p><strong>Current Stock:</strong> {filamentToDelete.total_qty_kg} kg</p>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
+              This action cannot be undone. All associated purchase history will also be deleted.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFilamentToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteFilament}>
+              Delete Filament
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

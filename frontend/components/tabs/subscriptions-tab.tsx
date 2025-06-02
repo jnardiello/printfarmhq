@@ -52,21 +52,7 @@ export function SubscriptionsTab() {
         <Card className="card-hover shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-primary"
-              >
-                <rect width="20" height="14" x="2" y="5" rx="2"></rect>
-                <line x1="2" x2="22" y1="10" y2="10"></line>
-              </svg>
+              <CreditCard className="h-5 w-5 text-primary" />
               Add Commercial License
             </CardTitle>
           </CardHeader>
@@ -154,21 +140,7 @@ export function SubscriptionsTab() {
         <Card className="card-hover shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="text-secondary"
-              >
-                <rect width="20" height="14" x="2" y="5" rx="2"></rect>
-                <line x1="2" x2="22" y1="10" y2="10"></line>
-              </svg>
+              <CreditCard className="h-5 w-5 text-primary" />
               Commercial Licenses List
             </CardTitle>
           </CardHeader>

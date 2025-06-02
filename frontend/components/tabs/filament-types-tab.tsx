@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { toast } from "@/components/ui/use-toast"
-import { Plus, Pencil, Trash2, Package2, AlertTriangle } from "lucide-react"
+import { Plus, Pencil, Trash2, Package2, AlertTriangle, AlertCircle } from "lucide-react"
 import type { Filament } from "@/lib/types"
 import { MATERIAL_OPTIONS, getColorHex } from "@/lib/constants/filaments"
 
@@ -19,6 +20,7 @@ export function FilamentTypesTab() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [editingFilament, setEditingFilament] = useState<Filament | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [filamentToDelete, setFilamentToDelete] = useState<Filament | null>(null)
   
   // Form state for adding new filament type
   const [newFilament, setNewFilament] = useState({
@@ -99,27 +101,27 @@ export function FilamentTypesTab() {
     }
   }
   
-  const handleDeleteFilament = async (filament: Filament) => {
+  const handleDeleteFilament = async () => {
+    if (!filamentToDelete) return
+    
     // Check if filament has inventory
-    if (filament.total_qty_kg > 0) {
+    if (filamentToDelete.total_qty_kg > 0) {
       toast({
         title: "Cannot Delete",
         description: "This filament type has inventory. Use up or transfer the inventory first.",
         variant: "destructive"
       })
-      return
-    }
-    
-    if (!confirm(`Are you sure you want to delete ${filament.color} ${filament.material} by ${filament.brand}?`)) {
+      setFilamentToDelete(null)
       return
     }
     
     try {
-      await deleteFilament(filament.id)
+      await deleteFilament(filamentToDelete.id)
       toast({
         title: "Success",
         description: "Filament type deleted successfully"
       })
+      setFilamentToDelete(null)
     } catch (error) {
       toast({
         title: "Error",
@@ -151,8 +153,8 @@ export function FilamentTypesTab() {
     <div className="space-y-6">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-2xl">
-            <Package2 className="h-6 w-6 text-primary" />
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Package2 className="h-5 w-5 text-primary" />
             Filament Types Configuration
           </CardTitle>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -251,7 +253,7 @@ export function FilamentTypesTab() {
                   <TableHead>Material</TableHead>
                   <TableHead className="text-right">Avg Cost/kg</TableHead>
                   <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -277,25 +279,43 @@ export function FilamentTypesTab() {
                           <span className="text-muted-foreground text-sm">No Inventory</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => openEditDialog(filament)}
-                            className="h-8 w-8"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteFilament(filament)}
-                            className="h-8 w-8 hover:text-red-600"
-                            disabled={filament.total_qty_kg > 0}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                      <TableCell>
+                        <div className="flex justify-center gap-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => openEditDialog(filament)}
+                                  className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                  title="Edit filament type"
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Edit filament type</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => setFilamentToDelete(filament)}
+                                  className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                  disabled={filament.total_qty_kg > 0}
+                                  title={filament.total_qty_kg > 0 ? "Cannot delete - inventory exists" : "Delete filament type"}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>{filament.total_qty_kg > 0 ? "Cannot delete - inventory exists" : "Delete filament type"}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -388,6 +408,50 @@ export function FilamentTypesTab() {
               <Button type="submit">Update Type</Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Filament Type Confirmation Dialog */}
+      <Dialog open={!!filamentToDelete} onOpenChange={() => setFilamentToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+              Delete Filament Type
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to delete this filament type?
+            </p>
+            {filamentToDelete && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
+                <p><strong>Type:</strong> {filamentToDelete.color} {filamentToDelete.brand} {filamentToDelete.material}</p>
+                <p><strong>Average Cost:</strong> €{filamentToDelete.price_per_kg.toFixed(2)}/kg</p>
+                {filamentToDelete.total_qty_kg > 0 && (
+                  <p className="text-orange-600 font-medium">
+                    <AlertTriangle className="h-4 w-4 inline mr-1" />
+                    Cannot delete - {filamentToDelete.total_qty_kg.toFixed(2)} kg in inventory
+                  </p>
+                )}
+              </div>
+            )}
+            <p className="text-sm text-red-600">
+              This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFilamentToDelete(null)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleDeleteFilament}
+              disabled={filamentToDelete?.total_qty_kg > 0}
+            >
+              Delete Filament Type
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

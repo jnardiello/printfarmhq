@@ -10,8 +10,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Trash2, Plus, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard, AlertTriangle, DollarSign } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Trash2, Plus, Eye, Info, Package, UploadCloud, ChevronDown, ChevronUp, Pencil, CreditCard, AlertTriangle, DollarSign } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import type { ProductFormData, Product as ProductType, Printer, Filament, Subscription, FilamentUsage } from "@/lib/types"
@@ -68,6 +69,7 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
 
   // State for Edit Modal
   const [editingProduct, setEditingProduct] = useState<ProductType | null>(null)
+  const [productToDelete, setProductToDelete] = useState<ProductType | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editForm, setEditForm] = useState<ProductEditFormData>({
     name: "",
@@ -216,10 +218,11 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
     }
   }
 
-  const handleDeleteProduct = async (productId: number) => {
-    if (confirm("Are you sure you want to delete this product?")) {
+  const handleDeleteProduct = async () => {
+    if (productToDelete) {
       try {
-        await deleteProduct(productId)
+        await deleteProduct(productToDelete.id)
+        setProductToDelete(null)
       } catch (error) {
         console.error('Failed to delete product:', error)
         alert('Failed to delete product')
@@ -496,10 +499,10 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
       </Accordion>
 
       {/* Products List */}
-      <Card className="bg-white dark:bg-gray-800 shadow-lg border-gray-200 dark:border-gray-700">
-        <CardHeader className="border-b border-gray-200 dark:border-gray-700">
-          <CardTitle className="text-xl font-semibold flex items-center gap-2 text-gray-900 dark:text-gray-100">
-            <Package className="h-6 w-6 text-primary" />
+      <Card className="card-hover shadow-md">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Package className="h-5 w-5 text-primary" />
             Products ({filteredProducts.length})
           </CardTitle>
         </CardHeader>
@@ -508,18 +511,18 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
-                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Name</TableHead>
-                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">SKU</TableHead>
-                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Print Time</TableHead>
-                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">Est. COP</TableHead>
-                    <TableHead className="font-semibold text-gray-700 dark:text-gray-300">License</TableHead>
-                    <TableHead className="text-right font-semibold text-gray-700 dark:text-gray-300">Actions</TableHead>
+                  <TableRow className="bg-muted/50">
+                    <TableHead>Name</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Print Time</TableHead>
+                    <TableHead>Est. COP</TableHead>
+                    <TableHead>License</TableHead>
+                    <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProducts.map((product) => (
-                    <TableRow key={product.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/30 transition-colors">
+                    <TableRow key={product.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-xs">{product.sku}</Badge>
@@ -541,19 +544,23 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                           <span className="text-gray-400">-</span>
                         )}
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="hover:bg-gray-100 dark:hover:bg-gray-800"
-                                onClick={() => setSelectedProduct(product)}
-                              >
-                                <Info className="h-4 w-4" />
-                              </Button>
-                            </DialogTrigger>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                              <Dialog>
+                                <DialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    onClick={() => setSelectedProduct(product)}
+                                    title="View details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </DialogTrigger>
                             <DialogContent className="max-w-md">
                               <DialogHeader>
                                 <DialogTitle className="flex items-center gap-2 text-xl">
@@ -644,23 +651,45 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
                                 </div>
                               )}
                             </DialogContent>
-                          </Dialog>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleEditProduct(product)}
-                            className="hover:bg-blue-50 dark:hover:bg-blue-950/30"
-                          >
-                            <Pencil className="h-4 w-4 text-blue-600" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => handleDeleteProduct(product.id)}
-                            className="hover:bg-red-50 dark:hover:bg-red-950/30"
-                          >
-                            <Trash2 className="h-4 w-4 text-red-600" />
-                          </Button>
+                              </Dialog>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>View product details</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditProduct(product)}
+                                className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                title="Edit product"
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Edit product</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setProductToDelete(product)}
+                                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                title="Delete product"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Delete product</p>
+                            </TooltipContent>
+                          </Tooltip>
+                          </TooltipProvider>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -756,6 +785,41 @@ export function ProductsTab({ onNavigateToTab }: ProductsTabProps) {
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Product Confirmation Dialog */}
+      <Dialog open={!!productToDelete} onOpenChange={() => setProductToDelete(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5" />
+              Delete Product
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to delete this product?
+            </p>
+            {productToDelete && (
+              <div className="bg-gray-50 dark:bg-gray-800 p-3 rounded-lg space-y-1 text-sm">
+                <p><strong>Product:</strong> {productToDelete.name}</p>
+                <p><strong>SKU:</strong> {productToDelete.sku}</p>
+                <p><strong>Print Time:</strong> {productToDelete.print_time_formatted || formatHoursDisplay(productToDelete.print_time_hrs)}</p>
+              </div>
+            )}
+            <p className="text-sm text-red-600">
+              This action cannot be undone.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProductToDelete(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteProduct}>
+              Delete Product
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
