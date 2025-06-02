@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
-import { Trash2, Plus, Eye, Package, Upload, Info, CreditCard, AlertCircle, Settings, FileText, Clock } from "lucide-react"
+import { Trash2, Plus, Eye, Package, Upload, Info, CreditCard, AlertCircle, Settings, FileText, Clock, Edit } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { formatTimeToHHMM } from "@/lib/utils"
 import { FilamentSelect } from "@/components/filament-select"
@@ -28,12 +28,22 @@ interface FilamentUsage {
 }
 
 export function ProductsTab() {
-  const { products, filaments, subscriptions, addProduct, deleteProduct } = useData()
+  const { products, filaments, subscriptions, addProduct, updateProduct, deleteProduct } = useData()
   const [selectedProduct, setSelectedProduct] = useState<any>(null)
   const [productToDelete, setProductToDelete] = useState<any>(null)
+  const [productToEdit, setProductToEdit] = useState<any>(null)
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false)
+  const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false)
 
   const [productForm, setProductForm] = useState<{
+    name: string
+    license_id: string | number | undefined
+  }>({
+    name: "",
+    license_id: undefined,
+  })
+  
+  const [editProductForm, setEditProductForm] = useState<{
     name: string
     license_id: string | number | undefined
   }>({
@@ -46,9 +56,44 @@ export function ProductsTab() {
   const [additionalPartsCost, setAdditionalPartsCost] = useState("")
   const [modelFileName, setModelFileName] = useState("")
   const modelFileRef = useRef<HTMLInputElement>(null)
+  
+  const [editPrintTime, setEditPrintTime] = useState("")
+  const [editFilamentUsageRows, setEditFilamentUsageRows] = useState<FilamentUsage[]>([{ filament_id: "", grams_used: "" }])
+  const [editAdditionalPartsCost, setEditAdditionalPartsCost] = useState("")
+  const [editModelFileName, setEditModelFileName] = useState("")
+  const editModelFileRef = useRef<HTMLInputElement>(null)
 
   const handleProductChange = (field: string, value: string | number | undefined) => {
     setProductForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const handleEditProductChange = (field: string, value: string | number | undefined) => {
+    setEditProductForm((prev) => ({ ...prev, [field]: value }))
+  }
+
+  const openEditModal = (product: any) => {
+    setProductToEdit(product)
+    setEditProductForm({
+      name: product.name,
+      license_id: product.license_id
+    })
+    setEditPrintTime(product.print_time_hrs ? formatTimeToHHMM(product.print_time_hrs) : "")
+    setEditAdditionalPartsCost(product.additional_parts_cost?.toString() || "0")
+    
+    // Populate filament usage rows from existing product
+    if (product.filament_usages && product.filament_usages.length > 0) {
+      setEditFilamentUsageRows(
+        product.filament_usages.map((usage: any) => ({
+          filament_id: usage.filament_id.toString(),
+          grams_used: usage.grams_used.toString()
+        }))
+      )
+    } else {
+      setEditFilamentUsageRows([{ filament_id: "", grams_used: "" }])
+    }
+    
+    setEditModelFileName("")
+    setIsEditProductModalOpen(true)
   }
 
   const handleFilamentUsageChange = (index: number, field: keyof FilamentUsage, value: string) => {
@@ -57,17 +102,36 @@ export function ProductsTab() {
     setFilamentUsageRows(updated)
   }
 
+  const handleEditFilamentUsageChange = (index: number, field: keyof FilamentUsage, value: string) => {
+    const updated = [...editFilamentUsageRows]
+    updated[index][field] = value
+    setEditFilamentUsageRows(updated)
+  }
+
   const addFilamentUsageRow = () => {
     setFilamentUsageRows([...filamentUsageRows, { filament_id: "", grams_used: "" }])
+  }
+
+  const addEditFilamentUsageRow = () => {
+    setEditFilamentUsageRows([...editFilamentUsageRows, { filament_id: "", grams_used: "" }])
   }
 
   const removeFilamentUsageRow = (index: number) => {
     setFilamentUsageRows(filamentUsageRows.filter((_, i) => i !== index))
   }
 
+  const removeEditFilamentUsageRow = (index: number) => {
+    setEditFilamentUsageRows(editFilamentUsageRows.filter((_, i) => i !== index))
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     setModelFileName(file?.name || "")
+  }
+
+  const handleEditFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    setEditModelFileName(file?.name || "")
   }
 
   const isValidTimeFormat = (value: string): boolean => {
@@ -84,6 +148,7 @@ export function ProductsTab() {
     
     return patterns.some(pattern => pattern.test(value.toLowerCase()))
   }
+
 
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -166,6 +231,93 @@ export function ProductsTab() {
       toast({
         title: "Error",
         description: "Failed to create product. Please check your inputs and try again.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleEditProduct = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!productToEdit) return
+
+    // Validate time format
+    if (!isValidTimeFormat(editPrintTime)) {
+      alert(`Invalid time format. Please use one of these formats:\n• 1h30m (1 hour 30 minutes)\n• 2h (2 hours)\n• 45m (45 minutes)\n• 1.5 (1.5 hours)`)
+      return
+    }
+
+    // Validate filament usages
+    const noInventoryFilaments = new Set<string>()
+    
+    for (let i = 0; i < editFilamentUsageRows.length; i++) {
+      const usage = editFilamentUsageRows[i]
+      if (!usage.filament_id || !usage.grams_used) {
+        alert(`Please complete all filament entries`)
+        return
+      }
+      
+      // Check for no-inventory filaments
+      const filament = filaments.find(f => f.id.toString() === usage.filament_id.toString())
+      if (filament && filament.total_qty_kg === 0) {
+        noInventoryFilaments.add(`${filament.color} ${filament.material} (${filament.brand})`)
+      }
+    }
+    
+    // Show inventory warning if there are no-inventory filaments
+    if (noInventoryFilaments.size > 0) {
+      const filamentList = Array.from(noInventoryFilaments).join('\n• ')
+      const confirmMessage = `⚠️ Inventory Warning\n\nThis product uses filaments with no tracked inventory:\n\n• ${filamentList}\n\nMake sure to order these filaments before starting production.\n\nDo you want to update anyway?`
+      
+      if (!confirm(confirmMessage)) {
+        return
+      }
+    }
+
+    try {
+      // Prepare filament usages data
+      const filamentUsages = editFilamentUsageRows.map(row => ({
+        filament_id: Number(row.filament_id),
+        grams_used: Number(row.grams_used)
+      }))
+
+      const formData = new FormData()
+      formData.append("name", editProductForm.name)
+      formData.append("print_time", editPrintTime)
+      formData.append("filament_usages", JSON.stringify(filamentUsages))
+      formData.append("additional_parts_cost", editAdditionalPartsCost || "0")
+      
+      if (editProductForm.license_id) {
+        formData.append("license_id", editProductForm.license_id.toString())
+      } else {
+        formData.append("license_id", "")
+      }
+
+      // Add file if selected
+      if (editModelFileRef.current?.files?.[0]) {
+        formData.append("file", editModelFileRef.current.files[0])
+      }
+
+      await updateProduct(productToEdit.id, formData)
+      
+      // Reset edit form
+      setIsEditProductModalOpen(false)
+      setProductToEdit(null)
+      setEditProductForm({ name: "", license_id: undefined })
+      setEditPrintTime("")
+      setEditFilamentUsageRows([{ filament_id: "", grams_used: "" }])
+      setEditAdditionalPartsCost("")
+      setEditModelFileName("")
+      
+      toast({
+        title: "Success",
+        description: "Product updated successfully"
+      })
+    } catch (error) {
+      console.error('Failed to update product:', error)
+      toast({
+        title: "Error",
+        description: "Failed to update product. Please check your inputs and try again.",
         variant: "destructive"
       })
     }
@@ -633,6 +785,22 @@ export function ProductsTab() {
                                 <Button
                                   variant="ghost"
                                   size="icon"
+                                  className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                                  onClick={() => openEditModal(product)}
+                                  title="Edit product"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Edit product</p>
+                              </TooltipContent>
+                            </Tooltip>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
                                   className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
                                   onClick={() => setProductToDelete(product)}
                                   title="Delete product"
@@ -663,6 +831,259 @@ export function ProductsTab() {
       </Card>
 
       {/* Plate Manager Section - Removed as it requires specific product context */}
+
+      {/* Edit Product Modal */}
+      <Dialog open={isEditProductModalOpen} onOpenChange={setIsEditProductModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-amber-500 to-amber-600 rounded-lg">
+                <Edit className="h-6 w-6 text-white" />
+              </div>
+              Edit Product
+            </DialogTitle>
+          </DialogHeader>
+
+          <form onSubmit={handleEditProduct} className="space-y-6 mt-6">
+            {/* Basic Information */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                  <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Product Information</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Basic product details</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="md:col-span-2">
+                  <Label htmlFor="editProdName" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Product Name *
+                  </Label>
+                  <Input
+                    id="editProdName"
+                    type="text"
+                    value={editProductForm.name}
+                    onChange={(e) => handleEditProductChange("name", e.target.value)}
+                    placeholder="Enter product name"
+                    required
+                    className="h-11"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="editPrintTime" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Print Time *
+                  </Label>
+                  <Input
+                    id="editPrintTime"
+                    type="text"
+                    value={editPrintTime}
+                    onChange={(e) => setEditPrintTime(e.target.value)}
+                    placeholder={TIME_FORMAT_PLACEHOLDER}
+                    required
+                    className="h-11"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Format: 1h30m, 2h, 45m, or 1.5
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="editAdditionalCost" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Additional Parts Cost (€)
+                  </Label>
+                  <Input
+                    id="editAdditionalCost"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editAdditionalPartsCost}
+                    onChange={(e) => setEditAdditionalPartsCost(e.target.value)}
+                    placeholder="0.00"
+                    className="h-11"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    e.g., screws, inserts, magnets
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filament Composition */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <CreditCard className="h-5 w-5 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Filament Composition</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Define the filaments used in this product</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {editFilamentUsageRows.map((usage, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-white dark:bg-gray-800 rounded-lg border"
+                  >
+                    <div className="md:col-span-2">
+                      <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                        Filament Type
+                      </Label>
+                      <FilamentSelect
+                        value={usage.filament_id}
+                        onValueChange={(value) => handleEditFilamentUsageChange(index, "filament_id", value.toString())}
+                        filaments={filaments}
+                        placeholder="Select filament"
+                        required
+                      />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <div className="flex-1">
+                        <Label className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                          Weight (grams)
+                        </Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          value={usage.grams_used}
+                          onChange={(e) => handleEditFilamentUsageChange(index, "grams_used", e.target.value)}
+                          placeholder="50"
+                          required
+                          className="h-11"
+                        />
+                      </div>
+                      {editFilamentUsageRows.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="mt-6 h-11 w-11 flex-shrink-0 border-red-200 text-red-600 hover:bg-red-50"
+                          onClick={() => removeEditFilamentUsageRow(index)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addEditFilamentUsageRow}
+                  className="w-full border-dashed border-2 h-12 text-gray-600 hover:text-gray-800 hover:bg-gray-50"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Another Filament
+                </Button>
+              </div>
+            </div>
+
+            {/* Licensing & Files */}
+            <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <FileText className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">License & Files</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Optional information</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="editProdLicense" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Commercial License
+                  </Label>
+                  <Select
+                    value={editProductForm.license_id ? editProductForm.license_id.toString() : "none"}
+                    onValueChange={(value) => {
+                      if (value === "none") handleEditProductChange("license_id", undefined)
+                      else handleEditProductChange("license_id", value)
+                    }}
+                  >
+                    <SelectTrigger id="editProdLicense" className="h-11">
+                      <SelectValue placeholder="Select License" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No License</SelectItem>
+                      {subscriptions.map((sub) => (
+                        <SelectItem key={sub.id} value={sub.id.toString()}>
+                          {sub.name} ({sub.platform})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <Label htmlFor="editModelFile" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    3D Model File
+                  </Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      ref={editModelFileRef}
+                      id="editModelFile"
+                      type="file"
+                      accept=".stl,.obj,.3mf"
+                      onChange={handleEditFileSelect}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => editModelFileRef.current?.click()}
+                      className="h-11"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Choose New File
+                    </Button>
+                    {editModelFileName && (
+                      <span className="text-sm text-gray-600 dark:text-gray-400">
+                        {editModelFileName}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Supported formats: STL, OBJ, 3MF (Leave empty to keep existing file)
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex gap-3">
+                <Button 
+                  type="button" 
+                  variant="outline"
+                  onClick={() => setIsEditProductModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
+                >
+                  <Edit className="mr-2 h-5 w-5" /> 
+                  Update Product
+                </Button>
+              </div>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Product Confirmation Dialog */}
       <Dialog open={!!productToDelete} onOpenChange={() => setProductToDelete(null)}>

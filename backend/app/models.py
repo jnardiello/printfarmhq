@@ -59,6 +59,7 @@ class Product(Base):
     name = Column(String, nullable=False)
 
     print_time_hrs = Column(Float, nullable=False, default=0.0)
+    additional_parts_cost = Column(Float, nullable=False, default=0.0)
 
     # legacy single-filament weight (kept for not-null constraint)
     filament_weight_g = Column(Float, nullable=False, default=0.0)
@@ -74,17 +75,19 @@ class Product(Base):
 
     @property
     def cop(self) -> float:
-        """Compute Cost of Product (sum of all plate costs)."""
+        """Compute Cost of Product (sum of all plate costs + additional parts cost)."""
         # New calculation: sum costs across all plates
         if self.plates:
-            total_cost = sum(plate.cost for plate in self.plates)
+            filament_cost = sum(plate.cost for plate in self.plates)
+            total_cost = filament_cost + (self.additional_parts_cost or 0.0)
             return round(total_cost, 2)
         
         # Fallback to legacy calculation for backward compatibility during migration
-        cost_fila = sum(
+        filament_cost = sum(
             (fu.grams_used / 1000.0) * fu.filament.price_per_kg for fu in self.filament_usages if fu.filament
         )
-        return round(cost_fila, 2)
+        total_cost = filament_cost + (self.additional_parts_cost or 0.0)
+        return round(total_cost, 2)
 
     @property
     def total_print_time_hrs(self) -> float:

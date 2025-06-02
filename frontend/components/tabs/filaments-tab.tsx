@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Pencil, Trash2, Download, Eye, AlertTriangle, RefreshCw, CreditCard, Package, Plus, DollarSign, Calendar, Clock, Search, Filter } from "lucide-react"
+import { Edit, Trash2, Download, Eye, AlertTriangle, RefreshCw, CreditCard, Package, Plus, DollarSign, Calendar, Clock, Search, Filter } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { formatDate, calculateTotalSpent } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -564,7 +564,7 @@ export function FilamentsTab() {
                                     className="h-8 w-8 text-amber-500 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
                                     title="Edit filament"
                                   >
-                                    <Pencil className="h-4 w-4" />
+                                    <Edit className="h-4 w-4" />
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent>

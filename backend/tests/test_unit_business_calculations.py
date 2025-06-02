@@ -50,6 +50,7 @@ class TestCOGSCalculations:
         mock_product.plates = [mock_plate]
         mock_product.filament_usages = []  # Empty for new structure
         mock_product.cop = mock_plate.cost  # Set COP to match plate cost
+        mock_product.total_print_time_hrs = 1.5  # Mock print time
         
         # Create mock print job product
         mock_job_product = Mock()
@@ -98,12 +99,12 @@ class TestCOGSCalculations:
         
         # Expected calculations:
         # Filament cost: (50g * €25/kg * 2 items) / 1000 = €2.50
-        # Printer cost: (€600 / 3 years / 8760 hrs) * 4 hrs = €0.091
+        # Printer cost: (€600 / 26280 hrs) * 1.5 hrs * 2 items = €0.00068
         # Packaging cost: €2.50
-        # Total expected: €5.091
+        # Total expected: €5.00068
         
         expected_filament_cost = (50.0 * 25.00 * 2) / 1000  # €2.50
-        expected_printer_cost = (600.00 / 3 / 8760) * 4.0   # €0.091
+        expected_printer_cost = (600.00 / 26280.0) * 1.5 * 2   # Printer cost with updated print time
         expected_packaging = 2.50
         expected_total = expected_filament_cost + expected_printer_cost + expected_packaging
         
@@ -155,6 +156,7 @@ class TestCOGSCalculations:
         product.plates = [plate]
         product.filament_usages = []  # Empty for new structure
         product.cop = plate.cost  # Set COP to match plate cost
+        product.total_print_time_hrs = 12.0  # Mock print time
         
         # Mock job product
         job_product = Mock()
@@ -199,12 +201,12 @@ class TestCOGSCalculations:
         # Filament 1: (75g * €24/kg * 5 items) / 1000 = €9.00
         # Filament 2: (25g * €35/kg * 5 items) / 1000 = €4.375
         # Total filament: €13.375
-        # Printer: (€800 / (4 * 8760) hrs) * 12 hrs = €0.274
-        # Total: €13.649
+        # Printer: (€800 / (4 * 8760) hrs) * 12.0 hrs * 5 items = €1.369
+        # Total: €14.744
         
         expected_filament1_cost = (75.0 * 24.00 * 5) / 1000
         expected_filament2_cost = (25.0 * 35.00 * 5) / 1000
-        expected_printer_cost = (800.00 / (4 * 8760)) * 12.0
+        expected_printer_cost = (800.00 / (4 * 8760)) * 12.0 * 5  # Updated to include 5 items
         expected_total = expected_filament1_cost + expected_filament2_cost + expected_printer_cost
         
         assert abs(total_cogs - expected_total) < 0.01
@@ -327,6 +329,7 @@ class TestCOGSCalculations:
         product.plates = [plate]
         product.filament_usages = []  # Empty for new structure
         product.cop = plate.cost  # Set COP to match plate cost
+        product.total_print_time_hrs = 1.0  # Mock print time
         
         job_product = Mock()
         job_product.product_id = 1
@@ -625,6 +628,7 @@ class TestPricingCalculations:
         product.plates = [plate1, plate2]
         product.filament_usages = []  # No legacy usages
         product.cop = plate1.cost + plate2.cost  # Total cost of all plates
+        product.total_print_time_hrs = 2.5  # Mock print time
         
         # Mock job product
         job_product = Mock()
@@ -682,6 +686,7 @@ class TestPricingCalculations:
         product.plates = []  # No plates
         product.filament_usages = [usage]  # Legacy usages
         product.cop = (50.0 * 25.00 / 1000)  # Legacy COP calculation
+        product.total_print_time_hrs = 1.0  # Mock print time
         
         # Mock job product
         job_product = Mock()

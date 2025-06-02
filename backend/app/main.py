@@ -655,6 +655,7 @@ async def create_product(
     name: str = Form(...),
     print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
     print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
+    additional_parts_cost: Optional[float] = Form(0.0),
     license_id: Optional[int] = Form(None),
     filament_usages_str: str = Form(..., alias="filament_usages"),
     file: Optional[UploadFile] = File(None),
@@ -696,6 +697,7 @@ async def create_product(
     db_product_data = {
         "name": name, "sku": skl,
         "print_time_hrs": actual_print_time_hrs,
+        "additional_parts_cost": additional_parts_cost or 0.0,
         "license_id": license_id, "file_path": saved_model_file_path,
         "filament_weight_g": 0.0,
     }
@@ -736,8 +738,10 @@ def get_product_cop(product_id: int, db: Session = Depends(get_db), current_user
 async def update_product_endpoint(
     product_id: int,
     name: Optional[str] = Form(None),
-    print_time_hrs: Optional[float] = Form(None),
-    license_id_str: Optional[str] = Form(None),
+    print_time: Optional[Union[str, float]] = Form(None, description="Print time in format '1h30m', '2h', '45m', or decimal hours like 1.5"),
+    print_time_hrs: Optional[float] = Form(None),  # Keep for backward compatibility
+    additional_parts_cost: Optional[float] = Form(None),
+    license_id: Optional[str] = Form(None),
     filament_usages_str: Optional[str] = Form(None, alias="filament_usages"),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -749,13 +753,21 @@ async def update_product_endpoint(
 
     update_data_dict = {}
     if name is not None: update_data_dict["name"] = name
-    if print_time_hrs is not None: update_data_dict["print_time_hrs"] = print_time_hrs
+    if additional_parts_cost is not None: update_data_dict["additional_parts_cost"] = additional_parts_cost
     
-    if license_id_str is not None:
-        if license_id_str.lower() == "none" or license_id_str == "": update_data_dict["license_id"] = None
+    # Handle time format conversion (same as create endpoint)
+    if print_time is not None or print_time_hrs is not None:
+        actual_print_time_hrs = parse_time_from_form(print_time, print_time_hrs)
+        update_data_dict["print_time_hrs"] = actual_print_time_hrs
+    
+    if license_id is not None:
+        if license_id == "":
+            update_data_dict["license_id"] = None
         else:
-            try: update_data_dict["license_id"] = int(license_id_str)
-            except ValueError: raise HTTPException(status_code=400, detail="Invalid license_id format")
+            try:
+                update_data_dict["license_id"] = int(license_id)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid license_id format")
 
     for key, value in update_data_dict.items():
         setattr(product, key, value)

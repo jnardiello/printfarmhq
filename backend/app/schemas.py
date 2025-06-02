@@ -45,6 +45,7 @@ class ProductBase(BaseModel):
     
     name: str
     print_time_hrs: float = Field(..., ge=0)
+    additional_parts_cost: float = Field(default=0.0, ge=0)
     license_id: Optional[int] = None
     file_path: Optional[str] = None
 
