@@ -1239,10 +1239,7 @@ def delete_printer_profile(profile_id: int, db: Session = Depends(get_db), curre
     if not prof:
         raise HTTPException(status_code=404, detail="Profile not found")
     
-    # Check if profile is used by PrintJobs (via PrintJobPrinter association)
-    if prof.print_jobs:
-        raise HTTPException(status_code=400, detail="Profile in use by print jobs. Cannot delete.")
-
+    # No longer check if in use - printer data is stored in print jobs
     db.delete(prof)
     db.commit()
     return
@@ -1340,19 +1337,31 @@ def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
             product_print_time = product_model.total_print_time_hrs
             total_job_print_hours += product_print_time * job_product_item.items_qty
     
-    # Apply printer cost using single printer profile (now only one allowed per job)
+    # Apply printer cost using stored printer data
     if job.printers and len(job.printers) > 0:
         job_printer_item = job.printers[0]  # Only one printer type per job now
-        printer_profile_model = db.get(models.PrinterProfile, job_printer_item.printer_profile_id)
-        if printer_profile_model and printer_profile_model.expected_life_hours > 0:
-            cost_per_hour_for_this_printer_type = printer_profile_model.price_eur / printer_profile_model.expected_life_hours
-            current_printer_cost_total = cost_per_hour_for_this_printer_type * \
-                                       total_job_print_hours * \
-                                       job_printer_item.printers_qty
-        elif printer_profile_model:
-            logger.warning(f"Printer Profile {printer_profile_model.name} has 0 expected life hours. Cannot calculate cost.")
-        else:
-            logger.warning(f"Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
+        
+        # Use stored printer data if available
+        if job_printer_item.printer_price_eur is not None and job_printer_item.printer_expected_life_hours:
+            if job_printer_item.printer_expected_life_hours > 0:
+                cost_per_hour_for_this_printer_type = job_printer_item.printer_price_eur / job_printer_item.printer_expected_life_hours
+                current_printer_cost_total = cost_per_hour_for_this_printer_type * \
+                                           total_job_print_hours * \
+                                           job_printer_item.printers_qty
+            else:
+                logger.warning(f"Printer {job_printer_item.printer_name} has 0 expected life hours. Cannot calculate cost.")
+        # Fallback to looking up printer profile for backward compatibility
+        elif job_printer_item.printer_profile_id:
+            printer_profile_model = db.get(models.PrinterProfile, job_printer_item.printer_profile_id)
+            if printer_profile_model and printer_profile_model.expected_life_hours > 0:
+                cost_per_hour_for_this_printer_type = printer_profile_model.price_eur / printer_profile_model.expected_life_hours
+                current_printer_cost_total = cost_per_hour_for_this_printer_type * \
+                                           total_job_print_hours * \
+                                           job_printer_item.printers_qty
+            elif printer_profile_model:
+                logger.warning(f"Printer Profile {printer_profile_model.name} has 0 expected life hours. Cannot calculate cost.")
+            else:
+                logger.warning(f"Printer Profile ID {job_printer_item.printer_profile_id} not found for job printer item ID {job_printer_item.id}")
 
     total_cogs_for_job += current_printer_cost_total
 
@@ -1520,7 +1529,37 @@ def create_print_job(job_data: schemas.PrintJobCreate, db: Session = Depends(get
     
     # add associations
     assoc_products = [models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty) for it in job_data.products]
-    assoc_printers = [models.PrintJobPrinter(print_job_id=db_job.id, printer_profile_id=it.printer_profile_id, printers_qty=it.printers_qty, hours_each=it.hours_each) for it in job_data.printers]
+    
+    # Create printer associations with stored printer data
+    assoc_printers = []
+    for printer_item in job_data.printers:
+        # Look up printer profile to copy its data
+        printer_profile = db.get(models.PrinterProfile, printer_item.printer_profile_id)
+        if printer_profile:
+            printer_assoc = models.PrintJobPrinter(
+                print_job_id=db_job.id,
+                printer_profile_id=printer_item.printer_profile_id,
+                printers_qty=printer_item.printers_qty,
+                hours_each=printer_item.hours_each,
+                # Store printer data at time of job creation
+                printer_name=printer_profile.name,
+                printer_manufacturer=printer_profile.manufacturer,
+                printer_model=printer_profile.model,
+                printer_price_eur=printer_profile.price_eur,
+                printer_expected_life_hours=printer_profile.expected_life_hours
+            )
+            assoc_printers.append(printer_assoc)
+        else:
+            # Handle case where printer profile doesn't exist
+            logger.warning(f"Printer profile {printer_item.printer_profile_id} not found when creating print job")
+            printer_assoc = models.PrintJobPrinter(
+                print_job_id=db_job.id,
+                printer_profile_id=printer_item.printer_profile_id,
+                printers_qty=printer_item.printers_qty,
+                hours_each=printer_item.hours_each
+            )
+            assoc_printers.append(printer_assoc)
+    
     db.add_all(assoc_products + assoc_printers)
     db.flush()  # This makes the associations available without committing
     

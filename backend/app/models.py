@@ -208,11 +208,20 @@ class PrintJobPrinter(Base):
 
     id = Column(Integer, primary_key=True)
     print_job_id = Column(UUID(as_uuid=True), ForeignKey("print_jobs.id"), nullable=False)
-    printer_profile_id = Column(Integer, ForeignKey("printer_profiles.id"), nullable=False)
+    printer_profile_id = Column(Integer, nullable=True)  # Now nullable, no foreign key
     printers_qty = Column(Integer, nullable=False, default=1)
     hours_each = Column(Float, nullable=False, default=0.0)
+    
+    # Stored printer data at time of print job creation
+    printer_name = Column(String, nullable=True)
+    printer_manufacturer = Column(String, nullable=True)
+    printer_model = Column(String, nullable=True)
+    printer_price_eur = Column(Float, nullable=True)
+    printer_expected_life_hours = Column(Float, nullable=True)
 
-    printer_profile = relationship("PrinterProfile", back_populates="print_jobs")
+    # Optional relationship - may be null if printer was deleted
+    printer_profile = relationship("PrinterProfile", back_populates="print_jobs", foreign_keys=[printer_profile_id], 
+                                 primaryjoin="PrintJobPrinter.printer_profile_id == PrinterProfile.id")
 
 
 class PrintJob(Base):
