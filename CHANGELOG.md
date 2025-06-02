@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.5.0 (2025-06-02)
+
+- refactor: rename "Print Jobs" to "Print Queue" throughout UI
+- refactor: remove plates from Products tab UI while preserving backend structure
+- feat: improve form styling consistency and layout optimization
+- feat: add additional parts cost field and optimize product form layout
+- Removing euro sign
+- feat: standardize UI components for consistent user experience
+- fix: update print job backend to calculate print time from products
+- feat: implement full CRUD operations for commercial licenses
+- feat: refactor inventory forms from dropdowns to modal dialogs
+- feat: enhance filament inventory management and fix alert system
+- feat: implement additional parts cost with full CRUD and COP calculation
+
+
 ## v1.4.0 (2025-06-01)
 
 - fix: display formatted time in product info and plate edit modals
