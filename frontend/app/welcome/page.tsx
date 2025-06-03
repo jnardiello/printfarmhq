@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
+import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +19,8 @@ import {
 } from "lucide-react"
 
 export default function WelcomePage() {
+  const { theme } = useTheme()
+  
   const features = [
     {
       icon: Package2,
@@ -60,7 +64,7 @@ export default function WelcomePage() {
     {
       name: "Sarah Chen",
       role: "Product Designer",
-      content: "PrintFarm HQ transformed how we manage our prototyping costs. Now I know exactly what each iteration costs us.",
+      content: "PrintFarmHQ transformed how we manage our prototyping costs. Now I know exactly what each iteration costs us.",
       rating: 5
     },
     {
@@ -83,12 +87,7 @@ export default function WelcomePage() {
       <header className="border-b bg-white/80 backdrop-blur-sm dark:bg-gray-900/80 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Package2 className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold">PrintFarm HQ</span>
-            </div>
+            <span className="text-xl font-bold">PrintFarmHQ</span>
             <div className="flex items-center gap-4">
               <Link href="/auth">
                 <Button variant="ghost">Sign In</Button>
@@ -104,6 +103,17 @@ export default function WelcomePage() {
       {/* Hero Section */}
       <section className="py-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center space-y-8">
+          {/* Large Logo */}
+          <div className="flex justify-center mb-8">
+            <Image
+              src={theme === 'dark' ? "/logo-white.png" : "/logo.png"}
+              alt="PrintFarmHQ Logo"
+              width={192}
+              height={192}
+              className="object-contain"
+            />
+          </div>
+          
           <Badge variant="secondary" className="px-4 py-2">
             🚀 The Complete 3D Printing Management Solution
           </Badge>
@@ -172,7 +182,7 @@ export default function WelcomePage() {
           <div className="text-center space-y-4 mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold">Trusted by Makers Worldwide</h2>
             <p className="text-xl text-muted-foreground">
-              See what our users are saying about PrintFarm HQ
+              See what our users are saying about PrintFarmHQ
             </p>
           </div>
 
@@ -206,7 +216,7 @@ export default function WelcomePage() {
             Ready to Transform Your 3D Printing Workflow?
           </h2>
           <p className="text-xl opacity-90 max-w-2xl mx-auto">
-            Join thousands of makers who are already using PrintFarm HQ to optimize their operations and increase profitability.
+            Join thousands of makers who are already using PrintFarmHQ to optimize their operations and increase profitability.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link href="/register">
@@ -238,13 +248,17 @@ export default function WelcomePage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="flex items-center gap-3 mb-4 md:mb-0">
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <Package2 className="w-5 h-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold text-white">PrintFarm HQ</span>
+              <Image 
+                src="/logo-white.png" 
+                alt="PrintFarmHQ Logo" 
+                width={48} 
+                height={48}
+                className="object-contain"
+              />
+              <span className="text-xl font-bold text-white">PrintFarmHQ</span>
             </div>
             <div className="text-sm">
-              © 2024 PrintFarm HQ. All rights reserved.
+              © 2024 PrintFarmHQ. All rights reserved.
             </div>
           </div>
         </div>

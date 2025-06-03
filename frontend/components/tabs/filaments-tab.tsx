@@ -20,6 +20,7 @@ import { AlertCircle } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { api } from "@/lib/api"
 import { getColorHex } from "@/lib/constants/filaments"
+import { EditFilamentModal } from "@/components/modals/edit-filament-modal"
 
 export function FilamentsTab() {
   const {
@@ -54,6 +55,8 @@ export function FilamentsTab() {
   const [selectedFilamentId, setSelectedFilamentId] = useState<string>("")
   const [purchaseToDelete, setPurchaseToDelete] = useState<any>(null)
   const [filamentToDelete, setFilamentToDelete] = useState<any>(null)
+  const [filamentToEdit, setFilamentToEdit] = useState<any>(null)
+  const [isEditFilamentModalOpen, setIsEditFilamentModalOpen] = useState(false)
   
   // Search and filter states for purchase history
   const [searchQuery, setSearchQuery] = useState("")
@@ -72,17 +75,27 @@ export function FilamentsTab() {
     setPurchaseForm((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleEditQuantity = async (filament: any) => {
-    const newQty = prompt("New quantity (kg)", filament.total_qty_kg.toString())
-    if (newQty === null) return
+  const handleEditQuantity = (filament: any) => {
+    setFilamentToEdit(filament)
+    setIsEditFilamentModalOpen(true)
+  }
 
-    const qty = Number.parseFloat(newQty)
-    if (isNaN(qty) || qty < 0) {
-      toast({ title: "Invalid Input", description: "Quantity must be a non-negative number.", variant: "destructive" })
-      return
+  const handleSaveFilamentQuantity = async (filamentId: number, newQuantity: number) => {
+    try {
+      await updateFilament(filamentId, { total_qty_kg: newQuantity })
+      toast({ 
+        title: "Success", 
+        description: "Filament quantity updated successfully" 
+      })
+    } catch (error) {
+      console.error("Error updating filament quantity:", error)
+      toast({ 
+        title: "Update Failed", 
+        description: (error as Error).message, 
+        variant: "destructive" 
+      })
+      throw error // Re-throw to let modal handle loading state
     }
-
-    await updateFilament(filament.id, { total_qty_kg: qty })
   }
 
   const handleSetMinFilaments = async (filament: any) => {
@@ -1026,6 +1039,14 @@ export function FilamentsTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Filament Quantity Modal */}
+      <EditFilamentModal
+        open={isEditFilamentModalOpen}
+        onOpenChange={setIsEditFilamentModalOpen}
+        filament={filamentToEdit}
+        onSave={handleSaveFilamentQuantity}
+      />
 
     </div>
   )

@@ -451,3 +451,115 @@ class PasswordResetRequestResponse(BaseModel):
     """Response for password reset request submission"""
     message: str
     request_id: int
+
+
+# God Admin Metrics schemas
+class DailyMetric(BaseModel):
+    """Base schema for daily metrics"""
+    date: date
+    total_count: int
+
+
+class DailyUserMetric(DailyMetric):
+    """Daily user creation metrics with breakdown"""
+    superadmins: int
+    regular_users: int
+
+
+class DailyProductMetric(DailyMetric):
+    """Daily product creation metrics"""
+    pass
+
+
+class DailyPrintJobMetric(DailyMetric):
+    """Daily print job creation metrics"""
+    pass
+
+
+class GodMetricsSummary(BaseModel):
+    """Combined metrics response for God Admin dashboard"""
+    users: List[DailyUserMetric]
+    products: List[DailyProductMetric]
+    print_jobs: List[DailyPrintJobMetric]
+
+
+# Enhanced God Admin Metrics schemas
+class ActiveUserMetric(BaseModel):
+    """Daily Active Users (DAU), Weekly Active Users (WAU), Monthly Active Users (MAU)"""
+    date: date
+    daily_active_users: int
+    weekly_active_users: int
+    monthly_active_users: int
+    new_vs_returning: dict  # {"new": 5, "returning": 15}
+
+
+class UserEngagementMetric(BaseModel):
+    """User engagement and behavior patterns"""
+    date: date
+    total_logins: int
+    unique_users_logged_in: int
+    avg_actions_per_user: float
+    peak_hour: Optional[int] = None  # 0-23
+    feature_usage: dict  # {"prints": 50, "products": 30, "filaments": 20}
+
+
+class BusinessMetric(BaseModel):
+    """Business intelligence metrics"""
+    date: date
+    total_filament_consumed_g: float
+    avg_print_time_hrs: float
+    print_success_rate: float
+    top_products: List[dict]  # [{"name": "Product A", "count": 10}]
+    top_filaments: List[dict]  # [{"name": "PLA Red", "usage_g": 500}]
+
+
+class RetentionMetric(BaseModel):
+    """User retention cohort analysis"""
+    cohort_date: date
+    cohort_size: int
+    retention_1_day: Optional[float] = None  # percentage
+    retention_7_day: Optional[float] = None
+    retention_30_day: Optional[float] = None
+
+
+class UserFunnelMetric(BaseModel):
+    """User journey funnel metrics"""
+    date: date
+    signups: int
+    first_logins: int
+    first_products: int
+    first_prints: int
+    avg_signup_to_login_hrs: Optional[float] = None
+    avg_login_to_product_hrs: Optional[float] = None
+    avg_product_to_print_hrs: Optional[float] = None
+
+
+class UserActivityRead(BaseModel):
+    """Schema for reading user activity logs"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    user_id: int
+    activity_type: str
+    activity_timestamp: datetime
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    activity_metadata: Optional[str] = None  # JSON string
+
+
+class EnhancedGodMetricsSummary(BaseModel):
+    """Enhanced metrics response with all new metrics"""
+    # Existing metrics
+    users: List[DailyUserMetric]
+    products: List[DailyProductMetric]
+    print_jobs: List[DailyPrintJobMetric]
+    
+    # New comprehensive metrics
+    active_users: List[ActiveUserMetric]
+    engagement: List[UserEngagementMetric]
+    business: List[BusinessMetric]
+    retention: List[RetentionMetric]
+    funnel: List[UserFunnelMetric]
+    
+    # Summary statistics
+    summary: dict  # High-level KPIs

@@ -30,6 +30,12 @@ class User(Base):
     is_god_user = Column(Boolean, default=False)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     token_version = Column(Integer, default=1, nullable=False)
+    
+    # Activity tracking fields
+    last_login = Column(DateTime(timezone=True), nullable=True, index=True)
+    last_activity = Column(DateTime(timezone=True), nullable=True, index=True)
+    login_count = Column(Integer, default=0, nullable=False)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
@@ -47,6 +53,21 @@ class User(Base):
             return self.created_by_user_id  # Team member's data belongs to their super-admin
 
 
+class UserActivity(Base):
+    __tablename__ = "user_activities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    activity_type = Column(String(50), nullable=False, index=True)
+    activity_timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    ip_address = Column(String(45), nullable=True)  # IPv4/IPv6 compatible
+    user_agent = Column(String, nullable=True)
+    activity_metadata = Column(String, nullable=True)  # JSON stored as string in SQLite
+
+    # Relationship
+    user = relationship("User", backref="activities")
+
+
 class Filament(Base):
     __tablename__ = "filaments"
 
@@ -58,6 +79,8 @@ class Filament(Base):
     total_qty_kg = Column(Float, nullable=False, default=0.0)
     min_filaments_kg = Column(Float, nullable=True)  # Minimum threshold for low stock alert
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     products = relationship("Product", secondary="filament_usages", viewonly=True)
     purchases = relationship(
@@ -84,6 +107,8 @@ class Product(Base):
     license_id = Column(Integer, ForeignKey("subscriptions.id"), nullable=True)
     file_path = Column(String, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Legacy relationship - will be removed after migration
     filament_usages = relationship("FilamentUsage", back_populates="product", cascade="all, delete-orphan")
@@ -131,6 +156,8 @@ class Plate(Base):
     file_path = Column(String, nullable=True)  # Optional STL/3MF file for this plate
     gcode_path = Column(String, nullable=True)  # Optional G-code file for this plate
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     product = relationship("Product", back_populates="plates")
     filament_usages = relationship("PlateFilamentUsage", back_populates="plate", cascade="all, delete-orphan")
@@ -158,6 +185,8 @@ class Subscription(Base):
     end_date = Column(Date, nullable=True)  # nullable when ongoing
     price_eur = Column(Float, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     owner = relationship("User", foreign_keys=[owner_id])
 
@@ -173,6 +202,8 @@ class FilamentPurchase(Base):
     channel = Column(String, nullable=True)
     notes = Column(String, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     filament = relationship("Filament", back_populates="purchases")
     owner = relationship("User", foreign_keys=[owner_id])
@@ -219,6 +250,8 @@ class PrinterProfile(Base):
     price_eur = Column(Float, nullable=False)
     expected_life_hours = Column(Float, nullable=False)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Remove back_populates since we don't have a proper foreign key anymore
     print_jobs = relationship("PrintJobPrinter", 

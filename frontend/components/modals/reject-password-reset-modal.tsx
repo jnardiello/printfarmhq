@@ -28,26 +28,26 @@ interface PasswordResetRequest {
 }
 
 interface RejectPasswordResetModalProps {
-  isOpen: boolean
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   request: PasswordResetRequest | null
   onReject: (requestId: number, reason?: string) => Promise<void>
-  isProcessing: boolean
 }
 
 export function RejectPasswordResetModal({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   request,
-  onReject,
-  isProcessing
+  onReject
 }: RejectPasswordResetModalProps) {
   const [reason, setReason] = useState("")
+  const [isProcessing, setIsProcessing] = useState(false)
 
   // Reset state when modal closes
   const handleClose = () => {
     setReason("")
-    onClose()
+    setIsProcessing(false)
+    onOpenChange(false)
   }
 
   // Handle rejection
@@ -55,17 +55,19 @@ export function RejectPasswordResetModal({
     if (!request) return
     
     try {
+      setIsProcessing(true)
       await onReject(request.id, reason.trim() || undefined)
       handleClose()
     } catch (error) {
       // Error handling is done in parent component
+      setIsProcessing(false)
     }
   }
 
   if (!request) return null
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader className="space-y-3">
           <DialogTitle className="flex items-center gap-2">

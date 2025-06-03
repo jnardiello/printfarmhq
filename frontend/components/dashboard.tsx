@@ -11,7 +11,10 @@ import { SubscriptionsTab } from "@/components/tabs/subscriptions-tab"
 import { PrintsTab } from "@/components/tabs/prints-tab"
 import { UsersTab } from "@/components/tabs/users-tab"
 import { FilamentTypesTab } from "@/components/tabs/filament-types-tab"
-import { GodDashboardTab } from "@/components/tabs/god-dashboard-tab"
+import { GodAdminDropdown } from "@/components/god-admin/god-admin-dropdown"
+import { MetricsDashboard } from "@/components/god-admin/metrics/metrics-dashboard"
+import { UsersManagement } from "@/components/god-admin/users/users-management"
+import { PasswordResetRequests } from "@/components/god-admin/notifications/password-reset-requests"
 import { HomePage } from "@/components/home-page"
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeToggle } from "@/components/theme-toggle"
@@ -34,6 +37,7 @@ export function Dashboard() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState("home")
+  const [godAdminSection, setGodAdminSection] = useState<"metrics" | "users" | "notifications">("metrics")
   const { setCurrentTab } = useData()
   const { user } = useAuth()
   const isMobile = useIsMobile()
@@ -48,7 +52,7 @@ export function Dashboard() {
       validTabs.push("users", "filament-types")
     }
     if (user?.is_god_user) {
-      validTabs.push("god-dashboard")
+      validTabs.push("god-admin")
     }
     
     if (tab && validTabs.includes(tab)) {
@@ -79,7 +83,7 @@ export function Dashboard() {
     handleTabChange("home")
   }
 
-  // Fetch god dashboard notifications count (for god users only)
+  // Fetch god admin notifications count (for god users only)
   useEffect(() => {
     if (!user?.is_god_user) return
 
@@ -128,9 +132,9 @@ export function Dashboard() {
     { value: "filament-types", label: "Filament Types" }
   ]
 
-  // Add God Dashboard as the very last option after configurations
-  const godDashboardOptions = user?.is_god_user ? [
-    { value: "god-dashboard", label: "God Dashboard" }
+  // Add God Admin as the very last option after configurations
+  const godAdminOptions = user?.is_god_user ? [
+    { value: "god-admin", label: "God Admin" }
   ] : []
   
   const tabOptions = baseTabOptions
@@ -139,7 +143,7 @@ export function Dashboard() {
     ...baseTabOptions, 
     ...inventoryOptions, 
     ...(user?.is_admin ? configurationOptions : []),
-    ...godDashboardOptions
+    ...godAdminOptions
   ]
   
   const isInventoryTab = inventoryOptions.some(option => option.value === activeTab)
@@ -226,7 +230,7 @@ export function Dashboard() {
                       <DropdownMenuItem className="font-medium text-muted-foreground">
                         System
                       </DropdownMenuItem>
-                      {godDashboardOptions.map((tab) => (
+                      {godAdminOptions.map((tab) => (
                         <DropdownMenuItem 
                           key={tab.value}
                           className={`ml-4 ${activeTab === tab.value ? "bg-accent text-accent-foreground" : ""}`}
@@ -313,21 +317,13 @@ export function Dashboard() {
                 )}
 
                 {user?.is_god_user && (
-                  <Button
-                    variant={activeTab === "god-dashboard" ? "default" : "ghost"}
-                    className="h-10 relative"
-                    onClick={() => handleTabChange("god-dashboard")}
-                  >
-                    God Dashboard
-                    {godNotificationCount > 0 && (
-                      <Badge 
-                        variant="destructive" 
-                        className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 flex items-center justify-center text-xs"
-                      >
-                        {godNotificationCount}
-                      </Badge>
-                    )}
-                  </Button>
+                  <GodAdminDropdown
+                    currentSection={godAdminSection}
+                    onSectionChange={setGodAdminSection}
+                    notificationCount={godNotificationCount}
+                    isActive={activeTab === "god-admin"}
+                    onNavigateToGodAdmin={() => handleTabChange("god-admin")}
+                  />
                 )}
               </div>
             </div>
@@ -344,7 +340,13 @@ export function Dashboard() {
         {activeTab === "subscriptions" && <SubscriptionsTab />}
         {user?.is_admin && activeTab === "users" && <UsersTab />}
         {user?.is_admin && activeTab === "filament-types" && <FilamentTypesTab />}
-        {user?.is_god_user && activeTab === "god-dashboard" && <GodDashboardTab />}
+        {user?.is_god_user && activeTab === "god-admin" && (
+          <>
+            {godAdminSection === "metrics" && <MetricsDashboard />}
+            {godAdminSection === "users" && <UsersManagement />}
+            {godAdminSection === "notifications" && <PasswordResetRequests />}
+          </>
+        )}
       </main>
       <Toaster />
     </div>

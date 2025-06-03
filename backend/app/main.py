@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from typing import Optional, List, Union
@@ -32,6 +32,40 @@ from .auth import (
 )
 from .database import setup_required
 from .alerts import generate_alerts
+
+# Activity tracking helpers
+def log_user_activity(
+    db: Session, 
+    user: models.User, 
+    activity_type: str, 
+    request: Request = None,
+    metadata: dict = None
+):
+    """Helper function to log user activity"""
+    current_time = datetime.utcnow()
+    
+    # Update user's last activity
+    user.last_activity = current_time
+    
+    # Extract client information if request is provided
+    ip_address = None
+    user_agent = None
+    if request:
+        ip_address = request.headers.get("x-forwarded-for", request.client.host if request.client else None)
+        user_agent = request.headers.get("user-agent")
+    
+    # Create activity record
+    activity = models.UserActivity(
+        user_id=user.id,
+        activity_type=activity_type,
+        activity_timestamp=current_time,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        activity_metadata=json.dumps(metadata) if metadata else None
+    )
+    
+    db.add(activity)
+    db.commit()
 
 # Create DB tables
 Base.metadata.create_all(bind=engine)
@@ -121,7 +155,7 @@ def register(user_data: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/login", response_model=schemas.AuthResponse)
-def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+def login(credentials: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
     """Login user"""
     user = authenticate_user(credentials.email, credentials.password, db)
     if not user:
@@ -129,6 +163,31 @@ def login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password"
         )
+    
+    # Track login activity
+    current_time = datetime.utcnow()
+    user.last_login = current_time
+    user.last_activity = current_time
+    user.login_count = (user.login_count or 0) + 1
+    
+    # Extract client information
+    ip_address = request.headers.get("x-forwarded-for", request.client.host if request.client else None)
+    user_agent = request.headers.get("user-agent")
+    
+    # Log the activity
+    activity = models.UserActivity(
+        user_id=user.id,
+        activity_type="login",
+        activity_timestamp=current_time,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        activity_metadata=json.dumps({"email": user.email})
+    )
+    db.add(activity)
+    
+    # Commit changes
+    db.commit()
+    db.refresh(user)
     
     # Create JWT token
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -1091,6 +1150,7 @@ def delete_filament_purchase(
 
 @app.post("/products", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED)
 def create_product(
+    request: Request,
     sku: str = Form(...),
     name: str = Form(...),
     print_time: str = Form(...),  # HH:MM:SS or MM:SS format
@@ -1210,6 +1270,21 @@ def create_product(
     
     db.commit()
     db.refresh(db_product)
+    
+    # Track product creation activity
+    log_user_activity(
+        db=db,
+        user=current_user,
+        activity_type="create_product",
+        request=request,
+        metadata={
+            "product_id": db_product.id,
+            "product_name": db_product.name,
+            "sku": db_product.sku,
+            "using_plates": using_plates
+        }
+    )
+    
     return db_product
 
 
@@ -1945,7 +2020,7 @@ def _return_filament_to_inventory(job: models.PrintJob, db: Session):
 # ---------- Print Jobs ---------- #
 
 @app.post("/print_jobs", response_model=schemas.PrintJobRead, status_code=status.HTTP_201_CREATED)
-def create_print_job(job: schemas.PrintJobCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     # Create base job
     db_job = models.PrintJob(
         name=job.name,
@@ -2021,6 +2096,21 @@ def create_print_job(job: schemas.PrintJobCreate, db: Session = Depends(get_db),
     db_job.calculated_cogs_eur = _calculate_print_job_cogs(db_job, db)
     db.commit()
     db.refresh(db_job)
+    
+    # Track print job creation activity
+    log_user_activity(
+        db=db,
+        user=current_user,
+        activity_type="create_print_job",
+        request=request,
+        metadata={
+            "print_job_id": db_job.id,
+            "print_job_name": db_job.name,
+            "status": db_job.status,
+            "products_count": len(job.products),
+            "printers_count": len(job.printers)
+        }
+    )
     
     return db_job
 
@@ -2344,3 +2434,681 @@ def god_reset_user_password(
     return schemas.GodPasswordResetResponse(
         message=f"Password reset successfully for user {target_user.name}"
     )
+
+
+# ---------- God Admin Metrics (God User Only) ---------- #
+
+@app.get("/god/metrics/users", response_model=List[schemas.DailyUserMetric])
+def get_god_user_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get daily user creation metrics for the last N days (god user only)"""
+    from sqlalchemy import func, case
+    from datetime import datetime, timedelta
+    
+    # Calculate date range
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    # Query for daily user creation counts with breakdown
+    results = db.query(
+        func.date(models.User.created_at).label('date'),
+        func.count().label('total_count'),
+        func.sum(case((models.User.is_superadmin == True, 1), else_=0)).label('superadmins'),
+        func.sum(case((models.User.is_superadmin == False, 1), else_=0)).label('regular_users')
+    ).filter(
+        func.date(models.User.created_at) >= start_date,
+        func.date(models.User.created_at) <= end_date
+    ).group_by(
+        func.date(models.User.created_at)
+    ).order_by(
+        func.date(models.User.created_at)
+    ).all()
+    
+    # Convert to response format with zero padding for missing dates
+    # Note: func.date() returns strings, so we need to convert for lookup
+    result_dict = {str(r.date): r for r in results}
+    metrics = []
+    
+    current_date = start_date
+    while current_date <= end_date:
+        if str(current_date) in result_dict:
+            r = result_dict[str(current_date)]
+            metrics.append(schemas.DailyUserMetric(
+                date=current_date,
+                total_count=r.total_count,
+                superadmins=r.superadmins,
+                regular_users=r.regular_users
+            ))
+        else:
+            metrics.append(schemas.DailyUserMetric(
+                date=current_date,
+                total_count=0,
+                superadmins=0,
+                regular_users=0
+            ))
+        current_date += timedelta(days=1)
+    
+    return metrics
+
+
+@app.get("/god/metrics/products", response_model=List[schemas.DailyProductMetric])
+def get_god_product_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get daily product creation metrics for the last N days (god user only)"""
+    from sqlalchemy import func
+    from datetime import timedelta
+    
+    # Calculate date range
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    # Query for daily product creation counts using the new created_at field
+    results = db.query(
+        func.date(models.Product.created_at).label('date'),
+        func.count().label('total_count')
+    ).filter(
+        func.date(models.Product.created_at) >= start_date,
+        func.date(models.Product.created_at) <= end_date
+    ).group_by(
+        func.date(models.Product.created_at)
+    ).order_by(
+        func.date(models.Product.created_at)
+    ).all()
+    
+    # Convert to response format with zero padding for missing dates
+    # Note: func.date() returns strings, so we need to convert for lookup
+    result_dict = {str(r.date): r for r in results}
+    metrics = []
+    
+    current_date = start_date
+    while current_date <= end_date:
+        if str(current_date) in result_dict:
+            r = result_dict[str(current_date)]
+            metrics.append(schemas.DailyProductMetric(
+                date=current_date,
+                total_count=r.total_count
+            ))
+        else:
+            metrics.append(schemas.DailyProductMetric(
+                date=current_date,
+                total_count=0
+            ))
+        current_date += timedelta(days=1)
+    
+    return metrics
+
+
+@app.get("/god/metrics/print-jobs", response_model=List[schemas.DailyPrintJobMetric])
+def get_god_print_job_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get daily print job creation metrics for the last N days (god user only)"""
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+    
+    # Calculate date range
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    # Query for daily print job creation counts
+    results = db.query(
+        func.date(models.PrintJob.created_at).label('date'),
+        func.count().label('total_count')
+    ).filter(
+        func.date(models.PrintJob.created_at) >= start_date,
+        func.date(models.PrintJob.created_at) <= end_date
+    ).group_by(
+        func.date(models.PrintJob.created_at)
+    ).order_by(
+        func.date(models.PrintJob.created_at)
+    ).all()
+    
+    # Convert to response format with zero padding for missing dates
+    # Note: func.date() returns strings, so we need to convert for lookup
+    result_dict = {str(r.date): r for r in results}
+    metrics = []
+    
+    current_date = start_date
+    while current_date <= end_date:
+        if str(current_date) in result_dict:
+            r = result_dict[str(current_date)]
+            metrics.append(schemas.DailyPrintJobMetric(
+                date=current_date,
+                total_count=r.total_count
+            ))
+        else:
+            metrics.append(schemas.DailyPrintJobMetric(
+                date=current_date,
+                total_count=0
+            ))
+        current_date += timedelta(days=1)
+    
+    return metrics
+
+
+@app.get("/god/metrics/summary", response_model=schemas.GodMetricsSummary)
+def get_god_metrics_summary(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get all metrics in one call for God Admin dashboard (god user only)"""
+    # Get all metrics in parallel by calling the individual functions
+    user_metrics = get_god_user_metrics(days=days, db=db, god_user=god_user)
+    product_metrics = get_god_product_metrics(days=days, db=db, god_user=god_user)
+    print_job_metrics = get_god_print_job_metrics(days=days, db=db, god_user=god_user)
+    
+    return schemas.GodMetricsSummary(
+        users=user_metrics,
+        products=product_metrics,
+        print_jobs=print_job_metrics
+    )
+
+
+# ---------- Enhanced God Admin Metrics (God User Only) ---------- #
+
+@app.get("/god/metrics/active-users", response_model=List[schemas.ActiveUserMetric])
+def get_god_active_user_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get Daily/Weekly/Monthly Active Users metrics (god user only)"""
+    from sqlalchemy import func, distinct, or_, and_
+    from datetime import timedelta
+    
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    metrics = []
+    
+    for i in range(days):
+        current_date = start_date + timedelta(days=i)
+        
+        # DAU: Users active on this specific day
+        dau = db.query(func.count(distinct(models.User.id))).filter(
+            or_(
+                # Users who logged in on this day
+                func.date(models.User.last_login) == current_date,
+                # Users who created activities on this day
+                models.User.id.in_(
+                    db.query(models.UserActivity.user_id).filter(
+                        func.date(models.UserActivity.activity_timestamp) == current_date
+                    )
+                )
+            )
+        ).scalar() or 0
+        
+        # WAU: Users active in the past 7 days from current_date
+        wau_start = current_date - timedelta(days=6)
+        wau = db.query(func.count(distinct(models.User.id))).filter(
+            or_(
+                and_(
+                    func.date(models.User.last_login) >= wau_start,
+                    func.date(models.User.last_login) <= current_date
+                ),
+                models.User.id.in_(
+                    db.query(models.UserActivity.user_id).filter(
+                        func.date(models.UserActivity.activity_timestamp) >= wau_start,
+                        func.date(models.UserActivity.activity_timestamp) <= current_date
+                    )
+                )
+            )
+        ).scalar() or 0
+        
+        # MAU: Users active in the past 30 days from current_date
+        mau_start = current_date - timedelta(days=29)
+        mau = db.query(func.count(distinct(models.User.id))).filter(
+            or_(
+                and_(
+                    func.date(models.User.last_login) >= mau_start,
+                    func.date(models.User.last_login) <= current_date
+                ),
+                models.User.id.in_(
+                    db.query(models.UserActivity.user_id).filter(
+                        func.date(models.UserActivity.activity_timestamp) >= mau_start,
+                        func.date(models.UserActivity.activity_timestamp) <= current_date
+                    )
+                )
+            )
+        ).scalar() or 0
+        
+        # New vs Returning users for this day
+        new_users = db.query(func.count(models.User.id)).filter(
+            func.date(models.User.created_at) == current_date
+        ).scalar() or 0
+        
+        returning_users = max(0, dau - new_users)
+        
+        metrics.append(schemas.ActiveUserMetric(
+            date=current_date,
+            daily_active_users=dau,
+            weekly_active_users=wau,
+            monthly_active_users=mau,
+            new_vs_returning={
+                "new": new_users,
+                "returning": returning_users
+            }
+        ))
+    
+    return metrics
+
+
+@app.get("/god/metrics/engagement", response_model=List[schemas.UserEngagementMetric])
+def get_god_engagement_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get user engagement metrics (god user only)"""
+    from sqlalchemy import func
+    from datetime import timedelta
+    
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    metrics = []
+    
+    for i in range(days):
+        current_date = start_date + timedelta(days=i)
+        
+        # Total logins for this day
+        total_logins = db.query(func.count(models.UserActivity.id)).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date,
+            models.UserActivity.activity_type == 'login'
+        ).scalar() or 0
+        
+        # Unique users who logged in
+        unique_logins = db.query(func.count(func.distinct(models.UserActivity.user_id))).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date,
+            models.UserActivity.activity_type == 'login'
+        ).scalar() or 0
+        
+        # Total activities for the day
+        total_activities = db.query(func.count(models.UserActivity.id)).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date
+        ).scalar() or 0
+        
+        # Active users for the day
+        active_users = db.query(func.count(func.distinct(models.UserActivity.user_id))).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date
+        ).scalar() or 0
+        
+        # Calculate average actions per user
+        avg_actions = (total_activities / active_users) if active_users > 0 else 0.0
+        
+        # Feature usage breakdown
+        feature_usage = {}
+        activity_types = db.query(
+            models.UserActivity.activity_type,
+            func.count(models.UserActivity.id).label('count')
+        ).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date
+        ).group_by(models.UserActivity.activity_type).all()
+        
+        for activity_type, count in activity_types:
+            feature_usage[activity_type] = count
+        
+        # Peak hour analysis (hour with most activity)
+        peak_hour_data = db.query(
+            func.extract('hour', models.UserActivity.activity_timestamp).label('hour'),
+            func.count(models.UserActivity.id).label('count')
+        ).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date
+        ).group_by(
+            func.extract('hour', models.UserActivity.activity_timestamp)
+        ).order_by(func.count(models.UserActivity.id).desc()).first()
+        
+        peak_hour = int(peak_hour_data.hour) if peak_hour_data else None
+        
+        metrics.append(schemas.UserEngagementMetric(
+            date=current_date,
+            total_logins=total_logins,
+            unique_users_logged_in=unique_logins,
+            avg_actions_per_user=round(avg_actions, 2),
+            peak_hour=peak_hour,
+            feature_usage=feature_usage
+        ))
+    
+    return metrics
+
+
+@app.get("/god/metrics/business", response_model=List[schemas.BusinessMetric])
+def get_god_business_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get business intelligence metrics (god user only)"""
+    from sqlalchemy import func
+    from datetime import timedelta
+    
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    metrics = []
+    
+    for i in range(days):
+        current_date = start_date + timedelta(days=i)
+        
+        # Total filament consumed for the day (from print jobs created that day)
+        filament_consumed = db.query(func.sum(models.FilamentUsage.grams_used)).join(
+            models.Product, models.FilamentUsage.product_id == models.Product.id
+        ).join(
+            models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
+        ).join(
+            models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
+        ).filter(
+            func.date(models.PrintJob.created_at) == current_date
+        ).scalar() or 0.0
+        
+        # Alternative: get from plates if products use the new plate structure
+        plate_filament_consumed = db.query(func.sum(models.PlateFilamentUsage.grams_used)).join(
+            models.Plate, models.PlateFilamentUsage.plate_id == models.Plate.id
+        ).join(
+            models.Product, models.Plate.product_id == models.Product.id
+        ).join(
+            models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
+        ).join(
+            models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
+        ).filter(
+            func.date(models.PrintJob.created_at) == current_date
+        ).scalar() or 0.0
+        
+        # Use the higher value (new plate structure preferred)
+        total_filament_consumed = max(filament_consumed, plate_filament_consumed)
+        
+        # Average print time for jobs created that day
+        avg_print_time = db.query(func.avg(models.Product.print_time_hrs)).join(
+            models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
+        ).join(
+            models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
+        ).filter(
+            func.date(models.PrintJob.created_at) == current_date
+        ).scalar() or 0.0
+        
+        # Print success rate (completed vs total)
+        total_jobs = db.query(func.count(models.PrintJob.id)).filter(
+            func.date(models.PrintJob.created_at) == current_date
+        ).scalar() or 0
+        
+        completed_jobs = db.query(func.count(models.PrintJob.id)).filter(
+            func.date(models.PrintJob.created_at) == current_date,
+            models.PrintJob.status == 'completed'
+        ).scalar() or 0
+        
+        success_rate = (completed_jobs / total_jobs * 100) if total_jobs > 0 else 0.0
+        
+        # Top products for the day (most used in print jobs)
+        top_products_query = db.query(
+            models.Product.name,
+            func.sum(models.PrintJobProduct.items_qty).label('count')
+        ).join(
+            models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
+        ).join(
+            models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
+        ).filter(
+            func.date(models.PrintJob.created_at) == current_date
+        ).group_by(models.Product.id, models.Product.name).order_by(
+            func.sum(models.PrintJobProduct.items_qty).desc()
+        ).limit(5).all()
+        
+        top_products = [{"name": name, "count": count} for name, count in top_products_query]
+        
+        # Top filaments for the day (most consumed) - SQLite compatible
+        top_filaments_query = db.query(
+            (models.Filament.brand + ' ' + models.Filament.color + ' ' + models.Filament.material).label('name'),
+            func.sum(models.FilamentUsage.grams_used).label('usage_g')
+        ).join(
+            models.Filament, models.FilamentUsage.filament_id == models.Filament.id
+        ).join(
+            models.Product, models.FilamentUsage.product_id == models.Product.id
+        ).join(
+            models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
+        ).join(
+            models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
+        ).filter(
+            func.date(models.PrintJob.created_at) == current_date
+        ).group_by(models.Filament.id).order_by(
+            func.sum(models.FilamentUsage.grams_used).desc()
+        ).limit(5).all()
+        
+        # Alternative for plate-based filament usage - SQLite compatible
+        if not top_filaments_query:
+            top_filaments_query = db.query(
+                (models.Filament.brand + ' ' + models.Filament.color + ' ' + models.Filament.material).label('name'),
+                func.sum(models.PlateFilamentUsage.grams_used).label('usage_g')
+            ).join(
+                models.Filament, models.PlateFilamentUsage.filament_id == models.Filament.id
+            ).join(
+                models.Plate, models.PlateFilamentUsage.plate_id == models.Plate.id
+            ).join(
+                models.Product, models.Plate.product_id == models.Product.id
+            ).join(
+                models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
+            ).join(
+                models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
+            ).filter(
+                func.date(models.PrintJob.created_at) == current_date
+            ).group_by(models.Filament.id).order_by(
+                func.sum(models.PlateFilamentUsage.grams_used).desc()
+            ).limit(5).all()
+        
+        top_filaments = [{"name": name, "usage_g": float(usage_g)} for name, usage_g in top_filaments_query]
+        
+        metrics.append(schemas.BusinessMetric(
+            date=current_date,
+            total_filament_consumed_g=float(total_filament_consumed),
+            avg_print_time_hrs=float(avg_print_time) if avg_print_time else 0.0,
+            print_success_rate=round(success_rate, 2),
+            top_products=top_products,
+            top_filaments=top_filaments
+        ))
+    
+    return metrics
+
+
+@app.get("/god/metrics/retention", response_model=List[schemas.RetentionMetric])
+def get_god_retention_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get user retention cohort analysis (god user only)"""
+    from sqlalchemy import func
+    from datetime import timedelta
+    
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    metrics = []
+    
+    for i in range(days):
+        cohort_date = start_date + timedelta(days=i)
+        
+        # Users who signed up on this date (cohort)
+        cohort_users = db.query(models.User.id).filter(
+            func.date(models.User.created_at) == cohort_date
+        ).all()
+        
+        cohort_size = len(cohort_users)
+        
+        if cohort_size == 0:
+            metrics.append(schemas.RetentionMetric(
+                cohort_date=cohort_date,
+                cohort_size=0,
+                retention_1_day=None,
+                retention_7_day=None,
+                retention_30_day=None
+            ))
+            continue
+        
+        cohort_user_ids = [user.id for user in cohort_users]
+        
+        # 1-day retention: users who were active 1 day after signup
+        one_day_later = cohort_date + timedelta(days=1)
+        retained_1_day = db.query(func.count(func.distinct(models.UserActivity.user_id))).filter(
+            models.UserActivity.user_id.in_(cohort_user_ids),
+            func.date(models.UserActivity.activity_timestamp) == one_day_later
+        ).scalar() or 0
+        
+        # 7-day retention: users who were active within 7 days after signup
+        seven_days_later = cohort_date + timedelta(days=7)
+        retained_7_day = db.query(func.count(func.distinct(models.UserActivity.user_id))).filter(
+            models.UserActivity.user_id.in_(cohort_user_ids),
+            func.date(models.UserActivity.activity_timestamp) >= cohort_date + timedelta(days=1),
+            func.date(models.UserActivity.activity_timestamp) <= seven_days_later
+        ).scalar() or 0
+        
+        # 30-day retention: users who were active within 30 days after signup
+        thirty_days_later = cohort_date + timedelta(days=30)
+        retained_30_day = db.query(func.count(func.distinct(models.UserActivity.user_id))).filter(
+            models.UserActivity.user_id.in_(cohort_user_ids),
+            func.date(models.UserActivity.activity_timestamp) >= cohort_date + timedelta(days=1),
+            func.date(models.UserActivity.activity_timestamp) <= thirty_days_later
+        ).scalar() or 0
+        
+        # Calculate retention percentages
+        retention_1_day = (retained_1_day / cohort_size * 100) if cohort_size > 0 else None
+        retention_7_day = (retained_7_day / cohort_size * 100) if cohort_size > 0 else None
+        retention_30_day = (retained_30_day / cohort_size * 100) if cohort_size > 0 else None
+        
+        # Only show retention if enough time has passed
+        if (datetime.utcnow().date() - cohort_date).days < 1:
+            retention_1_day = None
+        if (datetime.utcnow().date() - cohort_date).days < 7:
+            retention_7_day = None
+        if (datetime.utcnow().date() - cohort_date).days < 30:
+            retention_30_day = None
+        
+        metrics.append(schemas.RetentionMetric(
+            cohort_date=cohort_date,
+            cohort_size=cohort_size,
+            retention_1_day=round(retention_1_day, 2) if retention_1_day is not None else None,
+            retention_7_day=round(retention_7_day, 2) if retention_7_day is not None else None,
+            retention_30_day=round(retention_30_day, 2) if retention_30_day is not None else None
+        ))
+    
+    return metrics
+
+
+@app.get("/god/metrics/funnel", response_model=List[schemas.UserFunnelMetric])
+def get_god_funnel_metrics(
+    days: int = 30,
+    db: Session = Depends(get_db), 
+    god_user: models.User = Depends(get_current_god_user)
+):
+    """Get user journey funnel metrics (god user only)"""
+    from sqlalchemy import func
+    from datetime import timedelta
+    
+    end_date = datetime.utcnow().date()
+    start_date = end_date - timedelta(days=days-1)
+    
+    metrics = []
+    
+    for i in range(days):
+        current_date = start_date + timedelta(days=i)
+        
+        # Signups for the day
+        signups = db.query(func.count(models.User.id)).filter(
+            func.date(models.User.created_at) == current_date
+        ).scalar() or 0
+        
+        # First logins for the day
+        first_logins = db.query(func.count(models.UserActivity.id)).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date,
+            models.UserActivity.activity_type == 'login'
+        ).join(models.User, models.UserActivity.user_id == models.User.id).filter(
+            func.date(models.User.created_at) == current_date
+        ).scalar() or 0
+        
+        # First product creation for the day
+        first_products = db.query(func.count(models.UserActivity.id)).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date,
+            models.UserActivity.activity_type == 'create_product'
+        ).join(models.User, models.UserActivity.user_id == models.User.id).filter(
+            func.date(models.User.created_at) == current_date
+        ).scalar() or 0
+        
+        # First print job creation for the day
+        first_prints = db.query(func.count(models.UserActivity.id)).filter(
+            func.date(models.UserActivity.activity_timestamp) == current_date,
+            models.UserActivity.activity_type == 'create_print_job'
+        ).join(models.User, models.UserActivity.user_id == models.User.id).filter(
+            func.date(models.User.created_at) == current_date
+        ).scalar() or 0
+        
+        # Calculate average time to progression for users who signed up today
+        today_users = db.query(models.User.id, models.User.created_at).filter(
+            func.date(models.User.created_at) == current_date
+        ).all()
+        
+        avg_signup_to_login_hrs = None
+        avg_login_to_product_hrs = None
+        avg_product_to_print_hrs = None
+        
+        if today_users:
+            signup_to_login_times = []
+            login_to_product_times = []
+            product_to_print_times = []
+            
+            for user_id, signup_time in today_users:
+                # First login after signup
+                first_login = db.query(models.UserActivity.activity_timestamp).filter(
+                    models.UserActivity.user_id == user_id,
+                    models.UserActivity.activity_type == 'login',
+                    models.UserActivity.activity_timestamp >= signup_time
+                ).order_by(models.UserActivity.activity_timestamp).first()
+                
+                if first_login:
+                    signup_to_login_hrs = (first_login[0] - signup_time).total_seconds() / 3600
+                    signup_to_login_times.append(signup_to_login_hrs)
+                    
+                    # First product after login
+                    first_product = db.query(models.UserActivity.activity_timestamp).filter(
+                        models.UserActivity.user_id == user_id,
+                        models.UserActivity.activity_type == 'create_product',
+                        models.UserActivity.activity_timestamp >= first_login[0]
+                    ).order_by(models.UserActivity.activity_timestamp).first()
+                    
+                    if first_product:
+                        login_to_product_hrs = (first_product[0] - first_login[0]).total_seconds() / 3600
+                        login_to_product_times.append(login_to_product_hrs)
+                        
+                        # First print after product
+                        first_print = db.query(models.UserActivity.activity_timestamp).filter(
+                            models.UserActivity.user_id == user_id,
+                            models.UserActivity.activity_type == 'create_print_job',
+                            models.UserActivity.activity_timestamp >= first_product[0]
+                        ).order_by(models.UserActivity.activity_timestamp).first()
+                        
+                        if first_print:
+                            product_to_print_hrs = (first_print[0] - first_product[0]).total_seconds() / 3600
+                            product_to_print_times.append(product_to_print_hrs)
+            
+            # Calculate averages
+            avg_signup_to_login_hrs = sum(signup_to_login_times) / len(signup_to_login_times) if signup_to_login_times else None
+            avg_login_to_product_hrs = sum(login_to_product_times) / len(login_to_product_times) if login_to_product_times else None
+            avg_product_to_print_hrs = sum(product_to_print_times) / len(product_to_print_times) if product_to_print_times else None
+        
+        metrics.append(schemas.UserFunnelMetric(
+            date=current_date,
+            signups=signups,
+            first_logins=first_logins,
+            first_products=first_products,
+            first_prints=first_prints,
+            avg_signup_to_login_hrs=round(avg_signup_to_login_hrs, 2) if avg_signup_to_login_hrs is not None else None,
+            avg_login_to_product_hrs=round(avg_login_to_product_hrs, 2) if avg_login_to_product_hrs is not None else None,
+            avg_product_to_print_hrs=round(avg_product_to_print_hrs, 2) if avg_product_to_print_hrs is not None else None
+        ))
+    
+    return metrics

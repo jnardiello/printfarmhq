@@ -1,0 +1,59 @@
+# Additional schemas for comprehensive God Admin metrics
+
+from pydantic import BaseModel
+from datetime import date, datetime
+from typing import Optional, Dict, List
+
+# Active User Metrics
+class ActiveUserMetric(BaseModel):
+    date: date
+    daily_active_users: int
+    weekly_active_users: int
+    monthly_active_users: int
+    new_vs_returning: Dict[str, int]  # {"new": 5, "returning": 15}
+    
+class UserEngagementMetric(BaseModel):
+    date: date
+    total_logins: int
+    unique_users_logged_in: int
+    avg_actions_per_user: float
+    peak_hour: Optional[int]  # 0-23
+    feature_usage: Dict[str, int]  # {"prints": 50, "products": 30, "filaments": 20}
+
+class BusinessMetric(BaseModel):
+    date: date
+    total_filament_consumed_g: float
+    avg_print_time_hrs: float
+    print_success_rate: float
+    top_products: List[Dict[str, any]]  # [{"name": "Product A", "count": 10}]
+    top_filaments: List[Dict[str, any]]  # [{"name": "PLA Red", "usage_g": 500}]
+
+class RetentionMetric(BaseModel):
+    cohort_date: date
+    cohort_size: int
+    retention_1_day: float  # percentage
+    retention_7_day: float
+    retention_30_day: float
+    
+class UserBehaviorMetric(BaseModel):
+    date: date
+    avg_time_to_first_action_mins: float
+    signup_to_first_print_hrs: Optional[float]
+    actions_before_churn: Optional[float]
+    most_common_workflow: Optional[str]
+
+class ComprehensiveMetricsSummary(BaseModel):
+    # Existing metrics
+    users: List[DailyUserMetric]
+    products: List[DailyProductMetric]
+    print_jobs: List[DailyPrintJobMetric]
+    
+    # New comprehensive metrics
+    active_users: List[ActiveUserMetric]
+    engagement: List[UserEngagementMetric]
+    business: List[BusinessMetric]
+    retention: List[RetentionMetric]
+    user_behavior: List[UserBehaviorMetric]
+    
+    # Summary statistics
+    summary: Dict[str, any]  # High-level KPIs

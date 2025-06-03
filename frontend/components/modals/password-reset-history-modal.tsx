@@ -27,7 +27,7 @@ import {
 import { api } from "@/lib/api"
 import { toast } from "sonner"
 
-interface PasswordResetLedgerEntry {
+interface PasswordResetHistoryEntry {
   id: number
   email: string
   status: "pending" | "approved" | "rejected"
@@ -42,31 +42,31 @@ interface PasswordResetLedgerEntry {
   }
 }
 
-interface PasswordResetLedgerModalProps {
-  isOpen: boolean
-  onClose: () => void
+interface PasswordResetHistoryModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }
 
-export function PasswordResetLedgerModal({
-  isOpen,
-  onClose
-}: PasswordResetLedgerModalProps) {
-  const [ledgerEntries, setLedgerEntries] = useState<PasswordResetLedgerEntry[]>([])
-  const [filteredEntries, setFilteredEntries] = useState<PasswordResetLedgerEntry[]>([])
+export function PasswordResetHistoryModal({
+  open,
+  onOpenChange
+}: PasswordResetHistoryModalProps) {
+  const [historyEntries, setHistoryEntries] = useState<PasswordResetHistoryEntry[]>([])
+  const [filteredEntries, setFilteredEntries] = useState<PasswordResetHistoryEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "approved" | "rejected">("all")
 
-  // Fetch ledger data when modal opens
+  // Fetch history data when modal opens
   useEffect(() => {
-    if (isOpen) {
-      fetchLedgerData()
+    if (open) {
+      fetchHistoryData()
     }
-  }, [isOpen])
+  }, [open])
 
   // Filter entries when search term or status filter changes
   useEffect(() => {
-    let filtered = ledgerEntries
+    let filtered = historyEntries
 
     // Apply search filter
     if (searchTerm.trim()) {
@@ -87,17 +87,17 @@ export function PasswordResetLedgerModal({
     )
 
     setFilteredEntries(filtered)
-  }, [ledgerEntries, searchTerm, statusFilter])
+  }, [historyEntries, searchTerm, statusFilter])
 
-  const fetchLedgerData = async () => {
+  const fetchHistoryData = async () => {
     try {
       setLoading(true)
       // Use the same endpoint but it should return all requests (pending and processed)
-      const data = await api<PasswordResetLedgerEntry[]>("/god/password-reset/ledger")
-      setLedgerEntries(data)
+      const data = await api<PasswordResetHistoryEntry[]>("/god/password-reset/ledger")
+      setHistoryEntries(data)
     } catch (error) {
-      console.error("Error fetching password reset ledger:", error)
-      toast.error("Failed to load password reset ledger")
+      console.error("Error fetching password reset history:", error)
+      toast.error("Failed to load password reset history")
     } finally {
       setLoading(false)
     }
@@ -140,10 +140,10 @@ export function PasswordResetLedgerModal({
   }
 
   const getStats = () => {
-    const total = ledgerEntries.length
-    const pending = ledgerEntries.filter(e => e.status === "pending").length
-    const approved = ledgerEntries.filter(e => e.status === "approved").length
-    const rejected = ledgerEntries.filter(e => e.status === "rejected").length
+    const total = historyEntries.length
+    const pending = historyEntries.filter(e => e.status === "pending").length
+    const approved = historyEntries.filter(e => e.status === "approved").length
+    const rejected = historyEntries.filter(e => e.status === "rejected").length
     
     return { total, pending, approved, rejected }
   }
@@ -151,12 +151,12 @@ export function PasswordResetLedgerModal({
   const stats = getStats()
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[900px] h-[80vh] flex flex-col">
         <DialogHeader className="space-y-3">
           <DialogTitle className="flex items-center gap-2">
             <History className="h-5 w-5 text-blue-600" />
-            Password Reset Ledger
+            Password Reset History
           </DialogTitle>
           <DialogDescription>
             Complete audit trail of all password reset requests and their processing status.
@@ -167,7 +167,7 @@ export function PasswordResetLedgerModal({
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-2">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-              <p className="text-sm text-muted-foreground">Loading ledger...</p>
+              <p className="text-sm text-muted-foreground">Loading history...</p>
             </div>
           </div>
         ) : (
@@ -228,7 +228,7 @@ export function PasswordResetLedgerModal({
 
             <Separator />
 
-            {/* Ledger Entries */}
+            {/* History Entries */}
             <div className="flex-1 overflow-y-auto space-y-3">
               {filteredEntries.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -305,9 +305,9 @@ export function PasswordResetLedgerModal({
         <div className="border-t pt-4">
           <div className="flex justify-between items-center">
             <div className="text-xs text-muted-foreground">
-              Showing {filteredEntries.length} of {ledgerEntries.length} entries
+              Showing {filteredEntries.length} of {historyEntries.length} entries
             </div>
-            <Button onClick={onClose}>
+            <Button onClick={() => onOpenChange(false)}>
               Close
             </Button>
           </div>

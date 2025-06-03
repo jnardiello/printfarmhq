@@ -30,37 +30,34 @@ interface PasswordResetRequest {
 }
 
 interface ApprovePasswordResetModalProps {
-  isOpen: boolean
-  onClose: () => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
   request: PasswordResetRequest | null
   onApprove: (requestId: number, password: string, notes?: string) => Promise<void>
-  isProcessing: boolean
+  generatePassword: () => string
 }
 
 export function ApprovePasswordResetModal({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   request,
   onApprove,
-  isProcessing
+  generatePassword
 }: ApprovePasswordResetModalProps) {
   const [password, setPassword] = useState("")
   const [notes, setNotes] = useState("")
   const [showPassword, setShowPassword] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
 
   // Generate secure password
   const generateSecurePassword = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*"
-    let newPassword = ""
-    for (let i = 0; i < 12; i++) {
-      newPassword += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
+    const newPassword = generatePassword()
     setPassword(newPassword)
   }
 
   // Initialize password when modal opens
   const handleModalOpen = () => {
-    if (isOpen && !password) {
+    if (open && !password) {
       generateSecurePassword()
       setNotes("")
     }
@@ -71,7 +68,8 @@ export function ApprovePasswordResetModal({
     setPassword("")
     setNotes("")
     setShowPassword(false)
-    onClose()
+    setIsProcessing(false)
+    onOpenChange(false)
   }
 
   // Copy password to clipboard
@@ -90,22 +88,24 @@ export function ApprovePasswordResetModal({
     if (!request || !password.trim()) return
     
     try {
+      setIsProcessing(true)
       await onApprove(request.id, password, notes.trim() || undefined)
       handleClose()
     } catch (error) {
       // Error handling is done in parent component
+      setIsProcessing(false)
     }
   }
 
-  // Call handleModalOpen when isOpen changes
-  if (isOpen && !password) {
+  // Call handleModalOpen when open changes
+  if (open && !password) {
     handleModalOpen()
   }
 
   if (!request) return null
 
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader className="space-y-3">
           <DialogTitle className="flex items-center gap-2">
