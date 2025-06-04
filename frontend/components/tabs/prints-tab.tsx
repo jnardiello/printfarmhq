@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play, Square } from "lucide-react"
+import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play, Square, StopCircle } from "lucide-react"
 import { motion } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
@@ -831,21 +831,21 @@ export function PrintsTab() {
                               Started: {job.started_at ? new Date(job.started_at).toLocaleString() : 'N/A'}
                             </p>
                           </div>
-                          <div className="flex items-start gap-2">
-                            <div className="text-right mr-4">
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
                               <p className="text-sm text-muted-foreground">Estimated completion:</p>
                               <p className="font-medium">
                                 {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleString() : 'N/A'}
                               </p>
                             </div>
                             <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              variant="outline"
+                              size="lg"
+                              className="bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 dark:from-red-900/30 dark:to-pink-900/30 dark:hover:from-red-900/50 dark:hover:to-pink-900/50 text-red-600 dark:text-red-400 border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 font-semibold transition-all duration-200 shadow-sm hover:shadow-md px-6"
                               onClick={() => handleStopJob(job.id)}
-                              title="Stop print job"
                             >
-                              <Square className="h-4 w-4" />
+                              <StopCircle className="h-5 w-5 mr-2" />
+                              Stop Print
                             </Button>
                           </div>
                         </div>
@@ -1554,7 +1554,7 @@ export function PrintsTab() {
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Square className="h-5 w-5 text-amber-500" />
+              <StopCircle className="h-5 w-5 text-red-500" />
               Stop Print Job?
             </DialogTitle>
             <DialogDescription className="pt-2">
