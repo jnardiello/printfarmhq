@@ -312,9 +312,14 @@ export function PrintsTab() {
   const calculateProgress = useCallback((job: any) => {
     if (!job.started_at || !job.estimated_completion_at) return 0
     
-    const startTime = new Date(job.started_at).getTime()
-    const endTime = new Date(job.estimated_completion_at).getTime()
-    const now = currentTime.getTime()
+    // Parse timestamps - they come from backend as UTC strings
+    // Ensure we're treating them as UTC by appending 'Z' if not present
+    const startTimeStr = job.started_at.endsWith('Z') ? job.started_at : job.started_at + 'Z'
+    const endTimeStr = job.estimated_completion_at.endsWith('Z') ? job.estimated_completion_at : job.estimated_completion_at + 'Z'
+    
+    const startTime = new Date(startTimeStr).getTime()
+    const endTime = new Date(endTimeStr).getTime()
+    const now = Date.now() // Use Date.now() for consistency
     
     const totalDuration = endTime - startTime
     const elapsed = now - startTime
@@ -327,23 +332,27 @@ export function PrintsTab() {
       startTime: new Date(startTime).toISOString(),
       endTime: new Date(endTime).toISOString(),
       now: new Date(now).toISOString(),
-      totalDuration: totalDuration / 1000 / 60, // in minutes
-      elapsed: elapsed / 1000 / 60, // in minutes
+      nowLocal: new Date(now).toString(),
+      totalDurationMinutes: totalDuration / 1000 / 60,
+      elapsedMinutes: elapsed / 1000 / 60,
+      elapsedSeconds: elapsed / 1000,
       progress: Math.round((elapsed / totalDuration) * 100)
     })
     
-    if (elapsed >= totalDuration) return 100
-    if (elapsed <= 0) return 0
+    // Ensure we don't go over 100% or under 0%
+    const progress = Math.max(0, Math.min(100, Math.round((elapsed / totalDuration) * 100)))
     
-    return Math.round((elapsed / totalDuration) * 100)
+    return progress
   }, [currentTime])
 
   // Format remaining time for display
   const formatRemainingTime = useCallback((job: any) => {
     if (!job.estimated_completion_at) return 'Unknown'
     
-    const endTime = new Date(job.estimated_completion_at).getTime()
-    const now = currentTime.getTime()
+    // Ensure we're treating the timestamp as UTC
+    const endTimeStr = job.estimated_completion_at.endsWith('Z') ? job.estimated_completion_at : job.estimated_completion_at + 'Z'
+    const endTime = new Date(endTimeStr).getTime()
+    const now = Date.now()
     const remaining = endTime - now
     
     if (remaining <= 0) {
@@ -837,6 +846,11 @@ export function PrintsTab() {
                             <p className="text-sm font-medium text-green-600 dark:text-green-400">
                               Time remaining: {formatRemainingTime(job)}
                             </p>
+                          </div>
+                          {/* Debug info - remove in production */}
+                          <div className="text-xs text-gray-500 mt-2 font-mono">
+                            Started: {job.started_at ? new Date(job.started_at).toLocaleTimeString() : 'N/A'}<br/>
+                            Ends: {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleTimeString() : 'N/A'}
                           </div>
                         </div>
                       </div>

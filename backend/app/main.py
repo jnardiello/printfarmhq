@@ -1836,10 +1836,10 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
             product_print_time = product.print_time_hrs or 0.0
             total_print_hours += product_print_time * product_data.items_qty
     
-    # Ensure minimum print time of 1 hour for testing/demo purposes
-    # This gives a better demo experience with visible progress
-    if total_print_hours < 1.0:
-        total_print_hours = 1.0
+    # Ensure minimum print time of 5 minutes (0.083 hours) for testing
+    # This allows us to see progress more quickly during development
+    if total_print_hours < 0.083:
+        total_print_hours = 0.083
     
     # Create printer associations with stored printer data
     assoc_printers = []
@@ -1940,7 +1940,7 @@ def list_print_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_d
     overdue_jobs = db.query(models.PrintJob).filter(
         models.PrintJob.status == "printing",
         models.PrintJob.estimated_completion_at != None,
-        models.PrintJob.estimated_completion_at < datetime.now(timezone.utc)
+        models.PrintJob.estimated_completion_at < datetime.utcnow()
     ).all()
     
     for job in overdue_jobs:
@@ -1962,6 +1962,15 @@ def get_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curren
     job = db.query(models.PrintJob).options(joinedload(models.PrintJob.products), joinedload(models.PrintJob.printers)).filter(models.PrintJob.id == print_job_id).first()
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Print Job with ID {print_job_id} not found")
+    
+    # Debug logging for timestamp issues
+    if job.started_at:
+        logger.info(f"Job {job.id} timestamps in get_print_job:")
+        logger.info(f"  started_at: {job.started_at} (type: {type(job.started_at)})")
+        logger.info(f"  started_at ISO: {job.started_at.isoformat() if hasattr(job.started_at, 'isoformat') else 'N/A'}")
+        logger.info(f"  estimated_completion_at: {job.estimated_completion_at}")
+        logger.info(f"  Now (UTC): {datetime.utcnow().isoformat()}")
+    
     return job
 
 @app.delete("/print_jobs/{print_job_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -2032,7 +2041,7 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
                 models.PrintJob.status == "printing",
                 models.PrintJobPrinter.printer_profile_id == job_printer.printer_profile_id,
                 models.PrintJob.estimated_completion_at != None,
-                models.PrintJob.estimated_completion_at < datetime.now(timezone.utc)
+                models.PrintJob.estimated_completion_at < datetime.utcnow()
             ).all()
             
             for overdue_job in overdue_jobs:
@@ -2070,21 +2079,28 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
             total_print_hours += product_print_time * product_job.items_qty
             logger.info(f"Product {product_job.product.name}: {product_print_time} hrs x {product_job.items_qty} items")
     
-    # Ensure minimum print time of 1 hour for testing/demo purposes
-    # This gives a better demo experience with visible progress
-    if total_print_hours < 1.0:
-        logger.warning(f"Total print time too low ({total_print_hours} hrs), setting to minimum 1 hour for demo")
-        total_print_hours = 1.0
+    # Ensure minimum print time of 5 minutes (0.083 hours) for testing
+    # This allows us to see progress more quickly during development
+    if total_print_hours < 0.083:
+        logger.warning(f"Total print time too low ({total_print_hours} hrs), setting to minimum 5 minutes for testing")
+        total_print_hours = 0.083
     
     logger.info(f"Starting job {job.id} with total print time: {total_print_hours} hours")
     
     # Update job status and timestamps
+    # Use UTC time consistently 
     job.status = "printing"
-    job.started_at = datetime.now(timezone.utc)
+    job.started_at = datetime.utcnow()  # Use naive UTC datetime for SQLite compatibility
     job.estimated_completion_at = job.started_at + timedelta(hours=total_print_hours)
+    
+    logger.info(f"Job {job.id} timestamps - Started: {job.started_at.isoformat()}, Completion: {job.estimated_completion_at.isoformat()}")
     
     db.commit()
     db.refresh(job)
+    
+    # Log the timestamps after commit to verify they're saved correctly
+    logger.info(f"Job {job.id} after commit - Started: {job.started_at.isoformat()}, Completion: {job.estimated_completion_at.isoformat()}")
+    
     return job
 
 
