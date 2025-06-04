@@ -346,7 +346,13 @@ export function PrintsTab() {
     const now = currentTime.getTime()
     const remaining = endTime - now
     
-    if (remaining <= 0) return 'Completed'
+    if (remaining <= 0) {
+      // Mark job as completed in UI when time is up
+      if (job.status === 'printing') {
+        console.log(`Job ${job.id} has completed - time remaining: ${remaining}ms`)
+      }
+      return 'Completed'
+    }
     
     const hours = Math.floor(remaining / (1000 * 60 * 60))
     const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))

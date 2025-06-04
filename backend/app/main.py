@@ -1936,6 +1936,21 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
 
 @app.get("/print_jobs", response_model=List[schemas.PrintJobRead])
 def list_print_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # First, update any "printing" jobs that have passed their estimated completion time
+    overdue_jobs = db.query(models.PrintJob).filter(
+        models.PrintJob.status == "printing",
+        models.PrintJob.estimated_completion_at != None,
+        models.PrintJob.estimated_completion_at < datetime.now(timezone.utc)
+    ).all()
+    
+    for job in overdue_jobs:
+        logger.info(f"Auto-completing overdue job {job.id}")
+        job.status = "completed"
+    
+    if overdue_jobs:
+        db.commit()
+    
+    # Now return the updated list with all relationships
     jobs = db.query(models.PrintJob).options(
         joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
         joinedload(models.PrintJob.printers).joinedload(models.PrintJobPrinter.printer_profile)
@@ -2010,6 +2025,23 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
     conflicts = []
     for job_printer in job.printers:
         if job_printer.printer_profile_id:
+            # First, auto-complete any overdue jobs for this printer
+            overdue_jobs = db.query(models.PrintJob).join(
+                models.PrintJobPrinter
+            ).filter(
+                models.PrintJob.status == "printing",
+                models.PrintJobPrinter.printer_profile_id == job_printer.printer_profile_id,
+                models.PrintJob.estimated_completion_at != None,
+                models.PrintJob.estimated_completion_at < datetime.now(timezone.utc)
+            ).all()
+            
+            for overdue_job in overdue_jobs:
+                logger.info(f"Auto-completing overdue job {overdue_job.id} before starting new job")
+                overdue_job.status = "completed"
+            
+            if overdue_jobs:
+                db.commit()
+            
             # Check if this printer is currently being used by another printing job
             active_jobs = db.query(models.PrintJob).join(
                 models.PrintJobPrinter
