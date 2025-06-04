@@ -1832,7 +1832,14 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
     for product_data in job.products:
         product = db.get(models.Product, product_data.product_id)
         if product:
-            total_print_hours += product.print_time_hrs * product_data.items_qty
+            # Get print time, ensuring it's not None
+            product_print_time = product.print_time_hrs or 0.0
+            total_print_hours += product_print_time * product_data.items_qty
+    
+    # Ensure minimum print time of 1 hour for testing/demo purposes
+    # This gives a better demo experience with visible progress
+    if total_print_hours < 1.0:
+        total_print_hours = 1.0
     
     # Create printer associations with stored printer data
     assoc_printers = []
@@ -2026,7 +2033,18 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
     total_print_hours = 0.0
     for product_job in job.products:
         if product_job.product:
-            total_print_hours += product_job.product.print_time_hrs * product_job.items_qty
+            # Get print time, ensuring it's not None or 0
+            product_print_time = product_job.product.print_time_hrs or 0.0
+            total_print_hours += product_print_time * product_job.items_qty
+            logger.info(f"Product {product_job.product.name}: {product_print_time} hrs x {product_job.items_qty} items")
+    
+    # Ensure minimum print time of 1 hour for testing/demo purposes
+    # This gives a better demo experience with visible progress
+    if total_print_hours < 1.0:
+        logger.warning(f"Total print time too low ({total_print_hours} hrs), setting to minimum 1 hour for demo")
+        total_print_hours = 1.0
+    
+    logger.info(f"Starting job {job.id} with total print time: {total_print_hours} hours")
     
     # Update job status and timestamps
     job.status = "printing"

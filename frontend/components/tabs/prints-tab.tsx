@@ -319,6 +319,19 @@ export function PrintsTab() {
     const totalDuration = endTime - startTime
     const elapsed = now - startTime
     
+    // Debug logging
+    console.log('Progress calculation:', {
+      jobId: job.id,
+      started_at: job.started_at,
+      estimated_completion_at: job.estimated_completion_at,
+      startTime: new Date(startTime).toISOString(),
+      endTime: new Date(endTime).toISOString(),
+      now: new Date(now).toISOString(),
+      totalDuration: totalDuration / 1000 / 60, // in minutes
+      elapsed: elapsed / 1000 / 60, // in minutes
+      progress: Math.round((elapsed / totalDuration) * 100)
+    })
+    
     if (elapsed >= totalDuration) return 100
     if (elapsed <= 0) return 0
     
