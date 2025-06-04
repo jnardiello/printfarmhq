@@ -83,6 +83,7 @@ class ProductUpdate(BaseModel):
     
     name: Optional[str] = None
     print_time_hrs: Optional[float] = Field(None, ge=0)
+    additional_parts_cost: Optional[float] = Field(None, ge=0)
     license_id: Optional[int] = None
 
 
@@ -314,6 +315,30 @@ class JobPrinterItem(BaseModel):
     hours_each: float = Field(default=0.0, ge=0)  # No longer required, calculated from products
 
 
+class JobProductRead(BaseModel):
+    """Read schema for print job products with nested product details"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    product_id: int
+    items_qty: int
+    product: Optional["ProductRead"] = None
+
+
+class JobPrinterRead(BaseModel):
+    """Read schema for print job printers with stored printer data"""
+    model_config = ConfigDict(from_attributes=True)
+    
+    printer_profile_id: Optional[int] = None
+    printers_qty: int
+    hours_each: float
+    # Stored printer data
+    printer_name: Optional[str] = None
+    printer_manufacturer: Optional[str] = None
+    printer_model: Optional[str] = None
+    printer_price_eur: Optional[float] = None
+    printer_expected_life_hours: Optional[float] = None
+
+
 # PrintJob Schemas (depends on ProductRead and PrinterProfileRead)
 class PrintJobBase(BaseModel):
     name: Optional[str] = None
@@ -335,10 +360,15 @@ class PrintJobUpdate(BaseModel):
     status: Optional[str] = None
 
 
-class PrintJobRead(PrintJobBase):
+class PrintJobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: UUID
+    name: Optional[str] = None
+    products: List[JobProductRead]
+    printers: List[JobPrinterRead]
+    packaging_cost_eur: float
+    status: str
     calculated_cogs_eur: Optional[float] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
@@ -606,3 +636,8 @@ class EnhancedGodMetricsSummary(BaseModel):
     
     # Summary statistics
     summary: dict  # High-level KPIs
+
+
+# Update forward references
+JobProductRead.model_rebuild()
+JobPrinterRead.model_rebuild()

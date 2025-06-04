@@ -773,17 +773,45 @@ export function PrintsTab() {
               <div>
                 <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <Package className="h-5 w-5 text-green-600" />
-                  Products
+                  Products ({selectedJobForDetails.products?.length || 0})
                 </h3>
                 <div className="space-y-2">
-                  {selectedJobForDetails.products?.map((productItem: any, idx: number) => (
-                    <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium">{productItem.product?.name || `Product ID: ${productItem.product_id}`}</p>
-                        <p className="text-sm text-gray-500">Quantity: {productItem.items_qty}</p>
+                  {selectedJobForDetails.products?.map((productItem: any, idx: number) => {
+                    const productName = productItem.product?.name || 'Unknown Product';
+                    const productCop = productItem.product?.cop || 0;
+                    const totalCost = productCop * productItem.items_qty;
+                    
+                    return (
+                      <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium text-lg">{productName}</p>
+                            {productItem.product?.sku && (
+                              <p className="text-sm text-gray-500 dark:text-gray-400">SKU: {productItem.product.sku}</p>
+                            )}
+                            <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Quantity:</span>
+                                <span className="ml-2 font-medium">{productItem.items_qty}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Print Time:</span>
+                                <span className="ml-2 font-medium">{(productItem.product?.print_time_hrs || 0).toFixed(1)}h each</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">COP/unit:</span>
+                                <span className="ml-2 font-medium">€{productCop.toFixed(2)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Total Cost:</span>
+                                <span className="ml-2 font-medium text-green-600">€{totalCost.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -794,26 +822,93 @@ export function PrintsTab() {
                   Printers
                 </h3>
                 <div className="space-y-2">
-                  {selectedJobForDetails.printers?.map((printerItem: any, idx: number) => (
-                    <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 flex justify-between items-center">
-                      <div>
-                        <p className="font-medium">{printerItem.printer_profile?.name || `Printer ID: ${printerItem.printer_profile_id}`}</p>
-                        <p className="text-sm text-gray-500">Quantity: {printerItem.printers_qty}</p>
+                  {selectedJobForDetails.printers?.map((printerItem: any, idx: number) => {
+                    const printerName = printerItem.printer_name || 'Unknown Printer';
+                    const workingHours = printerItem.working_hours || 0;
+                    const expectedLife = printerItem.printer_expected_life_hours || 0;
+                    const lifeLeftHours = Math.max(0, expectedLife - workingHours);
+                    const lifePercentage = expectedLife > 0 ? (lifeLeftHours / expectedLife) * 100 : 0;
+                    const hourlyRate = printerItem.printer_price_eur && expectedLife > 0 
+                      ? printerItem.printer_price_eur / expectedLife 
+                      : 0;
+                    const totalCost = hourlyRate * printerItem.hours_each * printerItem.printers_qty;
+                    
+                    return (
+                      <div key={idx} className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                        <div className="flex justify-between items-start">
+                          <div className="flex-1">
+                            <p className="font-medium text-lg">{printerName}</p>
+                            {printerItem.printer_manufacturer && printerItem.printer_model && (
+                              <p className="text-sm text-gray-500 dark:text-gray-400">
+                                {printerItem.printer_manufacturer} {printerItem.printer_model}
+                              </p>
+                            )}
+                            <div className="mt-2 grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Quantity:</span>
+                                <span className="ml-2 font-medium">{printerItem.printers_qty}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Hours/printer:</span>
+                                <span className="ml-2 font-medium">{printerItem.hours_each?.toFixed(1) || '0.0'}h</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Cost/hour:</span>
+                                <span className="ml-2 font-medium">€{hourlyRate.toFixed(3)}</span>
+                              </div>
+                              <div>
+                                <span className="text-gray-500 dark:text-gray-400">Total Cost:</span>
+                                <span className="ml-2 font-medium text-purple-600">€{totalCost.toFixed(2)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {/* Additional Costs */}
+              {/* Cost Breakdown */}
               <div>
                 <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
                   <CreditCard className="h-5 w-5 text-orange-600" />
-                  Additional Costs
+                  Cost Breakdown
                 </h3>
-                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                  <p className="text-sm text-gray-500">Packaging Cost</p>
-                  <p className="text-lg font-semibold">€{selectedJobForDetails.packaging_cost_eur?.toFixed(2) || '0.00'}</p>
+                <div className="space-y-2">
+                  <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Products Cost (COP):</span>
+                        <span className="font-medium">
+                          €{selectedJobForDetails.products?.reduce((acc: number, p: any) => 
+                            acc + ((p.product?.cop || 0) * p.items_qty), 0
+                          ).toFixed(2) || '0.00'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Printer Usage Cost:</span>
+                        <span className="font-medium">
+                          €{selectedJobForDetails.printers?.reduce((acc: number, pr: any) => {
+                            const hourlyRate = pr.printer_price_eur && pr.printer_expected_life_hours > 0 
+                              ? pr.printer_price_eur / pr.printer_expected_life_hours 
+                              : 0;
+                            return acc + (hourlyRate * pr.hours_each * pr.printers_qty);
+                          }, 0).toFixed(2) || '0.00'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Packaging Cost:</span>
+                        <span className="font-medium">€{selectedJobForDetails.packaging_cost_eur?.toFixed(2) || '0.00'}</span>
+                      </div>
+                      <div className="border-t pt-3 flex justify-between items-center">
+                        <span className="font-medium">Total COGS:</span>
+                        <span className="text-lg font-bold text-blue-600">
+                          €{selectedJobForDetails.calculated_cogs_eur?.toFixed(2) || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

@@ -1292,7 +1292,7 @@ def create_product(
 @app.get("/products", response_model=list[schemas.ProductRead])
 def list_products(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """List all products (any authenticated user can view products)"""
-    products = db.query(models.Product).offset(skip).limit(limit).all()
+    products = db.query(models.Product).order_by(models.Product.id.desc()).offset(skip).limit(limit).all()
     return products
 
 
@@ -1326,7 +1326,13 @@ def update_product(product_id: int, product_update: schemas.ProductUpdate, db: S
         setattr(product, field, value)
     
     db.commit()
-    db.refresh(product)
+    
+    # Reload product with relationships for proper COP calculation
+    product = db.query(models.Product).options(
+        joinedload(models.Product.plates).joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament),
+        joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament)
+    ).filter(models.Product.id == product_id).first()
+    
     return product
 
 
@@ -2188,12 +2194,19 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
             )
     
     # add associations
-    assoc_products = [models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty) for it in job_data.products]
+    assoc_products = [models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty) for it in job.products]
+    
+    # Calculate total print time for all products
+    total_print_hours = 0.0
+    for product_data in job.products:
+        product = db.get(models.Product, product_data.product_id)
+        if product:
+            total_print_hours += product.print_time_hrs * product_data.items_qty
     
     # Create printer associations with stored printer data
     assoc_printers = []
     usage_history_records = []
-    for printer_item in job_data.printers:
+    for printer_item in job.printers:
         # Look up printer profile to copy its data
         printer_profile = db.get(models.PrinterProfile, printer_item.printer_profile_id)
         if printer_profile:
@@ -2201,7 +2214,7 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
                 print_job_id=db_job.id,
                 printer_profile_id=printer_item.printer_profile_id,
                 printers_qty=printer_item.printers_qty,
-                hours_each=printer_item.hours_each,
+                hours_each=total_print_hours,  # Use calculated total print hours
                 # Store printer data at time of job creation
                 printer_name=printer_profile.name,
                 printer_manufacturer=printer_profile.manufacturer,
@@ -2212,7 +2225,7 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
             assoc_printers.append(printer_assoc)
             
             # Update printer working hours
-            total_hours_used = printer_item.hours_each * printer_item.printers_qty
+            total_hours_used = total_print_hours * printer_item.printers_qty
             printer_profile.working_hours = (printer_profile.working_hours or 0) + total_hours_used
             
             # Create usage history record
@@ -2238,42 +2251,9 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
                 print_job_id=db_job.id,
                 printer_profile_id=printer_item.printer_profile_id,
                 printers_qty=printer_item.printers_qty,
-                hours_each=printer_item.hours_each
+                hours_each=total_print_hours  # Use calculated total print hours
             )
-        
-        db_product_job = models.PrintJobProduct(
-            print_job_id=db_job.id,
-            product_id=product_data.product_id,
-            items_qty=product_data.items_qty
-        )
-        db.add(db_product_job)
-    
-    # Add printers with stored printer data
-    for printer_data in job.printers:
-        db_printer_job = models.PrintJobPrinter(
-            print_job_id=db_job.id,
-            printer_profile_id=printer_data.printer_profile_id,
-            printers_qty=printer_data.printers_qty,
-            hours_each=printer_data.hours_each
-        )
-        
-        # Store printer data at time of job creation
-        if printer_data.printer_profile_id:
-            printer_profile = db.get(models.PrinterProfile, printer_data.printer_profile_id)
-            if printer_profile:
-                db_printer_job.printer_name = printer_profile.name
-                db_printer_job.printer_manufacturer = printer_profile.manufacturer
-                db_printer_job.printer_model = printer_profile.model
-                db_printer_job.printer_price_eur = printer_profile.price_eur
-                db_printer_job.printer_expected_life_hours = printer_profile.expected_life_hours
-        
-        db.add(db_printer_job)
-    
-    # Flush to ensure all relationships are established
-    db.flush()
-    
-    # Reload the job with all relationships
-    db.refresh(db_job)
+            assoc_printers.append(printer_assoc)
     db.add_all(assoc_products + assoc_printers + usage_history_records)
     db.flush()  # This makes the associations available without committing
     
@@ -2306,7 +2286,7 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
         activity_type="create_print_job",
         request=request,
         metadata={
-            "print_job_id": db_job.id,
+            "print_job_id": str(db_job.id),
             "print_job_name": db_job.name,
             "status": db_job.status,
             "products_count": len(job.products),
@@ -2413,19 +2393,76 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
                 items_qty=product_data["items_qty"]
             )
             db.add(db_product_job)
+        
+        # Flush to ensure new products are available
+        db.flush()
+        # Expire the products relationship to force reload
+        db.expire(db_job, ['products'])
     
     # Handle printers update if provided
     if "printers" in update_fields:
+        # Reload job with fresh products data if products were updated
+        if new_products_data is not None:
+            db.refresh(db_job)
+            # Reload products with their related data
+            db_job = db.query(models.PrintJob).options(
+                joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product)
+            ).filter(models.PrintJob.id == print_job_id).first()
+        
+        # Calculate total print time for all products
+        total_print_hours = 0.0
+        for pjp in db_job.products:
+            if pjp.product:
+                total_print_hours += pjp.product.print_time_hrs * pjp.items_qty
+        
         # Delete existing printer associations
         db.query(models.PrintJobPrinter).filter(models.PrintJobPrinter.print_job_id == db_job.id).delete()
-        db.add_all([
-            models.PrintJobPrinter(print_job_id=db_job.id, printer_profile_id=it['printer_profile_id'], printers_qty=it['printers_qty'], hours_each=it.get('hours_each', 0.0))
-            for it in update_fields["printers"]
-        ])
+        
+        # Add new printer associations with calculated hours
+        for printer_data in update_fields["printers"]:
+            printer_profile = db.get(models.PrinterProfile, printer_data['printer_profile_id'])
+            if printer_profile:
+                db_printer_job = models.PrintJobPrinter(
+                    print_job_id=db_job.id,
+                    printer_profile_id=printer_data['printer_profile_id'],
+                    printers_qty=printer_data['printers_qty'],
+                    hours_each=total_print_hours,  # Use calculated total print hours
+                    # Store printer data at time of job creation
+                    printer_name=printer_profile.name,
+                    printer_manufacturer=printer_profile.manufacturer,
+                    printer_model=printer_profile.model,
+                    printer_price_eur=printer_profile.price_eur,
+                    printer_expected_life_hours=printer_profile.expected_life_hours
+                )
+            else:
+                db_printer_job = models.PrintJobPrinter(
+                    print_job_id=db_job.id,
+                    printer_profile_id=printer_data['printer_profile_id'],
+                    printers_qty=printer_data['printers_qty'],
+                    hours_each=total_print_hours  # Use calculated total print hours
+                )
+            db.add(db_printer_job)
 
     # Flush changes to get the updated job state without committing
     db.flush()
 
+    # If products were updated, we need to update printer hours too
+    if new_products_data is not None and db_job.printers:
+        # Reload the job to get fresh product data
+        db.refresh(db_job)
+        
+        # Calculate new total print hours based on updated products
+        total_print_hours = 0.0
+        for pjp in db_job.products:
+            if pjp.product:
+                total_print_hours += pjp.product.print_time_hrs * pjp.items_qty
+        
+        # Update hours_each for all printers
+        for printer in db_job.printers:
+            printer.hours_each = total_print_hours
+        
+        db.flush()
+    
     # Handle inventory adjustments if products were modified
     if new_products_data is not None:
         # First, calculate what needs to be returned to inventory from the original state
@@ -2460,9 +2497,14 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
 
     # Commit changes
     db.commit()
-    db.refresh(db_job)
     
-    # recalc
+    # Reload the job with all relationships for accurate COGS calculation
+    db_job = db.query(models.PrintJob).options(
+        joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
+        joinedload(models.PrintJob.printers)
+    ).filter(models.PrintJob.id == print_job_id).first()
+    
+    # recalc COGS with fresh data
     db_job.calculated_cogs_eur = _calculate_print_job_cogs(db_job, db)
     db.commit()
     db.refresh(db_job)
