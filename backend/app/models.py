@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Table, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, Date, ForeignKey, Table, DateTime, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship, foreign
 from sqlalchemy.dialects.postgresql import UUID # For UUID type if using PostgreSQL
 import uuid # For generating UUIDs
@@ -89,6 +89,10 @@ class Filament(Base):
         cascade="all, delete-orphan",
     )
     owner = relationship("User", foreign_keys=[owner_id])
+    
+    __table_args__ = (
+        UniqueConstraint('color', 'brand', 'material', 'owner_id', name='_color_brand_material_owner_uc'),
+    )
 
 
 class Product(Base):
@@ -186,38 +190,72 @@ class FilamentUsage(Base):
 
 
 
-class PrinterProfile(Base):
-    __tablename__ = "printer_profiles"
+class PrinterType(Base):
+    __tablename__ = "printer_types"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    manufacturer = Column(String, nullable=True)  # New field for printer manufacturer/brand
-    model = Column(String, nullable=True)  # New field for printer model
-    price_eur = Column(Float, nullable=False)
-    expected_life_hours = Column(Float, nullable=False)
-    working_hours = Column(Float, nullable=False, default=0.0)  # Total accumulated working hours
+    brand = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    expected_life_hours = Column(Float, nullable=False, default=10000.0)
+    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    
+    # Relationships
+    printers = relationship("Printer", back_populates="printer_type", cascade="all, delete-orphan")
+    owner = relationship("User", foreign_keys=[owner_id])
+    
+    # Unique constraint handled at database level
+    __table_args__ = (
+        UniqueConstraint('brand', 'model', 'owner_id', name='_brand_model_owner_uc'),
+    )
+
+
+class Printer(Base):
+    """Renamed from PrinterProfile - represents actual printer instances"""
+    __tablename__ = "printers"
+
+    id = Column(Integer, primary_key=True, index=True)
+    printer_type_id = Column(Integer, ForeignKey("printer_types.id"), nullable=False)
+    name = Column(String, nullable=False)  # Custom name like "Prusa 1", "Prusa 2"
+    name_normalized = Column(String, nullable=False)  # Lowercase, trimmed for uniqueness check
+    purchase_price_eur = Column(Float, nullable=False, default=0.0)
+    purchase_date = Column(Date, nullable=True)
+    working_hours = Column(Float, nullable=False, default=0.0)
+    status = Column(String, nullable=False, default="idle")  # idle, printing, maintenance, offline
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Remove back_populates since we don't have a proper foreign key anymore
+    # Relationships
+    printer_type = relationship("PrinterType", back_populates="printers")
     print_jobs = relationship("PrintJobPrinter", 
-                            primaryjoin="PrinterProfile.id == foreign(PrintJobPrinter.printer_profile_id)",
+                            primaryjoin="Printer.id == foreign(PrintJobPrinter.printer_profile_id)",
                             viewonly=True)
     owner = relationship("User", foreign_keys=[owner_id])
-    usage_history = relationship("PrinterUsageHistory", back_populates="printer_profile", cascade="all, delete-orphan")
+    usage_history = relationship("PrinterUsageHistory", back_populates="printer", cascade="all, delete-orphan")
 
     @property
     def life_left_hours(self) -> float:
-        """Calculate remaining lifetime hours."""
-        return max(0, self.expected_life_hours - self.working_hours)
+        """Calculate remaining lifetime hours based on printer type."""
+        if self.printer_type:
+            return max(0, self.printer_type.expected_life_hours - self.working_hours)
+        return 0
 
     @property
     def life_percentage(self) -> float:
         """Calculate remaining lifetime as percentage."""
-        if self.expected_life_hours == 0:
-            return 0
-        return (self.life_left_hours / self.expected_life_hours) * 100
+        if self.printer_type and self.printer_type.expected_life_hours > 0:
+            return (self.life_left_hours / self.printer_type.expected_life_hours) * 100
+        return 0
+    
+    __table_args__ = (
+        UniqueConstraint('name_normalized', 'owner_id', name='_printer_name_normalized_owner_uc'),
+    )
+
+
+# Keep backward compatibility alias
+PrinterProfile = Printer
 
 
 class PrintJobProduct(Base):
@@ -238,11 +276,12 @@ class PrintJobPrinter(Base):
 
     id = Column(Integer, primary_key=True)
     print_job_id = Column(UUID(as_uuid=True), ForeignKey("print_jobs.id"), nullable=False)
-    printer_profile_id = Column(Integer, nullable=True)  # Now nullable, no foreign key
-    printers_qty = Column(Integer, nullable=False, default=1)
+    printer_profile_id = Column(Integer, nullable=True)  # Legacy field, still named printer_profile_id in DB
+    printer_type_id = Column(Integer, ForeignKey("printer_types.id"), nullable=True)  # Type selected during job creation
+    assigned_printer_id = Column(Integer, ForeignKey("printers.id"), nullable=True)  # Actual printer assigned when started
     hours_each = Column(Float, nullable=False, default=0.0)
     
-    # Stored printer data at time of print job creation
+    # Stored printer data at time of print job creation (for historical purposes)
     printer_name = Column(String, nullable=True)
     printer_manufacturer = Column(String, nullable=True)
     printer_model = Column(String, nullable=True)
@@ -250,10 +289,13 @@ class PrintJobPrinter(Base):
     printer_expected_life_hours = Column(Float, nullable=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
-    # Optional relationship - may be null if printer was deleted
-    printer_profile = relationship("PrinterProfile", 
-                                 primaryjoin="foreign(PrintJobPrinter.printer_profile_id) == PrinterProfile.id",
-                                 viewonly=True)
+    # Relationships
+    printer_type = relationship("PrinterType")
+    assigned_printer = relationship("Printer", foreign_keys=[assigned_printer_id])
+    # Legacy relationship for backward compatibility (using printer_profile_id column)
+    printer = relationship("Printer", 
+                          primaryjoin="foreign(PrintJobPrinter.printer_profile_id) == Printer.id",
+                          viewonly=True)
     owner = relationship("User", foreign_keys=[owner_id])
 
 
@@ -266,6 +308,8 @@ class PrintJob(Base):
     packaging_cost_eur = Column(Float, nullable=False, default=0.0)
 
     calculated_cogs_eur = Column(Float, nullable=True)
+    
+    printer_type_id = Column(Integer, ForeignKey("printer_types.id"), nullable=True)  # For COGS calculation
 
     status = Column(String, nullable=False, default="pending")  # pending, printing, completed, failed
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -277,6 +321,7 @@ class PrintJob(Base):
 
     products = relationship("PrintJobProduct", cascade="all, delete-orphan")
     printers = relationship("PrintJobPrinter", cascade="all, delete-orphan")
+    printer_type = relationship("PrinterType")
     owner = relationship("User", foreign_keys=[owner_id])
 
 
@@ -284,10 +329,9 @@ class PrinterUsageHistory(Base):
     __tablename__ = "printer_usage_history"
 
     id = Column(Integer, primary_key=True, index=True)
-    printer_profile_id = Column(Integer, ForeignKey("printer_profiles.id", ondelete="CASCADE"), nullable=False)
+    printer_id = Column(Integer, ForeignKey("printers.id", ondelete="CASCADE"), nullable=False)
     print_job_id = Column(UUID(as_uuid=True), ForeignKey("print_jobs.id", ondelete="CASCADE"), nullable=False)
     hours_used = Column(Float, nullable=False)
-    printers_qty = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Denormalized fields for faster aggregation
@@ -296,7 +340,7 @@ class PrinterUsageHistory(Base):
     quarter_year = Column(Integer, nullable=False)  # Format: YYYYQ
     
     # Relationships
-    printer_profile = relationship("PrinterProfile", back_populates="usage_history")
+    printer = relationship("Printer", back_populates="usage_history")
     print_job = relationship("PrintJob")
 
 
