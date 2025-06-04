@@ -394,7 +394,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const updateProduct = async (productId: number, productData: FormData): Promise<Product | void> => {
     try {
       const updatedProduct = await apiUpload<Product>(`/products/${productId}`, productData, {
-        method: "PATCH",
+        method: "PUT",
       });
       
       if (updatedProduct) {

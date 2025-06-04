@@ -292,6 +292,11 @@ export function ProductsTab() {
       formData.append("grams_used_list", JSON.stringify(gramsUsedList))
       formData.append("additional_parts_cost", editAdditionalPartsCost || "0")
       
+      // Add SKU if it exists
+      if (productToEdit.sku) {
+        formData.append("sku", productToEdit.sku)
+      }
+      
       if (editProductForm.license_id) {
         formData.append("license_id", editProductForm.license_id.toString())
       } else {
