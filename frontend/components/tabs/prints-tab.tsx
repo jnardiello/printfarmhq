@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo, useEffect, useCallback } from "react"
 import { useData } from "@/components/data-provider" // Placeholder - will need to update useData
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,17 +11,21 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye } from "lucide-react"
+import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play } from "lucide-react"
 import { motion } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
 import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils";
+import { api } from "@/lib/api";
 
 
 export function PrintsTab() {
   // Placeholder - will need to update useData and related functions/state
   const { products, printers, printJobs, addPrintJob, deletePrintJob, updatePrintJob } = useData()
   const router = useRouter()
+  
+  // State for tracking current time for countdown
+  const [currentTime, setCurrentTime] = useState(new Date())
 
 
   // State for print job form - removed since we're using separate states for products and printers
@@ -50,11 +54,22 @@ export function PrintsTab() {
     setSortConfig(newConfig);
   };
 
-  // Sorted print jobs based on current sort configuration
+  // Sorted print jobs based on current sort configuration (only pending jobs for the queue)
   const sortedPrintJobs = useMemo(() => {
     if (!printJobs || printJobs.length === 0) return [];
-    return sortByDate(printJobs, sortConfig.field, sortConfig.direction);
+    // Filter to only show pending jobs in the queue table
+    const pendingJobs = printJobs.filter((job: any) => job.status === "pending");
+    return sortByDate(pendingJobs, sortConfig.field, sortConfig.direction);
   }, [printJobs, sortConfig]);
+
+  // Update current time every second for countdown timers
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date())
+    }, 1000)
+    
+    return () => clearInterval(timer)
+  }, [])
 
 
   const handleProductRowChange = (idx: number, field: string, value: string) => {
@@ -293,13 +308,74 @@ export function PrintsTab() {
     router.push('/?tab=printers')
   }
 
+  // Calculate progress percentage for a printing job
+  const calculateProgress = useCallback((job: any) => {
+    if (!job.started_at || !job.estimated_completion_at) return 0
+    
+    const startTime = new Date(job.started_at).getTime()
+    const endTime = new Date(job.estimated_completion_at).getTime()
+    const now = currentTime.getTime()
+    
+    const totalDuration = endTime - startTime
+    const elapsed = now - startTime
+    
+    if (elapsed >= totalDuration) return 100
+    if (elapsed <= 0) return 0
+    
+    return Math.round((elapsed / totalDuration) * 100)
+  }, [currentTime])
+
+  // Format remaining time for display
+  const formatRemainingTime = useCallback((job: any) => {
+    if (!job.estimated_completion_at) return 'Unknown'
+    
+    const endTime = new Date(job.estimated_completion_at).getTime()
+    const now = currentTime.getTime()
+    const remaining = endTime - now
+    
+    if (remaining <= 0) return 'Completed'
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60))
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60))
+    const seconds = Math.floor((remaining % (1000 * 60)) / 1000)
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${seconds}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${seconds}s`
+    } else {
+      return `${seconds}s`
+    }
+  }, [currentTime])
+
+  // Handle starting a print job
+  const handleStartJob = async (jobId: string) => {
+    try {
+      await api(`/print_jobs/${jobId}/start`, {
+        method: 'PUT',
+      });
+
+      // Refresh the print jobs data
+      // This will be handled by the data provider
+      window.location.reload(); // Temporary solution
+    } catch (error: any) {
+      console.error('Error starting print job:', error);
+      // Check if it's a printer conflict (409 error)
+      if (error.message && error.message.includes('currently in use')) {
+        alert(`Cannot start job: ${error.message}`);
+      } else {
+        alert(`Failed to start print job: ${error.message || 'Unknown error'}`);
+      }
+    }
+  }
+
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
       
       {/* Header Section */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Print Queue</h1>
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Print Jobs</h1>
           <p className="text-gray-600 dark:text-gray-400 mt-1">Manage your print jobs and track progress</p>
         </div>
         
@@ -311,7 +387,7 @@ export function PrintsTab() {
                 className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
               >
                 <Plus className="mr-2 h-5 w-5" />
-                Add Job to Queue
+                Create New Print Job
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -320,7 +396,7 @@ export function PrintsTab() {
                   <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
                     <ScanLine className="h-6 w-6 text-white" />
                   </div>
-                  Add Job to Queue
+                  Create New Print Job
                 </DialogTitle>
               </DialogHeader>
               
@@ -582,7 +658,7 @@ export function PrintsTab() {
                     className="bg-primary hover:bg-primary/90 text-white shadow-md transition-all"
                   >
                     <Plus className="mr-2 h-5 w-5" /> 
-                    Add to Print Queue
+                    Create Print Job
                   </Button>
                 </div>
                 
@@ -604,7 +680,7 @@ export function PrintsTab() {
             <CardContent>
               <div className="space-y-4">
                 <p className="text-amber-700 dark:text-amber-300">
-                  To add items to the print queue, you need at least one product and one printer configured.
+                  To create print jobs, you need at least one product and one printer configured.
                 </p>
                 
                 <div className="space-y-2">
@@ -652,12 +728,89 @@ export function PrintsTab() {
         </motion.div>
       )}
 
+      {/* Currently Printing Section */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+        <Card className="card-hover shadow-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <Printer className="h-5 w-5 text-green-600 animate-pulse" />
+              Currently Printing
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              {printJobs && printJobs.filter((job: any) => job.status === "printing").length > 0 ? (
+                <div className="grid gap-4 p-4">
+                  {printJobs
+                    .filter((job: any) => job.status === "printing")
+                    .map((job: any) => (
+                      <div key={job.id} className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h3 className="font-semibold text-lg">{job.name || `Job #${job.id.slice(0,6)}`}</h3>
+                            <p className="text-sm text-muted-foreground">
+                              Started: {job.started_at ? new Date(job.started_at).toLocaleString() : 'N/A'}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-muted-foreground">Estimated completion:</p>
+                            <p className="font-medium">
+                              {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleString() : 'N/A'}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Job details */}
+                        <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Products:</span>
+                            <span className="ml-2 font-medium">
+                              {job.products?.reduce((acc: number, p: any) => acc + (p.items_qty || 0), 0) || 0} items
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Printers:</span>
+                            <span className="ml-2 font-medium">
+                              {job.printers?.map((p: any) => p.printer_name || 'Unknown').join(', ') || 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Progress bar with real-time updates */}
+                        <div className="mt-4">
+                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                            <div 
+                              className="bg-green-600 h-2 rounded-full transition-all duration-1000" 
+                              style={{ width: `${calculateProgress(job)}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between items-center mt-1">
+                            <p className="text-sm text-muted-foreground">Progress: {calculateProgress(job)}%</p>
+                            <p className="text-sm font-medium text-green-600 dark:text-green-400">
+                              Time remaining: {formatRemainingTime(job)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-8 bg-muted/30">
+                  <Printer className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+                  <p>No print jobs currently running</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Job Queue Section */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
         <Card className="card-hover shadow-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Package className="h-5 w-5 text-primary" />
-              Print Queue
+              Job Queue (Pending)
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -709,6 +862,17 @@ export function PrintsTab() {
                         <TableCell>{new Date(job.created_at).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
+                            {/* Start Button */}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-green-500 hover:text-green-700 hover:bg-green-50 dark:hover:bg-green-900/20"
+                              onClick={() => handleStartJob(job.id)}
+                              title="Start print job"
+                            >
+                              <Play className="h-4 w-4" />
+                            </Button>
+                            
                             {/* Info/Details Button */}
                             <Button
                               variant="ghost"
@@ -750,8 +914,8 @@ export function PrintsTab() {
               ) : (
                 <div className="text-center text-muted-foreground py-12 bg-muted/30">
                   <Package className="h-12 w-12 mx-auto text-muted-foreground/50 mb-3" /> {/* Changed icon */}
-                  <p>No items in print queue yet.</p>
-                  <p className="text-sm mt-1">Click on "Create New Print Queue Entry" above to add your first item.</p>
+                  <p>No print jobs yet.</p>
+                  <p className="text-sm mt-1">Click on "Create New Print Job" above to add your first item.</p>
                 </div>
               )}
             </div>

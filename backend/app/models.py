@@ -267,7 +267,9 @@ class PrintJob(Base):
 
     calculated_cogs_eur = Column(Float, nullable=True)
 
-    status = Column(String, nullable=False, default="pending")
+    status = Column(String, nullable=False, default="pending")  # pending, printing, completed, failed
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    estimated_completion_at = Column(DateTime(timezone=True), nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())

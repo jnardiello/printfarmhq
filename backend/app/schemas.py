@@ -331,6 +331,8 @@ class PrintJobRead(BaseModel):
     packaging_cost_eur: float
     status: str
     calculated_cogs_eur: Optional[float] = None
+    started_at: Optional[datetime] = None
+    estimated_completion_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -338,6 +340,11 @@ class PrintJobRead(BaseModel):
 class PrintJobStatusUpdate(BaseModel):
     """Update schema for print job status only"""
     status: str = Field(..., examples=["pending", "in_progress", "completed", "failed"])
+
+
+class PrintJobStart(BaseModel):
+    """Schema for starting a print job"""
+    pass  # No additional fields needed, just triggers the start action
 
 
 # User and Auth schemas

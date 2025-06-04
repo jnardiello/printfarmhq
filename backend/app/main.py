@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import Optional, List, Union
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime, timezone
 import json
 import os
 import shutil
@@ -1972,6 +1972,67 @@ def update_print_job_status(print_job_id: uuid.UUID, status_update: schemas.Prin
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Print Job with ID {print_job_id} not found")
     
     job.status = status_update.status
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@app.put("/print_jobs/{print_job_id}/start", response_model=schemas.PrintJobRead)
+def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Start a print job by moving it from pending to printing status."""
+    # Get the job with all relationships
+    job = db.query(models.PrintJob).options(
+        joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
+        joinedload(models.PrintJob.printers)
+    ).filter(models.PrintJob.id == print_job_id).first()
+    
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Print Job with ID {print_job_id} not found"
+        )
+    
+    # Check if job is already printing or completed
+    if job.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot start job with status '{job.status}'. Only pending jobs can be started."
+        )
+    
+    # Check printer availability - ensure no printer is double-booked
+    conflicts = []
+    for job_printer in job.printers:
+        if job_printer.printer_profile_id:
+            # Check if this printer is currently being used by another printing job
+            active_jobs = db.query(models.PrintJob).join(
+                models.PrintJobPrinter
+            ).filter(
+                models.PrintJob.status == "printing",
+                models.PrintJobPrinter.printer_profile_id == job_printer.printer_profile_id,
+                models.PrintJob.id != print_job_id  # Exclude current job
+            ).first()
+            
+            if active_jobs:
+                printer_name = job_printer.printer_name or f"Printer ID {job_printer.printer_profile_id}"
+                conflicts.append(printer_name)
+    
+    if conflicts:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"The following printers are currently in use: {', '.join(conflicts)}"
+        )
+    
+    # Calculate total print time (hours)
+    total_print_hours = 0.0
+    for product_job in job.products:
+        if product_job.product:
+            total_print_hours += product_job.product.print_time_hrs * product_job.items_qty
+    
+    # Update job status and timestamps
+    job.status = "printing"
+    job.started_at = datetime.now(timezone.utc)
+    job.estimated_completion_at = job.started_at + timedelta(hours=total_print_hours)
+    
     db.commit()
     db.refresh(job)
     return job
