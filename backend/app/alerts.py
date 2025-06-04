@@ -167,22 +167,65 @@ def check_subscription_expiry(db: Session) -> List[Alert]:
 
 
 def check_printer_maintenance(db: Session) -> List[Alert]:
-    """Check for printers needing maintenance (placeholder)"""
+    """Check for printers needing maintenance based on working hours"""
     alerts = []
     
-    # This is a placeholder for future printer maintenance tracking
-    # In a full implementation, you'd track printer usage hours
-    printers = db.query(models.PrinterProfile).all()
+    # Get all printers with their printer types
+    printers = db.query(models.Printer).join(models.PrinterType).all()
     
-    # Example: Alert if we have expensive printers (business insight)
-    expensive_printers = [p for p in printers if p.price_eur > 1000]
-    if expensive_printers:
-        total_value = sum(p.price_eur for p in expensive_printers)
+    # Check for printers near end of life (< 10% remaining)
+    critical_printers = []
+    warning_printers = []
+    
+    for printer in printers:
+        if printer.life_percentage < 10:
+            critical_printers.append(printer)
+        elif printer.life_percentage < 25:
+            warning_printers.append(printer)
+    
+    # Critical maintenance alert
+    if critical_printers:
+        printer_names = [p.name for p in critical_printers[:3]]
+        more_count = len(critical_printers) - 3
+        message = f"Printers need immediate maintenance: {', '.join(printer_names)}"
+        if more_count > 0:
+            message += f" and {more_count} more"
+        
+        alerts.append(Alert(
+            alert_type="printer",
+            priority="critical",
+            title="Critical Printer Maintenance",
+            message=message,
+            action_label="View Printers",
+            action_link="?tab=printers"
+        ))
+    
+    # Warning maintenance alert
+    elif warning_printers:
+        printer_names = [p.name for p in warning_printers[:3]]
+        more_count = len(warning_printers) - 3
+        message = f"Printers approaching maintenance: {', '.join(printer_names)}"
+        if more_count > 0:
+            message += f" and {more_count} more"
+        
+        alerts.append(Alert(
+            alert_type="printer",
+            priority="warning",
+            title="Printer Maintenance Due Soon",
+            message=message,
+            action_label="View Printers",
+            action_link="?tab=printers"
+        ))
+    
+    # Business insight: Alert if we have expensive printers
+    expensive_printers = [p for p in printers if p.purchase_price_eur > 1000]
+    if expensive_printers and not critical_printers:  # Only show if no critical alerts
+        total_value = sum(p.purchase_price_eur for p in expensive_printers)
         alerts.append(Alert(
             alert_type="business",
             priority="info",
             title="High-Value Equipment",
-            message=f"You have €{total_value:.0f} in premium printers. Consider maintenance tracking.",
+            message=f"You have €{total_value:.0f} in premium printers. Track maintenance to protect your investment.",
             action_label="View Printers",
             action_link="?tab=printers"
         ))
