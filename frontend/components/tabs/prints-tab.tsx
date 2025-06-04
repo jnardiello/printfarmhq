@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play, Square } from "lucide-react"
 import { motion } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -37,6 +37,10 @@ export function PrintsTab() {
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any>(null);
   const [selectedJobForEdit, setSelectedJobForEdit] = useState<any>(null);
   const [jobToDelete, setJobToDelete] = useState<any>(null);
+  
+  // Modal states for errors and confirmations
+  const [errorModal, setErrorModal] = useState({ isOpen: false, title: '', message: '' });
+  const [confirmStopModal, setConfirmStopModal] = useState({ isOpen: false, jobId: '' });
   
   // Edit form states (separate from add form)
   const [editJobProducts, setEditJobProducts] = useState([{ productId: "", itemsQty: "1" }]);
@@ -218,7 +222,11 @@ export function PrintsTab() {
     e.preventDefault()
 
     if (jobProducts.some(p=> !p.productId) || !jobPrinter.printerId) {
-      alert("Please select all products and the printer.");
+      setErrorModal({
+        isOpen: true,
+        title: 'Incomplete Form',
+        message: 'Please select all products and the printer.'
+      });
       return;
     }
     await addPrintJob({
@@ -237,12 +245,20 @@ export function PrintsTab() {
     e.preventDefault()
 
     if (editJobProducts.some(p=> !p.productId) || !editJobPrinter.printerId) {
-      alert("Please select all products and the printer.");
+      setErrorModal({
+        isOpen: true,
+        title: 'Incomplete Form',
+        message: 'Please select all products and the printer.'
+      });
       return;
     }
     
     if (!selectedJobForEdit) {
-      alert("No job selected for editing.");
+      setErrorModal({
+        isOpen: true,
+        title: 'No Job Selected',
+        message: 'No job selected for editing.'
+      });
       return;
     }
 
@@ -390,18 +406,30 @@ export function PrintsTab() {
       console.error('Error starting print job:', error);
       // Check if it's a printer conflict (409 error)
       if (error.message && error.message.includes('currently in use')) {
-        alert(`Cannot start job: ${error.message}`);
+        setErrorModal({
+          isOpen: true,
+          title: 'Printer In Use',
+          message: error.message
+        });
       } else {
-        alert(`Failed to start print job: ${error.message || 'Unknown error'}`);
+        setErrorModal({
+          isOpen: true,
+          title: 'Failed to Start Print Job',
+          message: error.message || 'Unknown error occurred'
+        });
       }
     }
   }
 
   // Handle stopping a print job
   const handleStopJob = async (jobId: string) => {
-    if (!confirm('Are you sure you want to stop this print job? It will be moved back to the queue.')) {
-      return;
-    }
+    setConfirmStopModal({ isOpen: true, jobId });
+  }
+
+  // Confirm and execute stop job
+  const confirmStopJob = async () => {
+    const jobId = confirmStopModal.jobId;
+    setConfirmStopModal({ isOpen: false, jobId: '' });
     
     try {
       await api(`/print_jobs/${jobId}/stop`, {
@@ -412,7 +440,11 @@ export function PrintsTab() {
       window.location.reload(); // Temporary solution
     } catch (error: any) {
       console.error('Error stopping print job:', error);
-      alert(`Failed to stop print job: ${error.message || 'Unknown error'}`);
+      setErrorModal({
+        isOpen: true,
+        title: 'Failed to Stop Print Job',
+        message: error.message || 'Unknown error occurred'
+      });
     }
   }
 
@@ -1494,6 +1526,49 @@ export function PrintsTab() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Error Modal */}
+      <Dialog open={errorModal.isOpen} onOpenChange={(isOpen) => setErrorModal({ ...errorModal, isOpen })}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              {errorModal.title}
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {errorModal.message}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setErrorModal({ isOpen: false, title: '', message: '' })}>
+              OK
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Stop Modal */}
+      <Dialog open={confirmStopModal.isOpen} onOpenChange={(isOpen) => setConfirmStopModal({ ...confirmStopModal, isOpen })}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Square className="h-5 w-5 text-amber-500" />
+              Stop Print Job?
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              Are you sure you want to stop this print job? It will be moved back to the queue and the printer will become available.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setConfirmStopModal({ isOpen: false, jobId: '' })}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={confirmStopJob}>
+              Stop Job
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
