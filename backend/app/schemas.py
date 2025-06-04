@@ -193,6 +193,68 @@ class FilamentUpdate(BaseModel):
     min_filaments_kg: Optional[float] = None
 
 
+# Printer Type Schemas (similar to Filament)
+class PrinterTypeBase(BaseModel):
+    brand: str
+    model: str
+    expected_life_hours: float = Field(..., gt=0, description="Expected operational life in hours")
+
+
+class PrinterTypeCreate(PrinterTypeBase):
+    pass
+
+
+class PrinterTypeRead(PrinterTypeBase):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    # Count of associated printers
+    printer_count: Optional[int] = None
+
+
+class PrinterTypeUpdate(BaseModel):
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    expected_life_hours: Optional[float] = Field(None, gt=0)
+
+
+# Printer Instance Schemas (renamed from PrinterProfile)
+class PrinterBase(BaseModel):
+    printer_type_id: int
+    name: str
+    purchase_price_eur: float = Field(..., ge=0)
+    purchase_date: Optional[date] = None
+    status: str = Field(default="idle", pattern="^(idle|printing|maintenance|offline)$")
+
+
+class PrinterCreate(PrinterBase):
+    working_hours: float = Field(default=0.0, ge=0)
+
+
+class PrinterRead(PrinterBase):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    working_hours: float = Field(default=0.0, ge=0)
+    life_left_hours: Optional[float] = None
+    life_percentage: Optional[float] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    printer_type: Optional[PrinterTypeRead] = None
+
+
+class PrinterUpdate(BaseModel):
+    printer_type_id: Optional[int] = None
+    name: Optional[str] = None
+    purchase_price_eur: Optional[float] = Field(None, ge=0)
+    purchase_date: Optional[date] = None
+    working_hours: Optional[float] = Field(None, ge=0)
+    status: Optional[str] = Field(None, pattern="^(idle|printing|maintenance|offline)$")
+
+
+# Legacy schemas for backward compatibility
 class PrinterProfileBase(BaseModel):
     name: str
     manufacturer: Optional[str] = None
@@ -229,10 +291,9 @@ class PrinterUsageHistoryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
-    printer_profile_id: int
+    printer_id: int  # Updated field name to match model
     print_job_id: UUID
     hours_used: float
-    printers_qty: int
     created_at: datetime
     week_year: int
     month_year: int
@@ -271,9 +332,8 @@ class JobProductItem(BaseModel):
 
 
 class JobPrinterItem(BaseModel):
-    printer_profile_id: int
-    printers_qty: int = Field(..., gt=0)
-    hours_each: float = Field(default=0.0, ge=0)  # No longer required, calculated from products
+    printer_type_id: int  # Select printer type for the job
+    hours_each: float = Field(default=0.0, ge=0)  # Calculated from products
 
 
 class JobProductRead(BaseModel):
@@ -289,8 +349,9 @@ class JobPrinterRead(BaseModel):
     """Read schema for print job printers with stored printer data"""
     model_config = ConfigDict(from_attributes=True)
     
-    printer_profile_id: Optional[int] = None
-    printers_qty: int
+    printer_profile_id: Optional[int] = None  # Legacy field
+    printer_type_id: Optional[int] = None
+    assigned_printer_id: Optional[int] = None
     hours_each: float
     # Stored printer data
     printer_name: Optional[str] = None
@@ -586,6 +647,11 @@ class UserActivityRead(BaseModel):
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     activity_metadata: Optional[str] = None  # JSON string
+
+
+class PrintJobStart(BaseModel):
+    """Schema for starting a print job with selected printer"""
+    printer_id: int  # Single printer ID
 
 
 class EnhancedGodMetricsSummary(BaseModel):
