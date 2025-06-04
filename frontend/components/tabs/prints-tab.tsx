@@ -11,17 +11,18 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog"
-import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play, Square, StopCircle } from "lucide-react"
+import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play, Square, StopCircle, Settings } from "lucide-react"
 import { motion } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
 import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils";
 import { api } from "@/lib/api";
+import { PrinterTypeSelect } from "@/components/printer-type-select";
 
 
 export function PrintsTab() {
   // Placeholder - will need to update useData and related functions/state
-  const { products, printers, printJobs, addPrintJob, deletePrintJob, updatePrintJob } = useData()
+  const { products, printers, printerTypes, printJobs, addPrintJob, deletePrintJob, updatePrintJob } = useData()
   const router = useRouter()
   
   // State for tracking current time for countdown
@@ -31,7 +32,7 @@ export function PrintsTab() {
   // State for print job form - removed since we're using separate states for products and printers
 
   const [jobProducts, setJobProducts] = useState([{ productId: "", itemsQty: "1" }]);
-  const [jobPrinter, setJobPrinter] = useState({ printerId: "", printersQty: "1" });
+  const [jobPrinter, setJobPrinter] = useState({ printerTypeId: "" });
   const [packagingCost, setPackagingCost] = useState("0");
   const [isAddJobModalOpen, setIsAddJobModalOpen] = useState(false);
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any>(null);
@@ -41,10 +42,17 @@ export function PrintsTab() {
   // Modal states for errors and confirmations
   const [errorModal, setErrorModal] = useState({ isOpen: false, title: '', message: '' });
   const [confirmStopModal, setConfirmStopModal] = useState({ isOpen: false, jobId: '' });
+  const [printerSelectionModal, setPrinterSelectionModal] = useState<{
+    isOpen: boolean;
+    jobId: string;
+    printerTypeId: number | null;
+    requiredCount: number;
+  }>({ isOpen: false, jobId: '', printerTypeId: null, requiredCount: 1 });
+  const [selectedPrinters, setSelectedPrinters] = useState<number[]>([]);
   
   // Edit form states (separate from add form)
   const [editJobProducts, setEditJobProducts] = useState([{ productId: "", itemsQty: "1" }]);
-  const [editJobPrinter, setEditJobPrinter] = useState({ printerId: "", printersQty: "1" });
+  const [editJobPrinter, setEditJobPrinter] = useState({ printerTypeId: "" });
   const [editPackagingCost, setEditPackagingCost] = useState("0");
 
   // Sorting state for print jobs table
@@ -105,9 +113,8 @@ export function PrintsTab() {
     
     // Convert job printer to form format (take first printer since we only allow one type now)
     const formPrinter = job.printers?.[0] ? {
-      printerId: String(job.printers[0].printer_profile_id),
-      printersQty: String(job.printers[0].printers_qty)
-    } : { printerId: "", printersQty: "1" };
+      printerTypeId: String(job.printers[0].printer_type_id || job.printers[0].printer_profile_id)
+    } : { printerTypeId: "" };
     
     // Set form states
     setEditJobProducts(formProducts);
@@ -140,17 +147,21 @@ export function PrintsTab() {
       totalPrintTime += printTime * itemsQty;
     }
 
-    // 2. Calculate printer costs
-    if (jobPrinter.printerId && totalPrintTime > 0) {
-      const printer = printers?.find(p => p.id === parseInt(jobPrinter.printerId));
-      if (printer) {
-        const printerPrice = printer.price_eur || 0;
-        const printerLifeHours = printer.expected_life_hours || 0;
+    // 2. Calculate printer costs (estimate based on average printer price)
+    if (jobPrinter.printerTypeId && totalPrintTime > 0) {
+      const printerType = printerTypes?.find(pt => pt.id === parseInt(jobPrinter.printerTypeId));
+      if (printerType && printers) {
+        // Get all printers of this type
+        const printersOfType = printers.filter(p => p.printer_type_id === printerType.id);
         
-        if (printerLifeHours > 0 && printerPrice > 0) {
-          const costPerHour = printerPrice / printerLifeHours;
-          const printersQty = parseInt(jobPrinter.printersQty) || 1;
-          printerCost = costPerHour * totalPrintTime * printersQty;
+        if (printersOfType.length > 0) {
+          // Calculate average price of printers of this type
+          const avgPrice = printersOfType.reduce((sum, p) => sum + p.purchase_price_eur, 0) / printersOfType.length;
+          const hourlyRate = avgPrice / printerType.expected_life_hours;
+          printerCost = hourlyRate * totalPrintTime;
+        } else {
+          // No printers of this type exist yet
+          printerCost = 0;
         }
       }
     }
@@ -165,7 +176,7 @@ export function PrintsTab() {
       totalCogs: totalCogs,
       isValid: totalCogs > 0
     };
-  }, [jobProducts, jobPrinter, packagingCost, products, printers]);
+  }, [jobProducts, jobPrinter, packagingCost, products, printerTypes]);
 
   // Calculate COGS preview for edit form
   const editCogsPreview = useMemo(() => {
@@ -191,17 +202,21 @@ export function PrintsTab() {
       totalPrintTime += printTime * itemsQty;
     }
 
-    // 2. Calculate printer costs
-    if (editJobPrinter.printerId && totalPrintTime > 0) {
-      const printer = printers?.find(p => p.id === parseInt(editJobPrinter.printerId));
-      if (printer) {
-        const printerPrice = printer.price_eur || 0;
-        const printerLifeHours = printer.expected_life_hours || 0;
+    // 2. Calculate printer costs (estimate based on average printer price)
+    if (editJobPrinter.printerTypeId && totalPrintTime > 0) {
+      const printerType = printerTypes?.find(pt => pt.id === parseInt(editJobPrinter.printerTypeId));
+      if (printerType && printers) {
+        // Get all printers of this type
+        const printersOfType = printers.filter(p => p.printer_type_id === printerType.id);
         
-        if (printerLifeHours > 0 && printerPrice > 0) {
-          const costPerHour = printerPrice / printerLifeHours;
-          const printersQty = parseInt(editJobPrinter.printersQty) || 1;
-          printerCost = costPerHour * totalPrintTime * printersQty;
+        if (printersOfType.length > 0) {
+          // Calculate average price of printers of this type
+          const avgPrice = printersOfType.reduce((sum, p) => sum + p.purchase_price_eur, 0) / printersOfType.length;
+          const hourlyRate = avgPrice / printerType.expected_life_hours;
+          printerCost = hourlyRate * totalPrintTime;
+        } else {
+          // No printers of this type exist yet
+          printerCost = 0;
         }
       }
     }
@@ -216,12 +231,12 @@ export function PrintsTab() {
       totalCogs: totalCogs,
       isValid: totalCogs > 0
     };
-  }, [editJobProducts, editJobPrinter, editPackagingCost, products, printers]);
+  }, [editJobProducts, editJobPrinter, editPackagingCost, products, printerTypes]);
 
   const handleAddPrintJob = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (jobProducts.some(p=> !p.productId) || !jobPrinter.printerId) {
+    if (jobProducts.some(p=> !p.productId) || !jobPrinter.printerTypeId) {
       setErrorModal({
         isOpen: true,
         title: 'Incomplete Form',
@@ -231,12 +246,12 @@ export function PrintsTab() {
     }
     await addPrintJob({
       products: jobProducts.map(p=>({ product_id: Number(p.productId), items_qty: Number(p.itemsQty) })),
-      printers: [{ printer_profile_id: Number(jobPrinter.printerId), printers_qty: Number(jobPrinter.printersQty) }],
+      printers: [{ printer_type_id: Number(jobPrinter.printerTypeId) }],
       packaging_cost_eur: Number(packagingCost),
       status: "pending",
     });
     setJobProducts([{ productId:"", itemsQty:"1" }]);
-    setJobPrinter({ printerId:"", printersQty:"1" });
+    setJobPrinter({ printerTypeId:"" });
     setPackagingCost("0");
     setIsAddJobModalOpen(false); // Close modal after successful submission
   }
@@ -244,7 +259,7 @@ export function PrintsTab() {
   const handleUpdatePrintJob = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (editJobProducts.some(p=> !p.productId) || !editJobPrinter.printerId) {
+    if (editJobProducts.some(p=> !p.productId) || !editJobPrinter.printerTypeId) {
       setErrorModal({
         isOpen: true,
         title: 'Incomplete Form',
@@ -267,7 +282,7 @@ export function PrintsTab() {
       const updateData = {
         name: selectedJobForEdit.name, // Include the original name
         products: editJobProducts.map(p=>({ product_id: Number(p.productId), items_qty: Number(p.itemsQty) })),
-        printers: [{ printer_profile_id: Number(editJobPrinter.printerId), printers_qty: Number(editJobPrinter.printersQty) }],
+        printers: [{ printer_type_id: Number(editJobPrinter.printerTypeId) }],
         packaging_cost_eur: Number(editPackagingCost),
         status: selectedJobForEdit.status || "pending",
       };
@@ -279,7 +294,7 @@ export function PrintsTab() {
       
       // Reset edit form
       setEditJobProducts([{ productId:"", itemsQty:"1" }]);
-      setEditJobPrinter({ printerId:"", printersQty:"1" });
+      setEditJobPrinter({ printerTypeId:"" });
       setEditPackagingCost("0");
       setSelectedJobForEdit(null); // Close modal after successful submission
     } catch (error) {
@@ -392,19 +407,61 @@ export function PrintsTab() {
     }
   }, [currentTime])
 
-  // Handle starting a print job
+  // Handle starting a print job - first show printer selection modal
   const handleStartJob = async (jobId: string) => {
+    // Find the job to get printer type info
+    const job = printJobs?.find((j: any) => j.id === jobId);
+    if (!job || !job.printers || job.printers.length === 0) {
+      setErrorModal({
+        isOpen: true,
+        title: 'Invalid Job',
+        message: 'Job data not found or no printers specified'
+      });
+      return;
+    }
+
+    // Get the first printer requirement (assuming single printer type per job for now)
+    const printerReq = job.printers[0];
+    
+    // Open printer selection modal
+    setPrinterSelectionModal({
+      isOpen: true,
+      jobId: jobId,
+      printerTypeId: printerReq.printer_type_id,
+      requiredCount: printerReq.printers_qty || 1
+    });
+    setSelectedPrinters([]);
+  }
+
+  // Handle confirming printer selection and starting the job
+  const handleConfirmPrinterSelection = async () => {
+    const { jobId } = printerSelectionModal;
+    
+    if (selectedPrinters.length !== 1) {
+      setErrorModal({
+        isOpen: true,
+        title: 'Invalid Selection',
+        message: 'Please select exactly one printer'
+      });
+      return;
+    }
+
     try {
       await api(`/print_jobs/${jobId}/start`, {
         method: 'PUT',
+        body: JSON.stringify({ printer_id: selectedPrinters[0] })
       });
 
+      // Close modal and refresh
+      setPrinterSelectionModal({ isOpen: false, jobId: '', printerTypeId: null, requiredCount: 1 });
+      setSelectedPrinters([]);
+      
       // Refresh the print jobs data
-      // This will be handled by the data provider
       window.location.reload(); // Temporary solution
     } catch (error: any) {
       console.error('Error starting print job:', error);
-      // Check if it's a printer conflict (409 error)
+      setPrinterSelectionModal({ isOpen: false, jobId: '', printerTypeId: null, requiredCount: 1 });
+      
       if (error.message && error.message.includes('currently in use')) {
         setErrorModal({
           isOpen: true,
@@ -573,47 +630,23 @@ export function PrintsTab() {
                         <Printer className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                       </div>
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Printer Configuration</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Select printer profile and quantity</p>
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Printer Type</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Select the printer type for this job</p>
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="md:col-span-2">
-                        <Label htmlFor="printer-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                          Printer Profile *
-                        </Label>
-                        <Select value={jobPrinter.printerId} onValueChange={(v)=>handlePrinterChange("printerId",v)}>
-                          <SelectTrigger id="printer-select" className="h-11">
-                            <SelectValue placeholder="Choose printer profile..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {printers.map((pr:any)=>(
-                              <SelectItem key={pr.id} value={String(pr.id)}>
-                                <div className="flex items-center gap-2">
-                                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                                  {pr.name}
-                                </div>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      <div className="md:col-span-1">
-                        <Label htmlFor="printer-qty" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                          Quantity *
-                        </Label>
-                        <Input 
-                          id="printer-qty" 
-                          type="number" 
-                          min="1" 
-                          value={jobPrinter.printersQty} 
-                          onChange={(e)=>handlePrinterChange("printersQty",e.target.value)} 
-                          placeholder="1" 
-                          className="h-11 text-center font-medium"
-                        />
-                      </div>
+                    <div>
+                      <Label htmlFor="printer-type-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                        Printer Type *
+                      </Label>
+                      <PrinterTypeSelect
+                        value={jobPrinter.printerTypeId}
+                        onValueChange={(value) => {
+                          handlePrinterChange("printerTypeId", value.toString());
+                        }}
+                        printerTypes={printerTypes}
+                        required
+                      />
                     </div>
                   </div>
 
@@ -813,88 +846,110 @@ export function PrintsTab() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-xl">
               <Printer className="h-5 w-5 text-green-600 animate-pulse" />
-              Currently Printing
+              Printer Status
             </CardTitle>
           </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              {printJobs && printJobs.filter((job: any) => job.status === "printing").length > 0 ? (
-                <div className="grid gap-4 p-4">
-                  {printJobs
-                    .filter((job: any) => job.status === "printing")
-                    .map((job: any) => (
-                      <div key={job.id} className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-800">
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h3 className="font-semibold text-lg">{job.name || `Job #${job.id.slice(0,6)}`}</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Started: {job.started_at ? new Date(job.started_at).toLocaleString() : 'N/A'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-4">
-                            <div className="text-right">
-                              <p className="text-sm text-muted-foreground">Estimated completion:</p>
-                              <p className="font-medium">
-                                {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleString() : 'N/A'}
-                              </p>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="lg"
-                              className="bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 dark:from-red-900/30 dark:to-pink-900/30 dark:hover:from-red-900/50 dark:hover:to-pink-900/50 text-red-600 dark:text-red-400 border-red-300 dark:border-red-700 hover:border-red-400 dark:hover:border-red-600 font-semibold transition-all duration-200 shadow-sm hover:shadow-md px-6"
-                              onClick={() => handleStopJob(job.id)}
-                            >
-                              <StopCircle className="h-5 w-5 mr-2" />
-                              Stop Print
-                            </Button>
-                          </div>
+          <CardContent className="p-4">
+            {printers && printers.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {printers.map((printer) => {
+                  // Find any active print job for this printer
+                  const activeJob = printJobs?.find((job: any) => 
+                    job.status === "printing" && 
+                    job.printers?.some((p: any) => p.assigned_printer_id === printer.id)
+                  )
+                  
+                  return (
+                    <div 
+                      key={printer.id} 
+                      className={`rounded-lg p-4 border-2 transition-all ${
+                        activeJob 
+                          ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700' 
+                          : 'bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700'
+                      }`}
+                    >
+                      {/* Printer Header */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div>
+                          <h4 className="font-semibold text-base flex items-center gap-2">
+                            <Settings className={`h-4 w-4 ${activeJob ? 'text-green-600' : 'text-gray-500'}`} />
+                            {printer.name}
+                          </h4>
+                          <p className="text-xs text-muted-foreground">
+                            {printer.manufacturer} {printer.model}
+                          </p>
                         </div>
-                        
-                        {/* Job details */}
-                        <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">Products:</span>
-                            <span className="ml-2 font-medium">
-                              {job.products?.reduce((acc: number, p: any) => acc + (p.items_qty || 0), 0) || 0} items
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Printers:</span>
-                            <span className="ml-2 font-medium">
-                              {job.printers?.map((p: any) => p.printer_name || 'Unknown').join(', ') || 'N/A'}
-                            </span>
-                          </div>
-                        </div>
-                        {/* Progress bar with real-time updates */}
-                        <div className="mt-4">
-                          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                            <div 
-                              className="bg-green-600 h-2 rounded-full transition-all duration-1000" 
-                              style={{ width: `${calculateProgress(job)}%` }}
-                            ></div>
-                          </div>
-                          <div className="flex justify-between items-center mt-1">
-                            <p className="text-sm text-muted-foreground">Progress: {calculateProgress(job)}%</p>
-                            <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                              Time remaining: {formatRemainingTime(job)}
-                            </p>
-                          </div>
-                          {/* Debug info - remove in production */}
-                          <div className="text-xs text-gray-500 mt-2 font-mono">
-                            Started: {job.started_at ? new Date(job.started_at).toLocaleTimeString() : 'N/A'}<br/>
-                            Ends: {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleTimeString() : 'N/A'}
-                          </div>
+                        <div className={`px-2 py-1 rounded text-xs font-medium ${
+                          activeJob 
+                            ? 'bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300' 
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                        }`}>
+                          {activeJob ? 'PRINTING' : 'IDLE'}
                         </div>
                       </div>
-                    ))}
-                </div>
-              ) : (
-                <div className="text-center text-muted-foreground py-8 bg-muted/30">
-                  <Printer className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
-                  <p>No print jobs currently running</p>
-                </div>
-              )}
-            </div>
+                      
+                      {/* Printer Content */}
+                      {activeJob ? (
+                        <div className="space-y-3">
+                          {/* Job Info */}
+                          <div>
+                            <p className="text-sm font-medium mb-1">
+                              {activeJob.name || `Job #${activeJob.id.slice(0,6)}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {activeJob.products?.reduce((acc: number, p: any) => acc + (p.items_qty || 0), 0) || 0} items
+                            </p>
+                          </div>
+                          
+                          {/* Progress Bar */}
+                          <div>
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5">
+                              <div 
+                                className="bg-green-600 h-1.5 rounded-full transition-all duration-1000" 
+                                style={{ width: `${calculateProgress(activeJob)}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between items-center mt-1">
+                              <p className="text-xs text-muted-foreground">{calculateProgress(activeJob)}%</p>
+                              <p className="text-xs font-medium text-green-600 dark:text-green-400">
+                                {formatRemainingTime(activeJob)}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          {/* Stop Button */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full bg-gradient-to-r from-red-50 to-pink-50 hover:from-red-100 hover:to-pink-100 dark:from-red-900/30 dark:to-pink-900/30 dark:hover:from-red-900/50 dark:hover:to-pink-900/50 text-red-600 dark:text-red-400 border-red-300 dark:border-red-700"
+                            onClick={() => handleStopJob(activeJob.id)}
+                          >
+                            <StopCircle className="h-3.5 w-3.5 mr-1.5" />
+                            Stop
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+                          <div className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-2">
+                            <Settings className="h-6 w-6" />
+                          </div>
+                          <p className="text-sm">Idle</p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Ready for printing
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="text-center text-muted-foreground py-8 bg-muted/30 rounded-lg">
+                <Printer className="h-10 w-10 mx-auto text-muted-foreground/50 mb-2" />
+                <p>No printers configured</p>
+                <p className="text-sm mt-1">Add a printer to start tracking print jobs</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -935,12 +990,12 @@ export function PrintsTab() {
                         <TableCell className="font-medium">{job.name || `Job #${job.id.slice(0,6)}`}</TableCell>
                         <TableCell>
                           {job.products && job.products.length > 0
-                            ? `${job.products.length} Product Line${job.products.length > 1 ? 's' : ''}`
+                            ? job.products.map((p: any) => p.product?.name || 'Unknown').join(', ')
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
                           {job.printers && job.printers.length > 0
-                            ? `${job.printers.reduce((acc: number, pr_item: any) => acc + (pr_item.printers_qty || 0), 0)} Printer${job.printers.reduce((acc: number, pr_item: any) => acc + (pr_item.printers_qty || 0), 0) > 1 ? 's' : ''}`
+                            ? job.printers.map((p: any) => p.printer_name || 'Unknown').join(', ')
                             : 'N/A'}
                         </TableCell>
                         <TableCell>
@@ -1306,47 +1361,23 @@ export function PrintsTab() {
                       <Printer className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                     </div>
                     <div>
-                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Printer Configuration</h3>
-                      <p className="text-sm text-gray-500 dark:text-gray-400">Select printer profile and quantity</p>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Printer Type</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Select the printer type for this job</p>
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2">
-                      <Label htmlFor="edit-printer-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                        Printer Profile *
-                      </Label>
-                      <Select value={editJobPrinter.printerId} onValueChange={(v)=>handleEditPrinterChange("printerId",v)}>
-                        <SelectTrigger id="edit-printer-select" className="h-11">
-                          <SelectValue placeholder="Choose printer profile..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {printers.map((pr:any)=>(
-                            <SelectItem key={pr.id} value={String(pr.id)}>
-                              <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
-                                {pr.name}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="md:col-span-1">
-                      <Label htmlFor="edit-printer-qty" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
-                        Quantity *
-                      </Label>
-                      <Input 
-                        id="edit-printer-qty" 
-                        type="number" 
-                        min="1" 
-                        value={editJobPrinter.printersQty} 
-                        onChange={(e)=>handleEditPrinterChange("printersQty",e.target.value)} 
-                        placeholder="1" 
-                        className="h-11 text-center font-medium"
-                      />
-                    </div>
+                  <div>
+                    <Label htmlFor="edit-printer-type-select" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Printer Type *
+                    </Label>
+                    <PrinterTypeSelect
+                      value={editJobPrinter.printerTypeId}
+                      onValueChange={(value) => {
+                        handleEditPrinterChange("printerTypeId", value.toString());
+                      }}
+                      printerTypes={printerTypes}
+                      required
+                    />
                   </div>
                 </div>
 
@@ -1567,6 +1598,116 @@ export function PrintsTab() {
             </Button>
             <Button variant="destructive" onClick={confirmStopJob}>
               Stop Job
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Printer Selection Modal */}
+      <Dialog 
+        open={printerSelectionModal.isOpen} 
+        onOpenChange={(open) => {
+          if (!open) {
+            setPrinterSelectionModal({ isOpen: false, jobId: '', printerTypeId: null, requiredCount: 1 });
+            setSelectedPrinters([]);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                <Printer className="h-6 w-6 text-white" />
+              </div>
+              Select Printer
+            </DialogTitle>
+            <DialogDescription>
+              Select a printer for this job
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {(() => {
+              // Filter printers by type and availability
+              const availablePrinters = printers?.filter((printer: any) => 
+                printer.printer_type_id === printerSelectionModal.printerTypeId && 
+                printer.status === 'idle'
+              ) || [];
+
+              if (availablePrinters.length === 0) {
+                return (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Printer className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
+                    <p className="text-lg font-medium">No Available Printers</p>
+                    <p className="text-sm mt-1">
+                      All printers of this type are currently in use or offline.
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid gap-3">
+                  {availablePrinters.map((printer: any) => (
+                    <div
+                      key={printer.id}
+                      className={`
+                        p-4 rounded-lg border-2 cursor-pointer transition-all
+                        ${selectedPrinters.includes(printer.id) 
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                        }
+                      `}
+                      onClick={() => {
+                        // Single selection only
+                        setSelectedPrinters([printer.id]);
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-semibold text-lg">{printer.name}</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {printer.printer_type?.brand} {printer.printer_type?.model}
+                          </p>
+                          <div className="flex items-center gap-4 mt-2 text-sm">
+                            <span className="text-muted-foreground">
+                              Working hours: {printer.working_hours?.toFixed(1) || 0}h
+                            </span>
+                            <span className="text-muted-foreground">
+                              Life left: {printer.life_percentage?.toFixed(0) || 0}%
+                            </span>
+                          </div>
+                        </div>
+                        {selectedPrinters.includes(printer.id) && (
+                          <div className="flex items-center justify-center w-8 h-8 bg-blue-500 rounded-full">
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPrinterSelectionModal({ isOpen: false, jobId: '', printerTypeId: null, requiredCount: 1 });
+                setSelectedPrinters([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleConfirmPrinterSelection}
+              disabled={selectedPrinters.length !== 1}
+            >
+              Start Print Job
             </Button>
           </DialogFooter>
         </DialogContent>
