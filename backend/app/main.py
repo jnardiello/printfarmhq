@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Depends, HTTPException, status, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import Optional, List, Union
 from datetime import timedelta, datetime
 import json
@@ -1797,12 +1798,36 @@ def get_printer_profile(printer_id: int, db: Session = Depends(get_db), current_
     if not printer:
         raise HTTPException(status_code=404, detail="Printer profile not found")
     return printer
+@app.get("/printer_profiles/{profile_id}", response_model=schemas.PrinterProfileRead)
+def get_printer_profile(
+    profile_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    prof = db.get(models.PrinterProfile, profile_id)
+    if not prof:
+        raise HTTPException(status_code=404, detail="Printer profile not found")
+    return prof
+
+
+@app.delete("/printer_profiles/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_printer_profile(profile_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    prof = db.get(models.PrinterProfile, profile_id)
+    if not prof:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    
+    # No longer check if in use - printer data is stored in print jobs
+    db.delete(prof)
+    db.commit()
+    return
 
 
 @app.put("/printer_profiles/{printer_id}", response_model=schemas.PrinterProfileRead)
 def update_printer_profile(
     printer_id: int,
     printer_update: schemas.PrinterProfileUpdate,
+    profile_id: int,
+    profile_update: schemas.PrinterProfileUpdate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -1814,23 +1839,144 @@ def update_printer_profile(
     update_data = printer_update.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(printer, field, value)
+    # Update fields
+    if profile_update.name is not None:
+        prof.name = profile_update.name
+    if profile_update.manufacturer is not None:
+        prof.manufacturer = profile_update.manufacturer
+    if profile_update.model is not None:
+        prof.model = profile_update.model
+    if profile_update.price_eur is not None:
+        prof.price_eur = profile_update.price_eur
+    if profile_update.expected_life_hours is not None:
+        prof.expected_life_hours = profile_update.expected_life_hours
+    if profile_update.working_hours is not None:
+        prof.working_hours = profile_update.working_hours
     
     db.commit()
     db.refresh(printer)
     return printer
 
 
-@app.delete("/printer_profiles/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_printer_profile(printer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Delete a printer profile (any authenticated user can delete printer profiles)"""
-    printer = db.get(models.PrinterProfile, printer_id)
+@app.get("/printer_profiles/{profile_id}/usage_stats", response_model=schemas.PrinterUsageStatsResponse)
+def get_printer_usage_stats(
+    profile_id: int,
+    period: str = "month",  # week, month, or quarter
+    count: int = 12,  # How many periods to return
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Get printer usage statistics for specified period"""
+    printer = db.get(models.PrinterProfile, profile_id)
     if not printer:
         raise HTTPException(status_code=404, detail="Printer profile not found")
     
-    # No constraint check needed - print jobs store printer data directly
-    db.delete(printer)
-    db.commit()
-    return
+    # Validate period
+    if period not in ["week", "month", "quarter"]:
+        raise HTTPException(status_code=400, detail="Period must be 'week', 'month', or 'quarter'")
+    
+    # Determine the period column and format
+    now = datetime.now()
+    stats = []
+    
+    if period == "week":
+        # Get weekly stats
+        current_week = int(now.strftime("%Y%V"))
+        for i in range(count):
+            week_date = now - timedelta(weeks=i)
+            week_key = int(week_date.strftime("%Y%V"))
+            
+            # Query usage for this week
+            usage = db.query(
+                func.sum(models.PrinterUsageHistory.hours_used).label("total_hours"),
+                func.count(models.PrinterUsageHistory.id).label("print_count")
+            ).filter(
+                models.PrinterUsageHistory.printer_profile_id == profile_id,
+                models.PrinterUsageHistory.week_year == week_key
+            ).first()
+            
+            stats.append(schemas.PrinterUsageStats(
+                period="week",
+                period_key=week_key,
+                period_label=f"Week {week_date.strftime('%V')}, {week_date.year}",
+                hours_used=usage.total_hours or 0.0,
+                print_count=usage.print_count or 0
+            ))
+    
+    elif period == "month":
+        # Get monthly stats
+        for i in range(count):
+            month_date = now - timedelta(days=30*i)  # Approximate
+            month_key = int(month_date.strftime("%Y%m"))
+            
+            # Query usage for this month
+            usage = db.query(
+                func.sum(models.PrinterUsageHistory.hours_used).label("total_hours"),
+                func.count(models.PrinterUsageHistory.id).label("print_count")
+            ).filter(
+                models.PrinterUsageHistory.printer_profile_id == profile_id,
+                models.PrinterUsageHistory.month_year == month_key
+            ).first()
+            
+            stats.append(schemas.PrinterUsageStats(
+                period="month",
+                period_key=month_key,
+                period_label=month_date.strftime("%B %Y"),
+                hours_used=usage.total_hours or 0.0,
+                print_count=usage.print_count or 0
+            ))
+    
+    else:  # quarter
+        # Get quarterly stats
+        for i in range(count):
+            quarter_offset = (now.month - 1) // 3 - i
+            year_offset = quarter_offset // 4
+            quarter_num = (quarter_offset % 4) + 1
+            year = now.year + year_offset
+            quarter_key = int(f"{year}{quarter_num}")
+            
+            # Query usage for this quarter
+            usage = db.query(
+                func.sum(models.PrinterUsageHistory.hours_used).label("total_hours"),
+                func.count(models.PrinterUsageHistory.id).label("print_count")
+            ).filter(
+                models.PrinterUsageHistory.printer_profile_id == profile_id,
+                models.PrinterUsageHistory.quarter_year == quarter_key
+            ).first()
+            
+            stats.append(schemas.PrinterUsageStats(
+                period="quarter",
+                period_key=quarter_key,
+                period_label=f"Q{quarter_num} {year}",
+                hours_used=usage.total_hours or 0.0,
+                print_count=usage.print_count or 0
+            ))
+    
+    # Reverse to have oldest first
+    stats.reverse()
+    
+    return schemas.PrinterUsageStatsResponse(
+        printer_id=printer.id,
+        printer_name=printer.name,
+        stats=stats,
+        total_working_hours=printer.working_hours,
+        life_left_hours=printer.life_left_hours,
+        life_percentage=printer.life_percentage
+    )
+
+
+# Utility SKU generator
+
+def _generate_sku(name: str, db: Session) -> str:
+    base = "".join(ch for ch in name.upper() if ch.isalnum())[:3]
+    from datetime import date
+    today = date.today().strftime("%y%m%d")
+    seq = 1
+    while True:
+        sku = f"{base}-{today}-{seq:03d}"
+        if not db.query(models.Product).filter_by(sku=sku).first():
+            return sku
+        seq += 1
 
 
 # ---------- Private helper functions for print jobs ---------- #
@@ -2040,6 +2186,60 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
                 status_code=400, 
                 detail=f"Product with ID {product_data.product_id} not found"
             )
+    
+    # add associations
+    assoc_products = [models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty) for it in job_data.products]
+    
+    # Create printer associations with stored printer data
+    assoc_printers = []
+    usage_history_records = []
+    for printer_item in job_data.printers:
+        # Look up printer profile to copy its data
+        printer_profile = db.get(models.PrinterProfile, printer_item.printer_profile_id)
+        if printer_profile:
+            printer_assoc = models.PrintJobPrinter(
+                print_job_id=db_job.id,
+                printer_profile_id=printer_item.printer_profile_id,
+                printers_qty=printer_item.printers_qty,
+                hours_each=printer_item.hours_each,
+                # Store printer data at time of job creation
+                printer_name=printer_profile.name,
+                printer_manufacturer=printer_profile.manufacturer,
+                printer_model=printer_profile.model,
+                printer_price_eur=printer_profile.price_eur,
+                printer_expected_life_hours=printer_profile.expected_life_hours
+            )
+            assoc_printers.append(printer_assoc)
+            
+            # Update printer working hours
+            total_hours_used = printer_item.hours_each * printer_item.printers_qty
+            printer_profile.working_hours = (printer_profile.working_hours or 0) + total_hours_used
+            
+            # Create usage history record
+            now = datetime.now()
+            week_year = int(now.strftime("%Y%V"))  # Use %V for ISO week number
+            month_year = int(now.strftime("%Y%m"))
+            quarter_year = int(f"{now.year}{(now.month-1)//3 + 1}")
+            
+            usage_history = models.PrinterUsageHistory(
+                printer_profile_id=printer_item.printer_profile_id,
+                print_job_id=db_job.id,
+                hours_used=printer_item.hours_each,
+                printers_qty=printer_item.printers_qty,
+                week_year=week_year,
+                month_year=month_year,
+                quarter_year=quarter_year
+            )
+            usage_history_records.append(usage_history)
+        else:
+            # Handle case where printer profile doesn't exist
+            logger.warning(f"Printer profile {printer_item.printer_profile_id} not found when creating print job")
+            printer_assoc = models.PrintJobPrinter(
+                print_job_id=db_job.id,
+                printer_profile_id=printer_item.printer_profile_id,
+                printers_qty=printer_item.printers_qty,
+                hours_each=printer_item.hours_each
+            )
         
         db_product_job = models.PrintJobProduct(
             print_job_id=db_job.id,
@@ -2074,6 +2274,8 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
     
     # Reload the job with all relationships
     db.refresh(db_job)
+    db.add_all(assoc_products + assoc_printers + usage_history_records)
+    db.flush()  # This makes the associations available without committing
     
     # Deduct filament inventory
     filament_result = _deduct_filament_for_print_job(db_job, db)

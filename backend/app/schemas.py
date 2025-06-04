@@ -242,13 +242,56 @@ class PrinterProfileBase(BaseModel):
 
 
 class PrinterProfileCreate(PrinterProfileBase):
-    pass
+    working_hours: float = Field(default=0.0, ge=0)
 
 
 class PrinterProfileRead(PrinterProfileBase):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
+    working_hours: float = Field(default=0.0, ge=0)
+    life_left_hours: Optional[float] = None
+    life_percentage: Optional[float] = None
+
+
+class PrinterProfileUpdate(BaseModel):
+    name: Optional[str] = None
+    manufacturer: Optional[str] = None
+    model: Optional[str] = None
+    price_eur: Optional[float] = Field(None, ge=0)
+    expected_life_hours: Optional[float] = Field(None, gt=0)
+    working_hours: Optional[float] = Field(None, ge=0)
+
+
+class PrinterUsageHistoryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    
+    id: int
+    printer_profile_id: int
+    print_job_id: UUID
+    hours_used: float
+    printers_qty: int
+    created_at: datetime
+    week_year: int
+    month_year: int
+    quarter_year: int
+
+
+class PrinterUsageStats(BaseModel):
+    period: str  # 'week', 'month', or 'quarter'
+    period_key: int  # YYYYWW, YYYYMM, or YYYYQ
+    period_label: str  # Human-readable label
+    hours_used: float
+    print_count: int
+    
+
+class PrinterUsageStatsResponse(BaseModel):
+    printer_id: int
+    printer_name: str
+    stats: List[PrinterUsageStats]
+    total_working_hours: float
+    life_left_hours: float
+    life_percentage: float
 
 
 class PrinterProfileUpdate(BaseModel):

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock, Copy } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
 import { motion } from "framer-motion"
 import { toast } from "@/components/ui/use-toast"
 
@@ -31,6 +32,7 @@ export function PrintersTab() {
     model: "",
     price_eur: "",
     expected_life_hours: "",
+    working_hours: "0",
   })
 
   const [editForm, setEditForm] = useState({
@@ -39,6 +41,7 @@ export function PrintersTab() {
     model: "",
     price_eur: "",
     expected_life_hours: "",
+    working_hours: "",
   })
 
   const handlePrinterChange = (field: string, value: string) => {
@@ -55,6 +58,7 @@ export function PrintersTab() {
         model: newPrinter.model || null,
         price_eur: Number.parseFloat(newPrinter.price_eur),
         expected_life_hours: Number.parseInt(newPrinter.expected_life_hours),
+        working_hours: Number.parseFloat(newPrinter.working_hours || "0"),
       })
 
       // Reset form
@@ -64,6 +68,7 @@ export function PrintersTab() {
         model: "",
         price_eur: "",
         expected_life_hours: "",
+        working_hours: "0",
       })
       setIsAddPrinterModalOpen(false)
 
@@ -96,6 +101,7 @@ export function PrintersTab() {
       model: printer.model || "",
       price_eur: printer.price_eur.toString(),
       expected_life_hours: printer.expected_life_hours.toString(),
+      working_hours: printer.working_hours.toString(),
     })
     setIsEditModalOpen(true)
   }
@@ -110,11 +116,12 @@ export function PrintersTab() {
       model: editForm.model || null,
       price_eur: Number.parseFloat(editForm.price_eur),
       expected_life_hours: Number.parseInt(editForm.expected_life_hours),
+      working_hours: Number.parseFloat(editForm.working_hours),
     })
 
     setIsEditModalOpen(false)
     setEditingPrinter(null)
-    setEditForm({ name: "", manufacturer: "", model: "", price_eur: "", expected_life_hours: "" })
+    setEditForm({ name: "", manufacturer: "", model: "", price_eur: "", expected_life_hours: "", working_hours: "" })
   }
 
   const handleEditFormChange = (field: string, value: string) => {
@@ -138,6 +145,7 @@ export function PrintersTab() {
         model: printerToClone.model,
         price_eur: printerToClone.price_eur,
         expected_life_hours: printerToClone.expected_life_hours,
+        working_hours: 0,
       })
 
       setIsCloneModalOpen(false)
@@ -322,6 +330,38 @@ export function PrintersTab() {
                     </p>
                   </div>
                 </div>
+
+                {/* Working Hours */}
+                <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                      <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Initial Working Hours</h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">Already used hours (optional)</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="workingHours" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                      Working Hours
+                    </Label>
+                    <Input
+                      id="workingHours"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={newPrinter.working_hours}
+                      onChange={(e) => handlePrinterChange("working_hours", e.target.value)}
+                      placeholder="0"
+                      className="h-11"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Set this if the printer has already been used
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Cost Preview */}
@@ -382,7 +422,8 @@ export function PrintersTab() {
                       <TableHead>Manufacturer</TableHead>
                       <TableHead>Model</TableHead>
                       <TableHead>Cost €</TableHead>
-                      <TableHead>Life hrs</TableHead>
+                      <TableHead>Expected Life</TableHead>
+                      <TableHead>Life Left</TableHead>
                       <TableHead>Cost/hr €</TableHead>
                       <TableHead className="text-center w-[150px]">Actions</TableHead>
                     </TableRow>
@@ -394,7 +435,31 @@ export function PrintersTab() {
                         <TableCell className="text-gray-600 dark:text-gray-400">{printer.manufacturer || "—"}</TableCell>
                         <TableCell className="text-gray-600 dark:text-gray-400">{printer.model || "—"}</TableCell>
                         <TableCell>€{printer.price_eur.toFixed(2)}</TableCell>
-                        <TableCell>{printer.expected_life_hours}</TableCell>
+                        <TableCell>{printer.expected_life_hours.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <div className="font-medium">
+                              {(printer.life_left_hours || (printer.expected_life_hours - (printer.working_hours || 0))).toLocaleString()}h
+                            </div>
+                            <div className="h-2 w-24 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full transition-all ${
+                                  (printer.life_percentage || ((printer.expected_life_hours - (printer.working_hours || 0)) / printer.expected_life_hours * 100)) > 50 
+                                    ? 'bg-green-500' 
+                                    : (printer.life_percentage || ((printer.expected_life_hours - (printer.working_hours || 0)) / printer.expected_life_hours * 100)) > 20 
+                                    ? 'bg-yellow-500' 
+                                    : 'bg-red-500'
+                                }`}
+                                style={{ 
+                                  width: `${printer.life_percentage || ((printer.expected_life_hours - (printer.working_hours || 0)) / printer.expected_life_hours * 100)}%` 
+                                }}
+                              />
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
+                              {(printer.life_percentage || ((printer.expected_life_hours - (printer.working_hours || 0)) / printer.expected_life_hours * 100)).toFixed(1)}% remaining
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <span className="font-medium text-gray-700 dark:text-gray-300">
                             €{(printer.price_eur / printer.expected_life_hours).toFixed(3)}
@@ -613,6 +678,49 @@ export function PrintersTab() {
                   <p className="text-xs text-gray-500 dark:text-gray-400">
                     5 years = 43,800 hours (5 × 365 × 24)
                   </p>
+                </div>
+              </div>
+
+              {/* Working Hours */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Working Hours</h3>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">Track actual usage</p>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="edit-working-hours" className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 block">
+                    Current Working Hours
+                  </Label>
+                  <Input
+                    id="edit-working-hours"
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    value={editForm.working_hours}
+                    onChange={(e) => handleEditFormChange("working_hours", e.target.value)}
+                    placeholder="0"
+                    className="h-11"
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Total hours this printer has been used
+                  </p>
+                  {editForm.working_hours && editForm.expected_life_hours && (
+                    <div className="mt-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-lg">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600 dark:text-gray-400">Life remaining:</span>
+                        <span className="font-medium">
+                          {Math.max(0, Number.parseInt(editForm.expected_life_hours) - Number.parseFloat(editForm.working_hours)).toLocaleString()}h 
+                          ({((Math.max(0, Number.parseInt(editForm.expected_life_hours) - Number.parseFloat(editForm.working_hours)) / Number.parseInt(editForm.expected_life_hours)) * 100).toFixed(1)}%)
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

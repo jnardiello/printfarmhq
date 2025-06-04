@@ -59,8 +59,13 @@ export interface Product {
 export interface Printer {
   id: number
   name: string
+  manufacturer?: string
+  model?: string
   price_eur: number
   expected_life_hours: number
+  working_hours: number
+  life_left_hours?: number
+  life_percentage?: number
 }
 
 export interface Subscription {
@@ -157,4 +162,21 @@ export interface Alert {
   dismissible: boolean
   expiresAt?: string
   metadata?: Record<string, any>
+}
+
+export interface PrinterUsageStats {
+  period: string
+  period_key: number
+  period_label: string
+  hours_used: number
+  print_count: number
+}
+
+export interface PrinterUsageStatsResponse {
+  printer_id: number
+  printer_name: string
+  stats: PrinterUsageStats[]
+  total_working_hours: number
+  life_left_hours: number
+  life_percentage: number
 }

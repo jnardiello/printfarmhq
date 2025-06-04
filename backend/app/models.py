@@ -249,6 +249,7 @@ class PrinterProfile(Base):
     model = Column(String, nullable=True)  # New field for printer model
     price_eur = Column(Float, nullable=False)
     expected_life_hours = Column(Float, nullable=False)
+    working_hours = Column(Float, nullable=False, default=0.0)  # Total accumulated working hours
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -258,6 +259,19 @@ class PrinterProfile(Base):
                             primaryjoin="PrinterProfile.id == foreign(PrintJobPrinter.printer_profile_id)",
                             viewonly=True)
     owner = relationship("User", foreign_keys=[owner_id])
+    usage_history = relationship("PrinterUsageHistory", back_populates="printer_profile", cascade="all, delete-orphan")
+
+    @property
+    def life_left_hours(self) -> float:
+        """Calculate remaining lifetime hours."""
+        return max(0, self.expected_life_hours - self.working_hours)
+
+    @property
+    def life_percentage(self) -> float:
+        """Calculate remaining lifetime as percentage."""
+        if self.expected_life_hours == 0:
+            return 0
+        return (self.life_left_hours / self.expected_life_hours) * 100
 
 
 class PrintJobProduct(Base):
@@ -318,6 +332,26 @@ class PrintJob(Base):
     owner = relationship("User", foreign_keys=[owner_id])
 
 
+class PrinterUsageHistory(Base):
+    __tablename__ = "printer_usage_history"
+
+    id = Column(Integer, primary_key=True, index=True)
+    printer_profile_id = Column(Integer, ForeignKey("printer_profiles.id", ondelete="CASCADE"), nullable=False)
+    print_job_id = Column(UUID(as_uuid=True), ForeignKey("print_jobs.id", ondelete="CASCADE"), nullable=False)
+    hours_used = Column(Float, nullable=False)
+    printers_qty = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Denormalized fields for faster aggregation
+    week_year = Column(Integer, nullable=False)  # Format: YYYYWW
+    month_year = Column(Integer, nullable=False)  # Format: YYYYMM
+    quarter_year = Column(Integer, nullable=False)  # Format: YYYYQ
+    
+    # Relationships
+    printer_profile = relationship("PrinterProfile", back_populates="usage_history")
+    print_job = relationship("PrintJob")
+
+
 class PasswordResetRequest(Base):
     __tablename__ = "password_reset_requests"
 
@@ -329,4 +363,4 @@ class PasswordResetRequest(Base):
     processed_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     notes = Column(String, nullable=True)  # Optional notes from god user
 
-    processed_by = relationship("User", foreign_keys=[processed_by_user_id]) 
+    processed_by = relationship("User", foreign_keys=[processed_by_user_id])
