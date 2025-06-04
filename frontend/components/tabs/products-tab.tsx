@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useRef } from "react"
+import { useState, useRef, useMemo } from "react"
 import { useData } from "@/components/data-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -19,6 +19,8 @@ import { PlateManager } from "@/components/plate-manager"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DollarSign } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
+import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils"
 
 const TIME_FORMAT_PLACEHOLDER = "e.g., 1h30m, 2h, 45m, or 1.5"
 
@@ -34,6 +36,11 @@ export function ProductsTab() {
   const [productToEdit, setProductToEdit] = useState<any>(null)
   const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false)
   const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false)
+
+  // Sorting state for products table
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('products', 'created_at', 'desc')
+  )
 
   const [productForm, setProductForm] = useState<{
     name: string
@@ -187,16 +194,15 @@ export function ProductsTab() {
     }
 
     try {
-      // Prepare filament usages data
-      const filamentUsages = filamentUsageRows.map(row => ({
-        filament_id: Number(row.filament_id),
-        grams_used: Number(row.grams_used)
-      }))
+      // Prepare filament data - separate arrays for IDs and grams
+      const filamentIds = filamentUsageRows.map(row => Number(row.filament_id))
+      const gramsUsedList = filamentUsageRows.map(row => Number(row.grams_used))
 
       const formData = new FormData()
       formData.append("name", productForm.name)
       formData.append("print_time", printTime)  // Send in flexible format
-      formData.append("filament_usages", JSON.stringify(filamentUsages))
+      formData.append("filament_ids", JSON.stringify(filamentIds))
+      formData.append("grams_used_list", JSON.stringify(gramsUsedList))
       formData.append("additional_parts_cost", additionalPartsCost || "0")
       
       if (productForm.license_id) {
@@ -275,16 +281,15 @@ export function ProductsTab() {
     }
 
     try {
-      // Prepare filament usages data
-      const filamentUsages = editFilamentUsageRows.map(row => ({
-        filament_id: Number(row.filament_id),
-        grams_used: Number(row.grams_used)
-      }))
+      // Prepare filament data - separate arrays for IDs and grams  
+      const filamentIds = editFilamentUsageRows.map(row => Number(row.filament_id))
+      const gramsUsedList = editFilamentUsageRows.map(row => Number(row.grams_used))
 
       const formData = new FormData()
       formData.append("name", editProductForm.name)
       formData.append("print_time", editPrintTime)
-      formData.append("filament_usages", JSON.stringify(filamentUsages))
+      formData.append("filament_ids", JSON.stringify(filamentIds))
+      formData.append("grams_used_list", JSON.stringify(gramsUsedList))
       formData.append("additional_parts_cost", editAdditionalPartsCost || "0")
       
       if (editProductForm.license_id) {
@@ -350,7 +355,17 @@ export function ProductsTab() {
     return license ? `${license.name} (${license.platform})` : "No license"
   }
 
-  const filteredProducts = [...products].reverse()
+  // Handle sort changes with persistence
+  const handleSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('products', field, sortConfig.direction)
+    setSortConfig(newConfig)
+  }
+
+  // Sorted products based on current sort configuration
+  const sortedProducts = useMemo(() => {
+    if (!products || products.length === 0) return []
+    return sortByDate(products, sortConfig.field, sortConfig.direction)
+  }, [products, sortConfig])
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8">
@@ -645,25 +660,31 @@ export function ProductsTab() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl">
             <Package className="h-5 w-5 text-primary" />
-            Products ({filteredProducts.length})
+            Products ({sortedProducts.length})
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {filteredProducts.length > 0 ? (
+          {sortedProducts.length > 0 ? (
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <TableHead>Name</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Print Time</TableHead>
-                    <TableHead>Est. COP</TableHead>
-                    <TableHead>License</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
+                    <StaticTableHeader label="Name" />
+                    <StaticTableHeader label="SKU" />
+                    <StaticTableHeader label="Print Time" />
+                    <StaticTableHeader label="Est. COP" />
+                    <StaticTableHeader label="License" />
+                    <SortableTableHeader
+                      label="Created At"
+                      sortKey="created_at"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                    />
+                    <StaticTableHeader label="Actions" align="center" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProducts.map((product) => (
+                  {sortedProducts.map((product) => (
                     <TableRow key={product.id} className="hover:bg-muted/50 transition-colors">
                       <TableCell className="font-medium">{product.name}</TableCell>
                       <TableCell>
@@ -691,6 +712,7 @@ export function ProductsTab() {
                           <span className="text-gray-400">—</span>
                         )}
                       </TableCell>
+                      <TableCell>{new Date(product.created_at).toLocaleDateString()}</TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">
                           <TooltipProvider>

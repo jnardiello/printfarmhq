@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useData } from "@/components/data-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,8 @@ import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock, Copy, Ey
 import { Progress } from "@/components/ui/progress"
 import { motion } from "framer-motion"
 import { toast } from "@/components/ui/use-toast"
+import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
+import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils"
 
 export function PrintersTab() {
   const { printers, addPrinter, updatePrinter, deletePrinter } = useData()
@@ -27,6 +29,11 @@ export function PrintersTab() {
   const [cloneName, setCloneName] = useState("")
   const [selectedPrinter, setSelectedPrinter] = useState<any>(null)
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
+
+  // Sorting state for printers table
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('printers', 'created_at', 'desc')
+  )
 
   const [newPrinter, setNewPrinter] = useState({
     name: "",
@@ -45,6 +52,18 @@ export function PrintersTab() {
     expected_life_hours: "",
     working_hours: "",
   })
+
+  // Handle sort changes with persistence
+  const handleSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('printers', field, sortConfig.direction)
+    setSortConfig(newConfig)
+  }
+
+  // Sorted printers based on current sort configuration
+  const sortedPrinters = useMemo(() => {
+    if (!printers || printers.length === 0) return []
+    return sortByDate(printers, sortConfig.field, sortConfig.direction)
+  }, [printers, sortConfig])
 
   const handlePrinterChange = (field: string, value: string) => {
     setNewPrinter((prev) => ({ ...prev, [field]: value }))
@@ -425,14 +444,20 @@ export function PrintersTab() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead>Name</TableHead>
-                      <TableHead>Life Left</TableHead>
-                      <TableHead>Cost/hr €</TableHead>
-                      <TableHead className="text-center w-[180px]">Actions</TableHead>
+                      <StaticTableHeader label="Name" />
+                      <StaticTableHeader label="Life Left" />
+                      <StaticTableHeader label="Cost/hr €" />
+                      <SortableTableHeader
+                        label="Created At"
+                        sortKey="created_at"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                      />
+                      <StaticTableHeader label="Actions" align="center" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {printers.map((printer) => (
+                    {sortedPrinters.map((printer) => (
                       <TableRow key={printer.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{printer.name}</TableCell>
                         <TableCell>
@@ -464,6 +489,7 @@ export function PrintersTab() {
                             €{(printer.price_eur / printer.expected_life_hours).toFixed(3)}
                           </span>
                         </TableCell>
+                        <TableCell>{new Date(printer.created_at).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
                             <TooltipProvider>

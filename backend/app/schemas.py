@@ -25,6 +25,8 @@ class FilamentRead(FilamentBase):
     price_per_kg: float
     total_qty_kg: float
     min_filaments_kg: Optional[float] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 class FilamentStatistics(BaseModel):
@@ -66,8 +68,9 @@ class ProductRead(ProductBase):
     sku: str
     license_id: Optional[int] = None
     file_path: Optional[str] = None
-    filament_usages: Optional[List[FilamentUsageRead]] = None  # Legacy - will be deprecated
-    plates: Optional[List["PlateRead"]] = None  # New plate-based structure
+    filament_usages: Optional[List[FilamentUsageRead]] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True, protected_namespaces=())
     
@@ -87,52 +90,6 @@ class ProductUpdate(BaseModel):
     license_id: Optional[int] = None
 
 
-# Plate schemas
-class PlateFilamentUsageCreate(BaseModel):
-    filament_id: int
-    grams_used: float = Field(..., gt=0)
-
-
-class PlateFilamentUsageRead(PlateFilamentUsageCreate):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-    filament: FilamentRead
-
-
-class PlateBase(BaseModel):
-    name: str
-    quantity: int = Field(..., ge=1)
-    print_time_hrs: float = Field(..., ge=0)
-    file_path: Optional[str] = None
-    gcode_path: Optional[str] = None
-
-
-class PlateCreate(PlateBase):
-    filament_usages: List[PlateFilamentUsageCreate] = Field(..., min_length=1)
-
-
-class PlateRead(PlateBase):
-    model_config = ConfigDict(from_attributes=True)
-    
-    id: int
-    cost: float
-    filament_usages: List[PlateFilamentUsageRead] = []
-    
-    @computed_field
-    @property
-    def print_time_formatted(self) -> str:
-        """Return print time in human-readable format."""
-        return format_hours_display(self.print_time_hrs)
-
-
-class PlateUpdate(BaseModel):
-    name: Optional[str] = None
-    quantity: Optional[int] = Field(None, ge=1)
-    print_time_hrs: Optional[float] = Field(None, ge=0)
-    file_path: Optional[str] = None
-    gcode_path: Optional[str] = None
-    filament_usages: Optional[List[PlateFilamentUsageCreate]] = None
 
 
 class SubscriptionBase(BaseModel):
@@ -161,6 +118,8 @@ class SubscriptionRead(SubscriptionBase):
     model_config = ConfigDict(from_attributes=True)
     
     id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 class FilamentPurchaseCreate(BaseModel):
@@ -253,6 +212,8 @@ class PrinterProfileRead(PrinterProfileBase):
     working_hours: float = Field(default=0.0, ge=0)
     life_left_hours: Optional[float] = None
     life_percentage: Optional[float] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 class PrinterProfileUpdate(BaseModel):

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useData } from "@/components/data-provider" // Placeholder - will need to update useData
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +13,9 @@ import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye } from "lucide-react"
 import { motion } from "framer-motion"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
+import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils";
 
 
 export function PrintsTab() {
@@ -36,6 +38,23 @@ export function PrintsTab() {
   const [editJobProducts, setEditJobProducts] = useState([{ productId: "", itemsQty: "1" }]);
   const [editJobPrinter, setEditJobPrinter] = useState({ printerId: "", printersQty: "1" });
   const [editPackagingCost, setEditPackagingCost] = useState("0");
+
+  // Sorting state for print jobs table
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('print-queue', 'created_at', 'desc')
+  );
+
+  // Handle sort changes with persistence
+  const handleSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('print-queue', field, sortConfig.direction);
+    setSortConfig(newConfig);
+  };
+
+  // Sorted print jobs based on current sort configuration
+  const sortedPrintJobs = useMemo(() => {
+    if (!printJobs || printJobs.length === 0) return [];
+    return sortByDate(printJobs, sortConfig.field, sortConfig.direction);
+  }, [printJobs, sortConfig]);
 
 
   const handleProductRowChange = (idx: number, field: string, value: string) => {
@@ -97,8 +116,8 @@ export function PrintsTab() {
       // Add filament costs (using product COP which includes all filament costs)
       totalFilamentCost += (product.cop || 0) * itemsQty;
       
-      // Add print time (try total_print_time_hrs first, fallback to print_time_hrs)
-      const printTime = product.total_print_time_hrs || product.print_time_hrs || 0;
+      // Add print time from product
+      const printTime = product.print_time_hrs || 0;
       totalPrintTime += printTime * itemsQty;
     }
 
@@ -148,8 +167,8 @@ export function PrintsTab() {
       // Add filament costs (using product COP which includes all filament costs)
       totalFilamentCost += (product.cop || 0) * itemsQty;
       
-      // Add print time (try total_print_time_hrs first, fallback to print_time_hrs)
-      const printTime = product.total_print_time_hrs || product.print_time_hrs || 0;
+      // Add print time from product
+      const printTime = product.print_time_hrs || 0;
       totalPrintTime += printTime * itemsQty;
     }
 
@@ -644,21 +663,26 @@ export function PrintsTab() {
           <CardContent className="p-0">
             <div className="overflow-x-auto">
               {/* Placeholder - update when printJobs data is available */}
-              {printJobs && printJobs.length > 0 ? (
+              {sortedPrintJobs && sortedPrintJobs.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead>Job Name</TableHead>
-                      <TableHead>Product</TableHead>
-                      <TableHead>Printer</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Calculated COGS (€)</TableHead>
-                      <TableHead>Created At</TableHead>
-                      <TableHead className="text-center">Actions</TableHead>
+                      <StaticTableHeader label="Job Name" />
+                      <StaticTableHeader label="Product" />
+                      <StaticTableHeader label="Printer" />
+                      <StaticTableHeader label="Quantity" />
+                      <StaticTableHeader label="Calculated COGS (€)" />
+                      <SortableTableHeader
+                        label="Created At"
+                        sortKey="created_at"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                      />
+                      <StaticTableHeader label="Actions" align="center" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {printJobs.map((job: any) => (
+                    {sortedPrintJobs.map((job: any) => (
                       <TableRow key={job.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{job.name || `Job #${job.id.slice(0,6)}`}</TableCell>
                         <TableCell>

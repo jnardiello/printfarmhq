@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -16,6 +16,8 @@ import { api } from "@/lib/api"
 import { toast } from "@/components/ui/use-toast"
 import type { User } from "@/lib/auth"
 import { useAuth } from "@/components/auth/auth-context"
+import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
+import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils"
 
 export function UsersTab() {
   const { user: currentUser } = useAuth()
@@ -49,6 +51,11 @@ export function UsersTab() {
   const [formError, setFormError] = useState("")
   const [editFormError, setEditFormError] = useState("")
   const [profileFormError, setProfileFormError] = useState("")
+
+  // Sorting state for users table
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('users', 'created_at', 'desc')
+  )
   const [isSubmitting, setIsSubmitting] = useState(false)
   
   // Password generator state
@@ -73,6 +80,18 @@ export function UsersTab() {
       setIsLoading(false)
     }
   }
+
+  // Handle sort changes with persistence
+  const handleSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('users', field, sortConfig.direction)
+    setSortConfig(newConfig)
+  }
+
+  // Sorted users based on current sort configuration
+  const sortedUsers = useMemo(() => {
+    if (!users || users.length === 0) return []
+    return sortByDate(users, sortConfig.field, sortConfig.direction)
+  }, [users, sortConfig])
 
   useEffect(() => {
     fetchUsers()
@@ -902,15 +921,20 @@ export function UsersTab() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead>User</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="w-[100px]">Actions</TableHead>
+                <StaticTableHeader label="User" />
+                <StaticTableHeader label="Email" />
+                <StaticTableHeader label="Role" />
+                <SortableTableHeader
+                  label="Created"
+                  sortKey="created_at"
+                  currentSort={sortConfig}
+                  onSort={handleSort}
+                />
+                <StaticTableHeader label="Actions" align="center" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((user) => (
+              {sortedUsers.map((user) => (
                 <TableRow key={user.id} className="hover:bg-muted/50 transition-colors">
                   <TableCell>
                     <div className="flex items-center space-x-2">

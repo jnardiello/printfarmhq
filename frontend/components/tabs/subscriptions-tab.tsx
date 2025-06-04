@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useData } from "@/components/data-provider"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { CreditCard, Eye, Edit, Trash2, AlertCircle, Plus, Info, DollarSign, Globe } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "@/components/ui/use-toast"
+import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
+import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils"
 
 export function SubscriptionsTab() {
   const { subscriptions, addSubscription, updateSubscription, deleteSubscription } = useData()
@@ -22,6 +24,11 @@ export function SubscriptionsTab() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isAddLicenseModalOpen, setIsAddLicenseModalOpen] = useState(false)
   const [subscriptionToDelete, setSubscriptionToDelete] = useState<any>(null)
+
+  // Sorting state for subscriptions table
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('subscriptions', 'created_at', 'desc')
+  )
 
   const [newSubscription, setNewSubscription] = useState({
     name: "",
@@ -36,6 +43,18 @@ export function SubscriptionsTab() {
     license_uri: "",
     price_eur: "",
   })
+
+  // Handle sort changes with persistence
+  const handleSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('subscriptions', field, sortConfig.direction)
+    setSortConfig(newConfig)
+  }
+
+  // Sorted subscriptions based on current sort configuration
+  const sortedSubscriptions = useMemo(() => {
+    if (!subscriptions || subscriptions.length === 0) return []
+    return sortByDate(subscriptions, sortConfig.field, sortConfig.direction)
+  }, [subscriptions, sortConfig])
 
   const handleSubscriptionChange = (field: string, value: string) => {
     setNewSubscription((prev) => ({ ...prev, [field]: value }))
@@ -290,16 +309,22 @@ export function SubscriptionsTab() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50">
-                      <TableHead>ID</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Platform</TableHead>
-                      <TableHead>License URI</TableHead>
-                      <TableHead>Price €</TableHead>
-                      <TableHead className="text-center">Actions</TableHead>
+                      <StaticTableHeader label="ID" />
+                      <StaticTableHeader label="Name" />
+                      <StaticTableHeader label="Platform" />
+                      <StaticTableHeader label="License URI" />
+                      <StaticTableHeader label="Price €" />
+                      <SortableTableHeader
+                        label="Created At"
+                        sortKey="created_at"
+                        currentSort={sortConfig}
+                        onSort={handleSort}
+                      />
+                      <StaticTableHeader label="Actions" align="center" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {subscriptions.map((subscription) => (
+                    {sortedSubscriptions.map((subscription) => (
                       <TableRow key={subscription.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{subscription.id}</TableCell>
                         <TableCell>{subscription.name}</TableCell>
@@ -316,6 +341,7 @@ export function SubscriptionsTab() {
                             "-"
                           )}
                         </TableCell>
+                        <TableCell>{new Date(subscription.created_at).toLocaleDateString()}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
                             <TooltipProvider>

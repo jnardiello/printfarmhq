@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useData } from "@/components/data-provider"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -21,6 +21,8 @@ import { toast } from "@/components/ui/use-toast"
 import { api } from "@/lib/api"
 import { getColorHex } from "@/lib/constants/filaments"
 import { EditFilamentModal } from "@/components/modals/edit-filament-modal"
+import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
+import { getSortConfig, updateSortConfig, sortByDate, SortDirection, SortConfig } from "@/lib/sorting-utils"
 
 export function FilamentsTab() {
   const {
@@ -48,6 +50,17 @@ export function FilamentsTab() {
   }
 
   const [isAddPurchaseModalOpen, setIsAddPurchaseModalOpen] = useState(false)
+
+  // Sorting state for filaments table
+  const [sortConfig, setSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('filaments', 'purchase_date', 'desc')
+  )
+  
+  // Sorting state for purchase history table
+  const [purchaseSortConfig, setPurchaseSortConfig] = useState<SortConfig>(() => 
+    getSortConfig('filament-purchases', 'purchase_date', 'desc')
+  )
+  
   const [isPurchaseHistoryModalOpen, setIsPurchaseHistoryModalOpen] = useState(false)
   const [page, setPage] = useState(1)
   const pageSize = 10
@@ -74,6 +87,52 @@ export function FilamentsTab() {
   const handlePurchaseChange = (field: string, value: string) => {
     setPurchaseForm((prev) => ({ ...prev, [field]: value }))
   }
+
+  // Handle sort changes with persistence
+  const handleSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('filaments', field, sortConfig.direction)
+    setSortConfig(newConfig)
+  }
+  
+  // Handle purchase table sort changes
+  const handlePurchaseSort = (field: string, direction: SortDirection) => {
+    const newConfig = updateSortConfig('filament-purchases', field, purchaseSortConfig.direction)
+    setPurchaseSortConfig(newConfig)
+  }
+
+  // Helper function to get most recent purchase date for a filament
+  const getMostRecentPurchaseDate = (filamentId: number) => {
+    const filamentPurchases = purchases.filter(p => p.filament.id === filamentId)
+    if (filamentPurchases.length === 0) return null
+    
+    // Find the most recent purchase_date
+    const sortedPurchases = filamentPurchases.sort((a, b) => 
+      new Date(b.purchase_date).getTime() - new Date(a.purchase_date).getTime()
+    )
+    return sortedPurchases[0].purchase_date
+  }
+
+  // Sorted and filtered filaments based on current sort configuration
+  const sortedFilaments = useMemo(() => {
+    if (!filaments || filaments.length === 0) return []
+    
+    // Filter filaments first (existing logic)
+    const inventoryFilaments = filaments.filter(f => 
+      f.total_qty_kg > 0 || purchases.some(p => p.filament.id === f.id)
+    )
+    
+    // Add most recent purchase date to each filament for sorting
+    const filamentsWithPurchaseDate = inventoryFilaments.map(filament => ({
+      ...filament,
+      most_recent_purchase_date: getMostRecentPurchaseDate(filament.id)
+    }))
+    
+    // Sort by purchase date (or created_at if no purchases)
+    return sortByDate(filamentsWithPurchaseDate, 
+      sortConfig.field === 'purchase_date' ? 'most_recent_purchase_date' : sortConfig.field, 
+      sortConfig.direction
+    )
+  }, [filaments, purchases, sortConfig])
 
   const handleEditQuantity = (filament: any) => {
     setFilamentToEdit(filament)
@@ -212,7 +271,12 @@ export function FilamentsTab() {
     return true
   })
 
-  const paginatedPurchases = filteredPurchases.slice((page - 1) * pageSize, page * pageSize)
+  // Sort filtered purchases
+  const sortedPurchases = useMemo(() => {
+    return sortByDate(filteredPurchases, purchaseSortConfig.field, purchaseSortConfig.direction)
+  }, [filteredPurchases, purchaseSortConfig])
+  
+  const paginatedPurchases = sortedPurchases.slice((page - 1) * pageSize, page * pageSize)
   const totalPages = Math.max(1, Math.ceil(filteredPurchases.length / pageSize))
   const totalSpent = calculateTotalSpent(filteredPurchases)
   const avgPricePerKg = filteredPurchases.length > 0 
@@ -501,23 +565,24 @@ export function FilamentsTab() {
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50">
-                    <TableHead>Color</TableHead>
-                    <TableHead>Brand</TableHead>
-                    <TableHead>Material</TableHead>
-                    <TableHead>Qty (kg)</TableHead>
-                    <TableHead>Min (kg)</TableHead>
-                    <TableHead>Avg €/kg</TableHead>
-                    <TableHead className="text-center w-[100px]">Actions</TableHead>
+                    <StaticTableHeader label="Color" />
+                    <StaticTableHeader label="Brand" />
+                    <StaticTableHeader label="Material" />
+                    <StaticTableHeader label="Qty (kg)" />
+                    <StaticTableHeader label="Min (kg)" />
+                    <StaticTableHeader label="Avg €/kg" />
+                    <SortableTableHeader
+                      label="Last Purchase"
+                      sortKey="purchase_date"
+                      currentSort={sortConfig}
+                      onSort={handleSort}
+                    />
+                    <StaticTableHeader label="Actions" align="center" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(() => {
-                    // Show filaments that have current inventory OR have had purchases (even if now 0kg)
-                    const inventoryFilaments = filaments.filter(f => 
-                      f.total_qty_kg > 0 || purchases.some(p => p.filament.id === f.id)
-                    )
-                    return inventoryFilaments.length > 0 ? (
-                      inventoryFilaments.map((filament) => (
+                  {sortedFilaments.length > 0 ? (
+                    sortedFilaments.map((filament) => (
                       <TableRow
                         key={filament.id}
                         className={`
@@ -564,6 +629,12 @@ export function FilamentsTab() {
                           <span className="font-medium text-gray-700 dark:text-gray-300">
                             €{filament.price_per_kg.toFixed(2)}
                           </span>
+                        </TableCell>
+                        <TableCell>
+                          {filament.most_recent_purchase_date 
+                            ? new Date(filament.most_recent_purchase_date).toLocaleDateString()
+                            : '—'
+                          }
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
@@ -623,7 +694,7 @@ export function FilamentsTab() {
                     ))
                   ) : (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         <div className="flex flex-col items-center">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
@@ -647,8 +718,7 @@ export function FilamentsTab() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  )
-                  })()}
+                  )}
                 </TableBody>
               </Table>
             )}
@@ -830,15 +900,20 @@ export function FilamentsTab() {
                   <Table>
                     <TableHeader>
                       <TableRow className="bg-muted/50">
-                        <TableHead>Date</TableHead>
-                        <TableHead>Filament</TableHead>
-                        <TableHead>Brand</TableHead>
-                        <TableHead>Material</TableHead>
-                        <TableHead>Quantity (kg)</TableHead>
-                        <TableHead>Price €/kg</TableHead>
-                        <TableHead>Total €</TableHead>
-                        <TableHead>Channel</TableHead>
-                        <TableHead className="text-center">Actions</TableHead>
+                        <SortableTableHeader
+                          label="Date"
+                          sortKey="purchase_date"
+                          currentSort={purchaseSortConfig}
+                          onSort={handlePurchaseSort}
+                        />
+                        <StaticTableHeader label="Filament" />
+                        <StaticTableHeader label="Brand" />
+                        <StaticTableHeader label="Material" />
+                        <StaticTableHeader label="Quantity (kg)" />
+                        <StaticTableHeader label="Price €/kg" />
+                        <StaticTableHeader label="Total €" />
+                        <StaticTableHeader label="Channel" />
+                        <StaticTableHeader label="Actions" align="center" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
