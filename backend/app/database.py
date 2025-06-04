@@ -102,6 +102,21 @@ def _ensure_columns():
             conn.execute(text("CREATE INDEX ix_products_id ON products (id)"))
             conn.execute(text("CREATE UNIQUE INDEX ix_products_sku ON products (sku)"))
 
+        # Add print job active tracking columns if they don't exist
+        res_print_jobs = conn.execute(text("PRAGMA table_info(print_jobs)"))
+        pj_cols = [row[1] for row in res_print_jobs.fetchall()]
+        if "started_at" not in pj_cols:
+            conn.execute(text("ALTER TABLE print_jobs ADD COLUMN started_at DATETIME DEFAULT NULL"))
+        if "estimated_completion_at" not in pj_cols:
+            conn.execute(text("ALTER TABLE print_jobs ADD COLUMN estimated_completion_at DATETIME DEFAULT NULL"))
+            
+        # Create indexes for print job queries
+        try:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_print_jobs_status ON print_jobs(status)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_print_job_printers_status ON print_job_printers(printer_profile_id)"))
+        except:
+            pass  # Indexes might already exist
+
 # _ensure_columns will be called after tables are created 
 
 
