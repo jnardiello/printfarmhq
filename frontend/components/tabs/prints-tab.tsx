@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play } from "lucide-react"
+import { Trash2, Plus, Printer, Package, ScanLine, AlertCircle, ExternalLink, CreditCard, Calculator, Info, Edit, Eye, Play, Square } from "lucide-react"
 import { motion } from "framer-motion"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SortableTableHeader, StaticTableHeader } from "@/components/ui/sortable-table-header"
@@ -385,6 +385,25 @@ export function PrintsTab() {
       } else {
         alert(`Failed to start print job: ${error.message || 'Unknown error'}`);
       }
+    }
+  }
+
+  // Handle stopping a print job
+  const handleStopJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to stop this print job? It will be moved back to the queue.')) {
+      return;
+    }
+    
+    try {
+      await api(`/print_jobs/${jobId}/stop`, {
+        method: 'PUT',
+      });
+
+      // Refresh the print jobs data
+      window.location.reload(); // Temporary solution
+    } catch (error: any) {
+      console.error('Error stopping print job:', error);
+      alert(`Failed to stop print job: ${error.message || 'Unknown error'}`);
     }
   }
 
@@ -771,11 +790,22 @@ export function PrintsTab() {
                               Started: {job.started_at ? new Date(job.started_at).toLocaleString() : 'N/A'}
                             </p>
                           </div>
-                          <div className="text-right">
-                            <p className="text-sm text-muted-foreground">Estimated completion:</p>
-                            <p className="font-medium">
-                              {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleString() : 'N/A'}
-                            </p>
+                          <div className="flex items-start gap-2">
+                            <div className="text-right mr-4">
+                              <p className="text-sm text-muted-foreground">Estimated completion:</p>
+                              <p className="font-medium">
+                                {job.estimated_completion_at ? new Date(job.estimated_completion_at).toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              onClick={() => handleStopJob(job.id)}
+                              title="Stop print job"
+                            >
+                              <Square className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
                         

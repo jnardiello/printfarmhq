@@ -2087,6 +2087,41 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
     db.refresh(job)
     return job
 
+
+@app.put("/print_jobs/{print_job_id}/stop", response_model=schemas.PrintJobRead)
+def stop_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """Stop a printing job and move it back to pending status."""
+    # Get the job with all relationships
+    job = db.query(models.PrintJob).options(
+        joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
+        joinedload(models.PrintJob.printers)
+    ).filter(models.PrintJob.id == print_job_id).first()
+    
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Print Job with ID {print_job_id} not found"
+        )
+    
+    # Check if job is currently printing
+    if job.status != "printing":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot stop job with status '{job.status}'. Only printing jobs can be stopped."
+        )
+    
+    logger.info(f"Stopping job {job.id} and moving back to queue")
+    
+    # Reset job status and clear timestamps
+    job.status = "pending"
+    job.started_at = None
+    job.estimated_completion_at = None
+    
+    db.commit()
+    db.refresh(job)
+    return job
+
+
 @app.patch("/print_jobs/{print_job_id}", response_model=schemas.PrintJobRead)
 def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Update a print job."""
