@@ -4,7 +4,7 @@
 
 import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
 import { toast } from "@/components/ui/use-toast"
-import type { Filament, FilamentPurchase, Product, Printer, Subscription, PrintJob, Plate } from "@/lib/types"
+import type { Filament, FilamentPurchase, Product, Printer, PrinterType, Subscription, PrintJob, Plate } from "@/lib/types"
 import { api, apiUpload, API_BASE_URL } from "@/lib/api"
 import { useAuth } from "@/components/auth/auth-context"
 
@@ -35,6 +35,7 @@ interface DataContextType {
   purchases: FilamentPurchase[]
   products: Product[]
   printers: Printer[]
+  printerTypes: PrinterType[]
   subscriptions: Subscription[]
   printJobs: PrintJob[]
   loadingFilaments: boolean
@@ -42,6 +43,7 @@ interface DataContextType {
   fetchPurchases: () => Promise<void>
   fetchProducts: () => Promise<void>
   fetchPrinters: () => Promise<void>
+  fetchPrinterTypes: () => Promise<void>
   fetchSubscriptions: () => Promise<void>
   fetchPrintJobs: () => Promise<void>
   addFilament: (filament: Partial<Filament>) => Promise<Filament | void>
@@ -58,6 +60,11 @@ interface DataContextType {
   addPlate: (productId: number, plateData: FormData) => Promise<void>
   updatePlate: (plateId: number, plateData: FormData) => Promise<void>
   deletePlate: (plateId: number) => Promise<void>
+  // Printer type management
+  addPrinterType: (printerType: Partial<PrinterType>) => Promise<PrinterType | void>
+  updatePrinterType: (id: number, data: Partial<PrinterType>) => Promise<void>
+  deletePrinterType: (id: number) => Promise<void>
+  // Printer instance management
   addPrinter: (printer: Partial<Printer>) => Promise<void>
   updatePrinter: (id: number, data: Partial<Printer>) => Promise<void>
   deletePrinter: (id: number) => Promise<void>
@@ -80,6 +87,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [purchases, setPurchases] = useState<FilamentPurchase[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [printers, setPrinters] = useState<Printer[]>([])
+  const [printerTypes, setPrinterTypes] = useState<PrinterType[]>([])
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([])
   const [printJobs, setPrintJobs] = useState<PrintJob[]>([])
   const [loadingFilaments, setLoadingFilaments] = useState(true)
@@ -95,7 +103,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             fetchFilaments(), 
             fetchPurchases(), 
             fetchProducts(), 
-            fetchPrinters(), 
+            fetchPrinters(),
+            fetchPrinterTypes(), 
             fetchSubscriptions(),
             fetchPrintJobs()
           ])
@@ -203,12 +212,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const fetchPrinters = async () => {
     try {
-      const data = await api<Printer[]>("/printer_profiles")
+      const data = await api<Printer[]>("/printers")
       setPrinters(data)
     } catch (error) {
       console.error("Error fetching printers:", error)
       toast({
         title: "Error Fetching Printers",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchPrinterTypes = async () => {
+    try {
+      const data = await api<PrinterType[]>("/printer_types")
+      setPrinterTypes(data)
+    } catch (error) {
+      console.error("Error fetching printer types:", error)
+      toast({
+        title: "Error Fetching Printer Types",
         description: (error as Error).message,
         variant: "destructive",
       })
@@ -520,16 +543,82 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // Printer Type Management
+  const addPrinterType = async (printerType: Partial<PrinterType>): Promise<PrinterType | void> => {
+    try {
+      const newPrinterType = await api<PrinterType>("/printer_types", {
+        method: "POST",
+        body: JSON.stringify(printerType),
+      })
+      await fetchPrinterTypes()
+      toast({
+        title: "Success",
+        description: "Printer type added successfully",
+      })
+      return newPrinterType
+    } catch (error) {
+      console.error("Error adding printer type:", error)
+      toast({
+        title: "Error Adding Printer Type",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+      throw error
+    }
+  }
+
+  const updatePrinterType = async (id: number, data: Partial<PrinterType>) => {
+    try {
+      await api(`/printer_types/${id}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      })
+      await fetchPrinterTypes()
+      toast({
+        title: "Success",
+        description: "Printer type updated successfully",
+      })
+    } catch (error) {
+      console.error("Error updating printer type:", error)
+      toast({
+        title: "Error Updating Printer Type",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  const deletePrinterType = async (id: number) => {
+    try {
+      await api(`/printer_types/${id}`, {
+        method: "DELETE",
+      })
+      await fetchPrinterTypes()
+      toast({
+        title: "Success",
+        description: "Printer type deleted successfully",
+      })
+    } catch (error) {
+      console.error("Error deleting printer type:", error)
+      toast({
+        title: "Error Deleting Printer Type",
+        description: (error as Error).message,
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Printer Instance Management
   const addPrinter = async (printer: Partial<Printer>) => {
     try {
-      await api("/printer_profiles", {
+      await api("/printers", {
         method: "POST",
         body: JSON.stringify(printer),
       })
       await fetchPrinters()
       toast({
         title: "Success",
-        description: "Printer profile added successfully",
+        description: "Printer added successfully",
       })
     } catch (error) {
       console.error("Error adding printer:", error)
@@ -538,12 +627,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+      throw error  // Re-throw to let calling code handle it
     }
   }
 
   const updatePrinter = async (id: number, data: Partial<Printer>) => {
     try {
-      await api(`/printer_profiles/${id}`, {
+      await api(`/printers/${id}`, {
         method: "PUT",
         body: JSON.stringify(data),
       })
@@ -559,12 +649,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
         description: (error as Error).message,
         variant: "destructive",
       })
+      throw error  // Re-throw to let calling code handle it
     }
   }
 
   const deletePrinter = async (id: number) => {
     try {
-      await api(`/printer_profiles/${id}`, { method: "DELETE" })
+      await api(`/printers/${id}`, { method: "DELETE" })
       await fetchPrinters()
       toast({
         title: "Success",
@@ -824,6 +915,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         purchases,
         products,
         printers,
+        printerTypes,
         subscriptions,
         printJobs,
         loadingFilaments,
@@ -831,6 +923,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         fetchPurchases,
         fetchProducts,
         fetchPrinters,
+        fetchPrinterTypes,
         fetchSubscriptions,
         fetchPrintJobs,
         addFilament,
@@ -846,6 +939,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         addPlate,
         updatePlate,
         deletePlate,
+        addPrinterType,
+        updatePrinterType,
+        deletePrinterType,
         addPrinter,
         updatePrinter,
         deletePrinter,

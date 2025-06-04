@@ -11,6 +11,7 @@ import { SubscriptionsTab } from "@/components/tabs/subscriptions-tab"
 import { PrintsTab } from "@/components/tabs/prints-tab"
 import { UsersTab } from "@/components/tabs/users-tab"
 import { FilamentTypesTab } from "@/components/tabs/filament-types-tab"
+import { PrinterTypesTab } from "@/components/tabs/printer-types-tab"
 import { GodAdminDropdown } from "@/components/god-admin/god-admin-dropdown"
 import { MetricsDashboard } from "@/components/god-admin/metrics/metrics-dashboard"
 import { UsersManagement } from "@/components/god-admin/users/users-management"
@@ -49,7 +50,7 @@ export function Dashboard() {
     const tab = searchParams.get("tab")
     const validTabs = ["home", "filaments", "products", "printers", "subscriptions", "prints"]
     if (user?.is_admin) {
-      validTabs.push("users", "filament-types")
+      validTabs.push("users", "filament-types", "printer-types")
     }
     if (user?.is_god_user) {
       validTabs.push("god-admin")
@@ -129,7 +130,8 @@ export function Dashboard() {
   
   const configurationOptions = [
     { value: "users", label: "Users" },
-    { value: "filament-types", label: "Filament Types" }
+    { value: "filament-types", label: "Filament Types" },
+    { value: "printer-types", label: "Printer Types" }
   ]
 
   // Add God Admin as the very last option after configurations
@@ -340,6 +342,7 @@ export function Dashboard() {
         {activeTab === "subscriptions" && <SubscriptionsTab />}
         {user?.is_admin && activeTab === "users" && <UsersTab />}
         {user?.is_admin && activeTab === "filament-types" && <FilamentTypesTab />}
+        {user?.is_admin && activeTab === "printer-types" && <PrinterTypesTab />}
         {user?.is_god_user && activeTab === "god-admin" && (
           <>
             {godAdminSection === "metrics" && <MetricsDashboard />}

@@ -292,6 +292,10 @@ export function ProductsTab() {
       formData.append("grams_used_list", JSON.stringify(gramsUsedList))
       formData.append("additional_parts_cost", editAdditionalPartsCost || "0")
       
+      // Debug logging
+      console.log('Updating product with time:', editPrintTime)
+      console.log('FormData entries:', Array.from(formData.entries()))
+      
       // Add SKU if it exists
       if (productToEdit.sku) {
         formData.append("sku", productToEdit.sku)

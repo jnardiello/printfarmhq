@@ -20,7 +20,7 @@ export function calculateTotalSpent(purchases: any[]): number {
 }
 
 export function formatTimeToHHMM(hours: number): string {
-  if (!hours || hours === 0) return "0h00m"
+  if (!hours || hours === 0) return "0h"
   
   const wholeHours = Math.floor(hours)
   const minutes = Math.round((hours - wholeHours) * 60)
@@ -29,5 +29,6 @@ export function formatTimeToHHMM(hours: number): string {
     return `${wholeHours}h`
   }
   
-  return `${wholeHours}h${minutes.toString().padStart(2, '0')}m`
+  // Don't pad minutes with zeros - backend expects "1h30m" not "1h30m"
+  return `${wholeHours}h${minutes}m`
 }
