@@ -56,16 +56,34 @@ export interface Product {
   file_path?: string | null // Legacy - moved to plates
 }
 
+export interface PrinterType {
+  id: number
+  brand: string
+  model: string
+  expected_life_hours: number
+  created_at?: string
+  updated_at?: string
+  printer_count?: number
+}
+
 export interface Printer {
   id: number
+  printer_type_id: number
+  printer_type?: PrinterType
   name: string
-  manufacturer?: string
-  model?: string
-  price_eur: number
-  expected_life_hours: number
+  purchase_price_eur: number
+  purchase_date?: string | null
   working_hours: number
+  status: 'idle' | 'printing' | 'maintenance' | 'offline'
   life_left_hours?: number
   life_percentage?: number
+  created_at?: string
+  updated_at?: string
+  // Legacy fields for backward compatibility
+  manufacturer?: string
+  model?: string
+  price_eur?: number
+  expected_life_hours?: number
 }
 
 export interface Subscription {
@@ -123,9 +141,16 @@ export interface JobProductItem {
 }
 
 export interface JobPrinterItem {
-  printer_profile_id: number
-  printers_qty: number
-  hours_each: number
+  printer_type_id: number  // Using printer types instead of specific printers
+  hours_each?: number  // Optional, calculated from products
+  // Legacy fields (for backward compatibility)
+  printer_profile_id?: number
+  assigned_printer_id?: number
+  printer_name?: string
+  printer_manufacturer?: string
+  printer_model?: string
+  printer_price_eur?: number
+  printer_expected_life_hours?: number
 }
 
 export interface PrintJob {
