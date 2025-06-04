@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock, Copy } from "lucide-react"
+import { Trash2, Plus, Box, AlertCircle, Edit, Info, DollarSign, Clock, Copy, Eye } from "lucide-react"
 import { Progress } from "@/components/ui/progress"
 import { motion } from "framer-motion"
 import { toast } from "@/components/ui/use-toast"
@@ -25,6 +25,8 @@ export function PrintersTab() {
   const [printerToClone, setPrinterToClone] = useState<any>(null)
   const [isCloneModalOpen, setIsCloneModalOpen] = useState(false)
   const [cloneName, setCloneName] = useState("")
+  const [selectedPrinter, setSelectedPrinter] = useState<any>(null)
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
 
   const [newPrinter, setNewPrinter] = useState({
     name: "",
@@ -164,6 +166,11 @@ export function PrintersTab() {
         variant: "destructive"
       })
     }
+  }
+
+  const handleInfoPrinter = (printer: any) => {
+    setSelectedPrinter(printer)
+    setIsInfoModalOpen(true)
   }
 
   return (
@@ -419,23 +426,15 @@ export function PrintersTab() {
                   <TableHeader>
                     <TableRow className="bg-muted/50">
                       <TableHead>Name</TableHead>
-                      <TableHead>Manufacturer</TableHead>
-                      <TableHead>Model</TableHead>
-                      <TableHead>Cost €</TableHead>
-                      <TableHead>Expected Life</TableHead>
                       <TableHead>Life Left</TableHead>
                       <TableHead>Cost/hr €</TableHead>
-                      <TableHead className="text-center w-[150px]">Actions</TableHead>
+                      <TableHead className="text-center w-[180px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {printers.map((printer) => (
                       <TableRow key={printer.id} className="hover:bg-muted/50 transition-colors">
                         <TableCell className="font-medium">{printer.name}</TableCell>
-                        <TableCell className="text-gray-600 dark:text-gray-400">{printer.manufacturer || "—"}</TableCell>
-                        <TableCell className="text-gray-600 dark:text-gray-400">{printer.model || "—"}</TableCell>
-                        <TableCell>€{printer.price_eur.toFixed(2)}</TableCell>
-                        <TableCell>{printer.expected_life_hours.toLocaleString()}</TableCell>
                         <TableCell>
                           <div className="space-y-1">
                             <div className="font-medium">
@@ -468,6 +467,22 @@ export function PrintersTab() {
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
                             <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                    onClick={() => handleInfoPrinter(printer)}
+                                    title="View details"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View details</p>
+                                </TooltipContent>
+                              </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
@@ -869,6 +884,115 @@ export function PrintersTab() {
               </div>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Printer Info Modal */}
+      <Dialog open={isInfoModalOpen} onOpenChange={setIsInfoModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3 text-2xl">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg">
+                <Box className="h-6 w-6 text-white" />
+              </div>
+              Printer Details
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedPrinter && (
+            <div className="space-y-6 mt-6">
+              {/* Basic Information */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                    <Info className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Basic Information</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Name</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{selectedPrinter.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Manufacturer</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{selectedPrinter.manufacturer || "—"}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Model</p>
+                    <p className="font-medium text-gray-900 dark:text-white">{selectedPrinter.model || "—"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Financial Details */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                    <DollarSign className="h-5 w-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Financial Details</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Purchase Cost</p>
+                    <p className="font-medium text-gray-900 dark:text-white">€{selectedPrinter.price_eur.toFixed(2)}</p>
+                  </div>
+                  <div>
+                    <p className="text-gray-500 dark:text-gray-400">Cost per Hour</p>
+                    <p className="font-medium text-gray-900 dark:text-white">€{(selectedPrinter.price_eur / selectedPrinter.expected_life_hours).toFixed(3)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Usage & Lifetime */}
+              <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+                    <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Usage & Lifetime</h3>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Expected Lifetime</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{selectedPrinter.expected_life_hours.toLocaleString()} hours</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 dark:text-gray-400">Working Hours</p>
+                      <p className="font-medium text-gray-900 dark:text-white">{(selectedPrinter.working_hours || 0).toLocaleString()} hours</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <p className="text-gray-500 dark:text-gray-400 text-sm">Life Remaining</p>
+                      <p className="font-medium text-sm">
+                        {(selectedPrinter.life_left_hours || (selectedPrinter.expected_life_hours - (selectedPrinter.working_hours || 0))).toLocaleString()} hours
+                      </p>
+                    </div>
+                    <Progress 
+                      value={selectedPrinter.life_percentage || ((selectedPrinter.expected_life_hours - (selectedPrinter.working_hours || 0)) / selectedPrinter.expected_life_hours * 100)} 
+                      className="h-3"
+                    />
+                    <p className="text-center mt-2 text-sm font-medium">
+                      {(selectedPrinter.life_percentage || ((selectedPrinter.expected_life_hours - (selectedPrinter.working_hours || 0)) / selectedPrinter.expected_life_hours * 100)).toFixed(1)}% remaining
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsInfoModalOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
