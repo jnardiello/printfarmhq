@@ -807,9 +807,8 @@ def delete_filament(filament_id: int, db: Session = Depends(get_db), current_use
     
     # Check if filament is used in any products
     filament_usages = db.query(models.FilamentUsage).filter(models.FilamentUsage.filament_id == filament_id).first()
-    plate_usages = db.query(models.PlateFilamentUsage).filter(models.PlateFilamentUsage.filament_id == filament_id).first()
     
-    if filament_usages or plate_usages:
+    if filament_usages:
         raise HTTPException(
             status_code=400,
             detail="Cannot delete filament type that is used in products. Remove it from all products first."
@@ -953,31 +952,10 @@ def get_filament_statistics(db: Session = Depends(get_db), current_user: models.
     
     statistics = []
     for filament in filaments:
-        # Count products using this filament through both legacy and plate-based relationships
-        legacy_products = db.query(models.Product).join(models.FilamentUsage).filter(
+        # Count products using this filament
+        products_using = db.query(models.Product).join(models.FilamentUsage).filter(
             models.FilamentUsage.filament_id == filament.id
         ).distinct().count()
-        
-        plate_products = db.query(models.Product).join(models.Plate).join(models.PlateFilamentUsage).filter(
-            models.PlateFilamentUsage.filament_id == filament.id
-        ).distinct().count()
-        
-        # Use set to avoid counting same product twice if it uses both systems
-        product_ids = set()
-        
-        # Get products through legacy system
-        legacy_product_ids = db.query(models.Product.id).join(models.FilamentUsage).filter(
-            models.FilamentUsage.filament_id == filament.id
-        ).distinct().all()
-        product_ids.update([p[0] for p in legacy_product_ids])
-        
-        # Get products through plate system
-        plate_product_ids = db.query(models.Product.id).join(models.Plate).join(models.PlateFilamentUsage).filter(
-            models.PlateFilamentUsage.filament_id == filament.id
-        ).distinct().all()
-        product_ids.update([p[0] for p in plate_product_ids])
-        
-        products_using = len(product_ids)
         
         # Count purchases
         purchases_count = db.query(models.FilamentPurchase).filter(
@@ -1152,31 +1130,36 @@ def delete_filament_purchase(
 @app.post("/products", response_model=schemas.ProductRead, status_code=status.HTTP_201_CREATED)
 def create_product(
     request: Request,
-    sku: str = Form(...),
     name: str = Form(...),
     print_time: str = Form(...),  # HH:MM:SS or MM:SS format
-    # plate data
-    plate_names: str = Form(None),  # JSON string of plate names
-    plate_quantities: str = Form(None),  # JSON string of plate quantities
-    plate_print_times: str = Form(None),  # JSON string of plate print times
-    plate_filament_ids: str = Form(None),  # JSON string of arrays of filament IDs per plate
-    plate_grams_used: str = Form(None),  # JSON string of arrays of grams used per plate
-    # legacy data (backwards compatibility)
-    filament_ids: str = Form(None),  # JSON string of filament IDs for legacy single product
-    grams_used_list: str = Form(None),  # JSON string of grams used for legacy single product
+    filament_ids: str = Form(None),  # JSON string of filament IDs
+    grams_used_list: str = Form(None),  # JSON string of grams used
     additional_parts_cost: float = Form(0.0),
     license_id: Optional[int] = Form(None),
     file: Optional[UploadFile] = File(None),
+    sku: str = Form(None),  # Optional SKU, will auto-generate if not provided
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    """Create a new product with plate-based or legacy filament usage"""
+    """Create a new product with filament usage"""
     # Parse time string
     total_seconds = parse_time_from_form(print_time)
     print_time_hrs = total_seconds / 3600
     
-    # Determine if using plates or legacy
-    using_plates = plate_names is not None
+    # Auto-generate SKU if not provided
+    if not sku:
+        # Generate SKU based on name + timestamp
+        import time
+        base_sku = "".join(c.upper() for c in name if c.isalnum())[:8]
+        timestamp = str(int(time.time()))[-6:]  # Last 6 digits of timestamp
+        sku = f"{base_sku}-{timestamp}"
+        
+        # Ensure uniqueness
+        counter = 1
+        original_sku = sku
+        while db.query(models.Product).filter(models.Product.sku == sku).first():
+            sku = f"{original_sku}-{counter}"
+            counter += 1
     
     # Create product
     db_product = models.Product(
@@ -1184,7 +1167,8 @@ def create_product(
         name=name,
         print_time_hrs=print_time_hrs,
         additional_parts_cost=additional_parts_cost,
-        license_id=license_id if license_id else None
+        license_id=license_id if license_id else None,
+        owner_id=current_user.owner_id
     )
     
     # Handle file upload if provided
@@ -1212,62 +1196,24 @@ def create_product(
     db.add(db_product)
     db.flush()  # Get the product ID
     
-    if using_plates:
-        # Parse plate data
+    # Add filament usages
+    if filament_ids and grams_used_list:
         try:
-            names = json.loads(plate_names) if plate_names else []
-            quantities = json.loads(plate_quantities) if plate_quantities else []
-            times = json.loads(plate_print_times) if plate_print_times else []
-            filament_ids_list = json.loads(plate_filament_ids) if plate_filament_ids else []
-            grams_list = json.loads(plate_grams_used) if plate_grams_used else []
+            filament_ids_parsed = json.loads(filament_ids)
+            grams_used_parsed = json.loads(grams_used_list)
             
-            # Create plates
-            for i, name in enumerate(names):
-                plate_time_str = times[i] if i < len(times) else "00:00:00"
-                plate_seconds = parse_time_from_form(plate_time_str)
-                
-                db_plate = models.Plate(
-                    product_id=db_product.id,
-                    name=name,
-                    quantity=quantities[i] if i < len(quantities) else 1,
-                    print_time_hrs=plate_seconds / 3600
-                )
-                db.add(db_plate)
-                db.flush()
-                
-                # Add filament usages for this plate
-                plate_filament_ids = filament_ids_list[i] if i < len(filament_ids_list) else []
-                plate_grams = grams_list[i] if i < len(grams_list) else []
-                
-                for j, fid in enumerate(plate_filament_ids):
-                    if fid and j < len(plate_grams):
-                        usage = models.PlateFilamentUsage(
-                            plate_id=db_plate.id,
-                            filament_id=fid,
-                            grams_used=plate_grams[j]
-                        )
-                        db.add(usage)
+            for fid, grams in zip(filament_ids_parsed, grams_used_parsed):
+                if fid and grams:
+                    usage = models.FilamentUsage(
+                        product_id=db_product.id,
+                        filament_id=fid,
+                        grams_used=grams,
+                        owner_id=current_user.owner_id
+                    )
+                    db.add(usage)
         except json.JSONDecodeError as e:
             db.rollback()
-            raise HTTPException(status_code=400, detail=f"Invalid JSON in plate data: {str(e)}")
-    else:
-        # Legacy single-product filament usage
-        if filament_ids and grams_used_list:
-            try:
-                filament_ids_parsed = json.loads(filament_ids)
-                grams_used_parsed = json.loads(grams_used_list)
-                
-                for fid, grams in zip(filament_ids_parsed, grams_used_parsed):
-                    if fid and grams:
-                        usage = models.FilamentUsage(
-                            product_id=db_product.id,
-                            filament_id=fid,
-                            grams_used=grams
-                        )
-                        db.add(usage)
-            except json.JSONDecodeError as e:
-                db.rollback()
-                raise HTTPException(status_code=400, detail=f"Invalid JSON in filament data: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in filament data: {str(e)}")
     
     db.commit()
     db.refresh(db_product)
@@ -1281,8 +1227,7 @@ def create_product(
         metadata={
             "product_id": db_product.id,
             "product_name": db_product.name,
-            "sku": db_product.sku,
-            "using_plates": using_plates
+            "sku": db_product.sku
         }
     )
     
@@ -1299,8 +1244,7 @@ def list_products(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
 @app.get("/products/{product_id}", response_model=schemas.ProductRead)
 def get_product(product_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     product = db.query(models.Product).options(
-        joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament),
-        joinedload(models.Product.plates).joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
+        joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament)
     ).filter(models.Product.id == product_id).first()
     
     if not product:
@@ -1329,7 +1273,6 @@ def update_product(product_id: int, product_update: schemas.ProductUpdate, db: S
     
     # Reload product with relationships for proper COP calculation
     product = db.query(models.Product).options(
-        joinedload(models.Product.plates).joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament),
         joinedload(models.Product.filament_usages).joinedload(models.FilamentUsage.filament)
     ).filter(models.Product.id == product_id).first()
     
@@ -1339,21 +1282,14 @@ def update_product(product_id: int, product_update: schemas.ProductUpdate, db: S
 @app.put("/products/{product_id}", response_model=schemas.ProductRead)
 def update_product_full(
     product_id: int,
-    sku: str = Form(...),
     name: str = Form(...),
     print_time: str = Form(...),  # HH:MM:SS or MM:SS format
-    # plate data
-    plate_names: str = Form(None),  # JSON string of plate names
-    plate_quantities: str = Form(None),  # JSON string of plate quantities
-    plate_print_times: str = Form(None),  # JSON string of plate print times
-    plate_filament_ids: str = Form(None),  # JSON string of arrays of filament IDs per plate
-    plate_grams_used: str = Form(None),  # JSON string of arrays of grams used per plate
-    # legacy data (backwards compatibility)
-    filament_ids: str = Form(None),  # JSON string of filament IDs for legacy single product
-    grams_used_list: str = Form(None),  # JSON string of grams used for legacy single product
+    filament_ids: str = Form(None),  # JSON string of filament IDs
+    grams_used_list: str = Form(None),  # JSON string of grams used
     additional_parts_cost: float = Form(0.0),
     license_id: Optional[int] = Form(None),
     file: Optional[UploadFile] = File(None),
+    sku: str = Form(None),  # Optional SKU for updates
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
@@ -1367,11 +1303,9 @@ def update_product_full(
     total_seconds = parse_time_from_form(print_time)
     print_time_hrs = total_seconds / 3600
     
-    # Determine if using plates or legacy
-    using_plates = plate_names is not None
-    
     # Update basic product info
-    db_product.sku = sku
+    if sku:  # Only update SKU if provided
+        db_product.sku = sku
     db_product.name = name
     db_product.print_time_hrs = print_time_hrs
     db_product.additional_parts_cost = additional_parts_cost
@@ -1399,66 +1333,26 @@ def update_product_full(
                 detail=f"Failed to save file: {str(e)}"
             )
     
-    if using_plates:
-        # Delete existing plates and their filament usages (cascade)
-        db.query(models.Plate).filter(models.Plate.product_id == product_id).delete()
-        
-        # Parse and create new plates
+    # Delete existing filament usages and create new ones
+    db.query(models.FilamentUsage).filter(models.FilamentUsage.product_id == product_id).delete()
+    
+    if filament_ids and grams_used_list:
         try:
-            names = json.loads(plate_names) if plate_names else []
-            quantities = json.loads(plate_quantities) if plate_quantities else []
-            times = json.loads(plate_print_times) if plate_print_times else []
-            filament_ids_list = json.loads(plate_filament_ids) if plate_filament_ids else []
-            grams_list = json.loads(plate_grams_used) if plate_grams_used else []
+            filament_ids_parsed = json.loads(filament_ids)
+            grams_used_parsed = json.loads(grams_used_list)
             
-            for i, name in enumerate(names):
-                plate_time_str = times[i] if i < len(times) else "00:00:00"
-                plate_seconds = parse_time_from_form(plate_time_str)
-                
-                db_plate = models.Plate(
-                    product_id=db_product.id,
-                    name=name,
-                    quantity=quantities[i] if i < len(quantities) else 1,
-                    print_time_hrs=plate_seconds / 3600
-                )
-                db.add(db_plate)
-                db.flush()
-                
-                # Add filament usages for this plate
-                plate_filament_ids = filament_ids_list[i] if i < len(filament_ids_list) else []
-                plate_grams = grams_list[i] if i < len(grams_list) else []
-                
-                for j, fid in enumerate(plate_filament_ids):
-                    if fid and j < len(plate_grams):
-                        usage = models.PlateFilamentUsage(
-                            plate_id=db_plate.id,
-                            filament_id=fid,
-                            grams_used=plate_grams[j]
-                        )
-                        db.add(usage)
+            for fid, grams in zip(filament_ids_parsed, grams_used_parsed):
+                if fid and grams:
+                    usage = models.FilamentUsage(
+                        product_id=db_product.id,
+                        filament_id=fid,
+                        grams_used=grams,
+                        owner_id=current_user.owner_id
+                    )
+                    db.add(usage)
         except json.JSONDecodeError as e:
             db.rollback()
-            raise HTTPException(status_code=400, detail=f"Invalid JSON in plate data: {str(e)}")
-    else:
-        # Legacy: Delete existing filament usages and create new ones
-        db.query(models.FilamentUsage).filter(models.FilamentUsage.product_id == product_id).delete()
-        
-        if filament_ids and grams_used_list:
-            try:
-                filament_ids_parsed = json.loads(filament_ids)
-                grams_used_parsed = json.loads(grams_used_list)
-                
-                for fid, grams in zip(filament_ids_parsed, grams_used_parsed):
-                    if fid and grams:
-                        usage = models.FilamentUsage(
-                            product_id=db_product.id,
-                            filament_id=fid,
-                            grams_used=grams
-                        )
-                        db.add(usage)
-            except json.JSONDecodeError as e:
-                db.rollback()
-                raise HTTPException(status_code=400, detail=f"Invalid JSON in filament data: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"Invalid JSON in filament data: {str(e)}")
     
     db.commit()
     db.refresh(db_product)
@@ -1496,235 +1390,6 @@ def delete_product(product_id: int, db: Session = Depends(get_db), current_user:
     db.commit()
     return
 
-
-# ---------- Plates ---------- #
-
-@app.post("/products/{product_id}/plates", response_model=schemas.PlateRead, status_code=status.HTTP_201_CREATED)
-def create_plate(
-    product_id: int,
-    plate: schemas.PlateCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """Create a new plate for a product"""
-    # Verify product exists
-    product = db.get(models.Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Create plate
-    db_plate = models.Plate(
-        product_id=product_id,
-        name=plate.name,
-        quantity=plate.quantity,
-        print_time_hrs=plate.print_time_hrs,
-        file_path=plate.file_path,
-        gcode_path=plate.gcode_path
-    )
-    db.add(db_plate)
-    db.flush()
-    
-    # Add filament usages
-    if plate.filament_usages:
-        for usage in plate.filament_usages:
-            db_usage = models.PlateFilamentUsage(
-                plate_id=db_plate.id,
-                filament_id=usage.filament_id,
-                grams_used=usage.grams_used
-            )
-            db.add(db_usage)
-    
-    db.commit()
-    db.refresh(db_plate)
-    return db_plate
-
-
-@app.get("/products/{product_id}/plates", response_model=List[schemas.PlateRead])
-def list_plates(
-    product_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """List all plates for a product"""
-    # Verify product exists
-    product = db.get(models.Product, product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    plates = db.query(models.Plate).filter(
-        models.Plate.product_id == product_id
-    ).options(
-        joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
-    ).all()
-    
-    return plates
-
-
-@app.get("/plates/{plate_id}", response_model=schemas.PlateRead)
-def get_plate(
-    plate_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """Get a specific plate"""
-    plate = db.query(models.Plate).options(
-        joinedload(models.Plate.filament_usages).joinedload(models.PlateFilamentUsage.filament)
-    ).filter(models.Plate.id == plate_id).first()
-    
-    if not plate:
-        raise HTTPException(status_code=404, detail="Plate not found")
-    
-    return plate
-
-
-@app.put("/plates/{plate_id}", response_model=schemas.PlateRead)
-def update_plate(
-    plate_id: int,
-    plate_update: schemas.PlateUpdate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """Update a plate"""
-    db_plate = db.get(models.Plate, plate_id)
-    if not db_plate:
-        raise HTTPException(status_code=404, detail="Plate not found")
-    
-    # Update basic fields
-    update_data = plate_update.model_dump(exclude={'filament_usages'}, exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(db_plate, field, value)
-    
-    # Update filament usages if provided
-    if plate_update.filament_usages is not None:
-        # Delete existing usages
-        db.query(models.PlateFilamentUsage).filter(
-            models.PlateFilamentUsage.plate_id == plate_id
-        ).delete()
-        
-        # Add new usages
-        for usage in plate_update.filament_usages:
-            db_usage = models.PlateFilamentUsage(
-                plate_id=plate_id,
-                filament_id=usage.filament_id,
-                grams_used=usage.grams_used
-            )
-            db.add(db_usage)
-    
-    db.commit()
-    db.refresh(db_plate)
-    return db_plate
-
-
-@app.delete("/plates/{plate_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_plate(
-    plate_id: int,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """Delete a plate"""
-    plate = db.get(models.Plate, plate_id)
-    if not plate:
-        raise HTTPException(status_code=404, detail="Plate not found")
-    
-    # Delete associated files if they exist
-    for file_path in [plate.file_path, plate.gcode_path]:
-        if file_path:
-            full_path = os.path.join(os.getcwd(), file_path)
-            if os.path.exists(full_path):
-                try:
-                    os.remove(full_path)
-                except Exception as e:
-                    logger.warning(f"Failed to delete file {full_path}: {str(e)}")
-    
-    db.delete(plate)
-    db.commit()
-    return
-
-
-@app.post("/plates/{plate_id}/upload/{file_type}", response_model=schemas.PlateRead)
-async def upload_plate_file(
-    plate_id: int,
-    file_type: str,
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(get_current_user)
-):
-    """Upload a file for a plate (stl/3mf or gcode)"""
-    # Validate file type
-    if file_type not in ["model", "gcode"]:
-        raise HTTPException(status_code=400, detail="file_type must be 'model' or 'gcode'")
-    
-    # Get the plate
-    db_plate = db.get(models.Plate, plate_id)
-    if not db_plate:
-        raise HTTPException(status_code=404, detail="Plate not found")
-    
-    # Get the product for SKU
-    product = db.get(models.Product, db_plate.product_id)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    
-    # Validate file extension
-    if file_type == "model":
-        if not file.filename.lower().endswith(('.stl', '.3mf')):
-            raise HTTPException(
-                status_code=400,
-                detail="Only STL and 3MF files are supported for models"
-            )
-        upload_dir = "uploads/plate_models"
-    else:  # gcode
-        if not file.filename.lower().endswith('.gcode'):
-            raise HTTPException(
-                status_code=400,
-                detail="Only GCODE files are supported"
-            )
-        upload_dir = "uploads/plate_gcodes"
-    
-    # Create directory if it doesn't exist
-    full_upload_dir = os.path.join(os.getcwd(), upload_dir)
-    os.makedirs(full_upload_dir, exist_ok=True)
-    
-    # Save the file
-    file_extension = os.path.splitext(file.filename)[1]
-    unique_filename = f"{product.sku}_plate_{plate_id}_{uuid.uuid4()}{file_extension}"
-    file_path = os.path.join(full_upload_dir, unique_filename)
-    
-    try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to save file: {str(e)}"
-        )
-    
-    # Update plate with file path
-    relative_path = f"{upload_dir}/{unique_filename}"
-    if file_type == "model":
-        # Delete old file if exists
-        if db_plate.file_path:
-            old_path = os.path.join(os.getcwd(), db_plate.file_path)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    logger.warning(f"Failed to delete old file {old_path}: {str(e)}")
-        db_plate.file_path = relative_path
-    else:  # gcode
-        # Delete old file if exists
-        if db_plate.gcode_path:
-            old_path = os.path.join(os.getcwd(), db_plate.gcode_path)
-            if os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception as e:
-                    logger.warning(f"Failed to delete old file {old_path}: {str(e)}")
-        db_plate.gcode_path = relative_path
-    
-    db.commit()
-    db.refresh(db_plate)
-    
-    return db_plate
 
 
 # ---------- Subscriptions ---------- #
@@ -2068,32 +1733,15 @@ def _deduct_filament_for_print_job(job: models.PrintJob, db: Session) -> dict:
             
         items_qty = pjp.items_qty
         
-        # Check if product uses plates (new system)
-        if product.plates:
-            # Iterate through plates
-            for plate in product.plates:
-                plate_qty_per_product = plate.quantity
-                total_plate_qty = plate_qty_per_product * items_qty
-                
-                # Iterate through filaments used in this plate
-                for usage in plate.filament_usages:
-                    filament_id = usage.filament_id
-                    grams_per_plate = usage.grams_used
-                    total_grams = grams_per_plate * total_plate_qty
-                    
-                    if filament_id not in filament_deductions:
-                        filament_deductions[filament_id] = 0
-                    filament_deductions[filament_id] += total_grams
-        else:
-            # Legacy system - single product with multiple filaments
-            for usage in product.filament_usages:
-                filament_id = usage.filament_id
-                grams_per_item = usage.grams_used
-                total_grams = grams_per_item * items_qty
-                
-                if filament_id not in filament_deductions:
-                    filament_deductions[filament_id] = 0
-                filament_deductions[filament_id] += total_grams
+        # Use filament usages for this product
+        for usage in product.filament_usages:
+            filament_id = usage.filament_id
+            grams_per_item = usage.grams_used
+            total_grams = grams_per_item * items_qty
+            
+            if filament_id not in filament_deductions:
+                filament_deductions[filament_id] = 0
+            filament_deductions[filament_id] += total_grams
     
     # Check availability and deduct
     for filament_id, total_grams_needed in filament_deductions.items():
@@ -2134,32 +1782,15 @@ def _return_filament_to_inventory(job: models.PrintJob, db: Session):
             
         items_qty = pjp.items_qty
         
-        # Check if product uses plates (new system)
-        if product.plates:
-            # Iterate through plates
-            for plate in product.plates:
-                plate_qty_per_product = plate.quantity
-                total_plate_qty = plate_qty_per_product * items_qty
-                
-                # Iterate through filaments used in this plate
-                for usage in plate.filament_usages:
-                    filament_id = usage.filament_id
-                    grams_per_plate = usage.grams_used
-                    total_grams = grams_per_plate * total_plate_qty
-                    
-                    if filament_id not in filament_returns:
-                        filament_returns[filament_id] = 0
-                    filament_returns[filament_id] += total_grams
-        else:
-            # Legacy system - single product with multiple filaments
-            for usage in product.filament_usages:
-                filament_id = usage.filament_id
-                grams_per_item = usage.grams_used
-                total_grams = grams_per_item * items_qty
-                
-                if filament_id not in filament_returns:
-                    filament_returns[filament_id] = 0
-                filament_returns[filament_id] += total_grams
+        # Use filament usages for this product
+        for usage in product.filament_usages:
+            filament_id = usage.filament_id
+            grams_per_item = usage.grams_used
+            total_grams = grams_per_item * items_qty
+            
+            if filament_id not in filament_returns:
+                filament_returns[filament_id] = 0
+            filament_returns[filament_id] += total_grams
     
     # Return filament to inventory
     for filament_id, total_grams_return in filament_returns.items():
@@ -3054,21 +2685,7 @@ def get_god_business_metrics(
             func.date(models.PrintJob.created_at) == current_date
         ).scalar() or 0.0
         
-        # Alternative: get from plates if products use the new plate structure
-        plate_filament_consumed = db.query(func.sum(models.PlateFilamentUsage.grams_used)).join(
-            models.Plate, models.PlateFilamentUsage.plate_id == models.Plate.id
-        ).join(
-            models.Product, models.Plate.product_id == models.Product.id
-        ).join(
-            models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
-        ).join(
-            models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
-        ).filter(
-            func.date(models.PrintJob.created_at) == current_date
-        ).scalar() or 0.0
-        
-        # Use the higher value (new plate structure preferred)
-        total_filament_consumed = max(filament_consumed, plate_filament_consumed)
+        total_filament_consumed = filament_consumed
         
         # Average print time for jobs created that day
         avg_print_time = db.query(func.avg(models.Product.print_time_hrs)).join(
@@ -3125,26 +2742,6 @@ def get_god_business_metrics(
             func.sum(models.FilamentUsage.grams_used).desc()
         ).limit(5).all()
         
-        # Alternative for plate-based filament usage - SQLite compatible
-        if not top_filaments_query:
-            top_filaments_query = db.query(
-                (models.Filament.brand + ' ' + models.Filament.color + ' ' + models.Filament.material).label('name'),
-                func.sum(models.PlateFilamentUsage.grams_used).label('usage_g')
-            ).join(
-                models.Filament, models.PlateFilamentUsage.filament_id == models.Filament.id
-            ).join(
-                models.Plate, models.PlateFilamentUsage.plate_id == models.Plate.id
-            ).join(
-                models.Product, models.Plate.product_id == models.Product.id
-            ).join(
-                models.PrintJobProduct, models.Product.id == models.PrintJobProduct.product_id
-            ).join(
-                models.PrintJob, models.PrintJobProduct.print_job_id == models.PrintJob.id
-            ).filter(
-                func.date(models.PrintJob.created_at) == current_date
-            ).group_by(models.Filament.id).order_by(
-                func.sum(models.PlateFilamentUsage.grams_used).desc()
-            ).limit(5).all()
         
         top_filaments = [{"name": name, "usage_g": float(usage_g)} for name, usage_g in top_filaments_query]
         

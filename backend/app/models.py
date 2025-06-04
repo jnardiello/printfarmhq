@@ -110,23 +110,13 @@ class Product(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Legacy relationship - will be removed after migration
+    # Filament usage relationship
     filament_usages = relationship("FilamentUsage", back_populates="product", cascade="all, delete-orphan")
-    
-    # New plate-based relationship
-    plates = relationship("Plate", back_populates="product", cascade="all, delete-orphan")
     owner = relationship("User", foreign_keys=[owner_id])
 
     @property
     def cop(self) -> float:
-        """Compute Cost of Product (sum of all plate costs + additional parts cost)."""
-        # New calculation: sum costs across all plates
-        if self.plates:
-            filament_cost = sum(plate.cost for plate in self.plates)
-            total_cost = filament_cost + (self.additional_parts_cost or 0.0)
-            return round(total_cost, 2)
-        
-        # Fallback to legacy calculation for backward compatibility during migration
+        """Compute Cost of Product (filament costs + additional parts cost)."""
         filament_cost = sum(
             (fu.grams_used / 1000.0) * fu.filament.price_per_kg for fu in self.filament_usages if fu.filament
         )
@@ -135,42 +125,10 @@ class Product(Base):
 
     @property
     def total_print_time_hrs(self) -> float:
-        """Compute total print time (sum of all plate print times * quantities)."""
-        # New calculation: sum print times across all plates
-        if self.plates:
-            total_time = sum(plate.print_time_hrs * plate.quantity for plate in self.plates)
-            return round(total_time, 2)
-        
-        # Fallback to legacy print_time_hrs for backward compatibility during migration
+        """Return the product's print time."""
         return round(self.print_time_hrs, 2)
 
 
-class Plate(Base):
-    __tablename__ = "plates"
-
-    id = Column(Integer, primary_key=True, index=True)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
-    name = Column(String, nullable=False)  # e.g., "Base", "Top", "Handle"
-    quantity = Column(Integer, nullable=False, default=1)  # How many of this plate per product
-    print_time_hrs = Column(Float, nullable=False, default=0.0)  # Print time for this plate
-    file_path = Column(String, nullable=True)  # Optional STL/3MF file for this plate
-    gcode_path = Column(String, nullable=True)  # Optional G-code file for this plate
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
-
-    product = relationship("Product", back_populates="plates")
-    filament_usages = relationship("PlateFilamentUsage", back_populates="plate", cascade="all, delete-orphan")
-    owner = relationship("User", foreign_keys=[owner_id])
-
-    @property
-    def cost(self) -> float:
-        """Compute cost of this plate (sum of filament costs * quantity)."""
-        filament_cost = sum(
-            (fu.grams_used / 1000.0) * fu.filament.price_per_kg 
-            for fu in self.filament_usages if fu.filament
-        )
-        return round(filament_cost * self.quantity, 2)
 
 
 class Subscription(Base):
@@ -226,18 +184,6 @@ class FilamentUsage(Base):
     owner = relationship("User", foreign_keys=[owner_id])
 
 
-class PlateFilamentUsage(Base):
-    __tablename__ = "plate_filament_usages"
-
-    id = Column(Integer, primary_key=True)
-    plate_id = Column(Integer, ForeignKey("plates.id"), nullable=False)
-    filament_id = Column(Integer, ForeignKey("filaments.id"), nullable=False)
-    grams_used = Column(Float, nullable=False)
-    owner_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-
-    plate = relationship("Plate", back_populates="filament_usages")
-    filament = relationship("Filament")
-    owner = relationship("User", foreign_keys=[owner_id])
 
 
 class PrinterProfile(Base):

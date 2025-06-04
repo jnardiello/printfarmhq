@@ -55,17 +55,6 @@ def _ensure_columns():
         if "token_version" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 1"))
 
-        # plates table extra columns (ensure print_time_hrs and gcode_path exist)
-        try:
-            res_plates = conn.execute(text("PRAGMA table_info(plates)"))
-            plate_cols = [row[1] for row in res_plates.fetchall()]
-            if "print_time_hrs" not in plate_cols:
-                conn.execute(text("ALTER TABLE plates ADD COLUMN print_time_hrs REAL NOT NULL DEFAULT 0.0"))
-            if "gcode_path" not in plate_cols:
-                conn.execute(text("ALTER TABLE plates ADD COLUMN gcode_path TEXT"))
-        except Exception:
-            # plates table doesn't exist yet, will be created by create_all()
-            pass
 
         # products table: migrate model_file to file_path to avoid Pydantic namespace conflict
         res_prod_check = conn.execute(text("PRAGMA table_info(products)"))
