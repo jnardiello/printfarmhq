@@ -737,12 +737,12 @@ def check_existing_filament(db: Session, color: str, brand: str, material: str, 
     
     color_normalized = color.strip().lower()
     brand_normalized = brand.strip().lower()
-    material_normalized = material.strip()
+    material_normalized = material.strip().lower()
     
     query = db.query(models.Filament).filter(
         func.lower(func.trim(models.Filament.color)) == color_normalized,
         func.lower(func.trim(models.Filament.brand)) == brand_normalized,
-        func.trim(models.Filament.material) == material_normalized
+        func.lower(func.trim(models.Filament.material)) == material_normalized
     )
     
     # Filter by owner for multi-tenancy
@@ -759,7 +759,24 @@ def check_existing_filament(db: Session, color: str, brand: str, material: str, 
 @app.post("/filaments", response_model=schemas.FilamentRead, status_code=status.HTTP_201_CREATED)
 def create_filament(filament: schemas.FilamentCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Create a new filament type (any authenticated user can create filament types)"""
-    db_filament = models.Filament(**filament.model_dump())
+    # Check for existing filament first (case-insensitive)
+    existing_filament = check_existing_filament(
+        db, filament.color, filament.brand, filament.material, current_user
+    )
+    
+    if existing_filament:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Filament '{filament.color} {filament.brand} {filament.material}' already exists"
+        )
+    
+    # Create with trimmed values
+    filament_data = filament.model_dump()
+    filament_data['color'] = filament_data['color'].strip()
+    filament_data['brand'] = filament_data['brand'].strip()
+    filament_data['material'] = filament_data['material'].strip()
+    
+    db_filament = models.Filament(**filament_data)
     db_filament.owner_id = get_owner_id(current_user)
     db.add(db_filament)
     db.commit()
@@ -826,7 +843,29 @@ def update_filament(filament_id: int, filament_update: schemas.FilamentUpdate, d
         raise HTTPException(status_code=404, detail="Filament not found")
     
     update_data = filament_update.model_dump(exclude_unset=True)
+    
+    # If updating color, brand, or material, check for duplicates
+    if any(field in update_data for field in ['color', 'brand', 'material']):
+        # Get the new values (use existing if not being updated)
+        new_color = update_data.get('color', filament.color)
+        new_brand = update_data.get('brand', filament.brand)
+        new_material = update_data.get('material', filament.material)
+        
+        # Check if this combination already exists (excluding current filament)
+        existing_filament = check_existing_filament(
+            db, new_color, new_brand, new_material, current_user
+        )
+        
+        if existing_filament and existing_filament.id != filament_id:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Filament '{new_color} {new_brand} {new_material}' already exists"
+            )
+    
+    # Trim string fields before setting
     for field, value in update_data.items():
+        if field in ['color', 'brand', 'material'] and isinstance(value, str):
+            value = value.strip()
         setattr(filament, field, value)
     
     db.commit()
@@ -858,7 +897,7 @@ def create_filament_flexible(
                 status_code=409,
                 detail={
                     "message": "Filament already exists",
-                    "existing_filament": schemas.FilamentRead.model_validate(existing_filament).model_dump()
+                    "existing_filament": schemas.FilamentRead.model_validate(existing_filament).model_dump(mode='json')
                 }
             )
         
@@ -909,12 +948,14 @@ def create_filament_flexible(
         # Prepare response
         response = schemas.FilamentFlexibleResponse(
             filament=schemas.FilamentRead.model_validate(db_filament),
+            message=f"Filament '{db_filament.color} {db_filament.brand} {db_filament.material}' created successfully",
             warnings=warnings
         )
         
         if db_purchase:
             db.refresh(db_purchase)
             response.purchase = schemas.FilamentPurchaseRead.model_validate(db_purchase)
+            response.message += " with initial inventory"
             
         return response
         
@@ -1131,7 +1172,7 @@ def delete_filament_purchase(
 def create_product(
     request: Request,
     name: str = Form(...),
-    print_time: str = Form(...),  # HH:MM:SS or MM:SS format
+    print_time: str = Form(...),  # Flexible format: "1h30m", "2h", "45m", or decimal like "1.5"
     filament_ids: str = Form(None),  # JSON string of filament IDs
     grams_used_list: str = Form(None),  # JSON string of grams used
     additional_parts_cost: float = Form(0.0),
@@ -1142,9 +1183,8 @@ def create_product(
     current_user: models.User = Depends(get_current_user)
 ):
     """Create a new product with filament usage"""
-    # Parse time string
-    total_seconds = parse_time_from_form(print_time)
-    print_time_hrs = total_seconds / 3600
+    # Parse time string - parse_time_from_form returns hours, not seconds
+    print_time_hrs = parse_time_from_form(print_time)
     
     # Auto-generate SKU if not provided
     if not sku:
@@ -1262,8 +1302,7 @@ def update_product(product_id: int, product_update: schemas.ProductUpdate, db: S
     
     # Handle print_time conversion if provided
     if "print_time" in update_data and update_data["print_time"]:
-        total_seconds = parse_time_from_form(update_data["print_time"])
-        update_data["print_time_hrs"] = total_seconds / 3600
+        update_data["print_time_hrs"] = parse_time_from_form(update_data["print_time"])  # Returns hours, not seconds
         del update_data["print_time"]
     
     for field, value in update_data.items():
@@ -1283,7 +1322,7 @@ def update_product(product_id: int, product_update: schemas.ProductUpdate, db: S
 def update_product_full(
     product_id: int,
     name: str = Form(...),
-    print_time: str = Form(...),  # HH:MM:SS or MM:SS format
+    print_time: str = Form(...),  # Flexible format: "1h30m", "2h", "45m", or decimal like "1.5"
     filament_ids: str = Form(None),  # JSON string of filament IDs
     grams_used_list: str = Form(None),  # JSON string of grams used
     additional_parts_cost: float = Form(0.0),
@@ -1300,8 +1339,9 @@ def update_product_full(
         raise HTTPException(status_code=404, detail="Product not found")
     
     # Parse time string
-    total_seconds = parse_time_from_form(print_time)
-    print_time_hrs = total_seconds / 3600
+    logger.info(f"Updating product {product_id} with print_time: '{print_time}'")
+    print_time_hrs = parse_time_from_form(print_time)  # This returns hours, not seconds!
+    logger.info(f"Parsed time: {print_time_hrs} hours")
     
     # Update basic product info
     if sku:  # Only update SKU if provided
@@ -1443,30 +1483,437 @@ def delete_subscription(subscription_id: int, db: Session = Depends(get_db), cur
     return
 
 
-# ---------- Printer Profiles ---------- #
+# ---------- Printer Types ---------- #
 
-@app.post("/printer_profiles", response_model=schemas.PrinterProfileRead, status_code=status.HTTP_201_CREATED)
-def create_printer_profile(printer: schemas.PrinterProfileCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Create a new printer profile (any authenticated user can create printer profiles)"""
-    db_printer = models.PrinterProfile(**printer.model_dump())
+@app.post("/printer_types", response_model=schemas.PrinterTypeRead, status_code=status.HTTP_201_CREATED)
+def create_printer_type(
+    printer_type: schemas.PrinterTypeCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Create a new printer type (template for printer instances)"""
+    # Check if this brand/model combination already exists for this user (case-insensitive)
+    from sqlalchemy import func
+    
+    brand_normalized = printer_type.brand.strip()
+    model_normalized = printer_type.model.strip()
+    
+    existing = db.query(models.PrinterType).filter(
+        func.lower(func.trim(models.PrinterType.brand)) == func.lower(brand_normalized),
+        func.lower(func.trim(models.PrinterType.model)) == func.lower(model_normalized),
+        models.PrinterType.owner_id == current_user.owner_id
+    ).first()
+    
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Printer type '{printer_type.brand} {printer_type.model}' already exists"
+        )
+    
+    # Create with trimmed values
+    printer_type_data = printer_type.model_dump()
+    printer_type_data['brand'] = printer_type_data['brand'].strip()
+    printer_type_data['model'] = printer_type_data['model'].strip()
+    
+    db_printer_type = models.PrinterType(
+        **printer_type_data,
+        owner_id=current_user.owner_id
+    )
+    db.add(db_printer_type)
+    db.commit()
+    db.refresh(db_printer_type)
+    
+    # Add printer count
+    db_printer_type.printer_count = db.query(models.Printer).filter(
+        models.Printer.printer_type_id == db_printer_type.id
+    ).count()
+    
+    return db_printer_type
+
+
+@app.get("/printer_types", response_model=list[schemas.PrinterTypeRead])
+def list_printer_types(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """List all printer types for the current user"""
+    printer_types = db.query(models.PrinterType).filter(
+        models.PrinterType.owner_id == current_user.owner_id
+    ).offset(skip).limit(limit).all()
+    
+    # Add printer count for each type
+    for pt in printer_types:
+        pt.printer_count = db.query(models.Printer).filter(
+            models.Printer.printer_type_id == pt.id
+        ).count()
+    
+    return printer_types
+
+
+@app.get("/printer_types/{printer_type_id}", response_model=schemas.PrinterTypeRead)
+def get_printer_type(
+    printer_type_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Get a specific printer type"""
+    printer_type = db.get(models.PrinterType, printer_type_id)
+    if not printer_type or printer_type.owner_id != current_user.owner_id:
+        raise HTTPException(status_code=404, detail="Printer type not found")
+    
+    # Add printer count
+    printer_type.printer_count = db.query(models.Printer).filter(
+        models.Printer.printer_type_id == printer_type.id
+    ).count()
+    
+    return printer_type
+
+
+@app.put("/printer_types/{printer_type_id}", response_model=schemas.PrinterTypeRead)
+def update_printer_type(
+    printer_type_id: int,
+    printer_type_update: schemas.PrinterTypeUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Update a printer type"""
+    printer_type = db.get(models.PrinterType, printer_type_id)
+    if not printer_type or printer_type.owner_id != current_user.owner_id:
+        raise HTTPException(status_code=404, detail="Printer type not found")
+    
+    # Check if the new brand/model combination already exists (case-insensitive)
+    from sqlalchemy import func
+    
+    update_data = printer_type_update.model_dump(exclude_unset=True)
+    if "brand" in update_data or "model" in update_data:
+        new_brand = update_data.get("brand", printer_type.brand).strip()
+        new_model = update_data.get("model", printer_type.model).strip()
+        
+        existing = db.query(models.PrinterType).filter(
+            models.PrinterType.id != printer_type_id,
+            func.lower(func.trim(models.PrinterType.brand)) == func.lower(new_brand),
+            func.lower(func.trim(models.PrinterType.model)) == func.lower(new_model),
+            models.PrinterType.owner_id == current_user.owner_id
+        ).first()
+        
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Printer type '{new_brand} {new_model}' already exists"
+            )
+        
+        # Update with trimmed values
+        if "brand" in update_data:
+            update_data["brand"] = new_brand
+        if "model" in update_data:
+            update_data["model"] = new_model
+    
+    for field, value in update_data.items():
+        setattr(printer_type, field, value)
+    
+    db.commit()
+    db.refresh(printer_type)
+    
+    # Add printer count
+    printer_type.printer_count = db.query(models.Printer).filter(
+        models.Printer.printer_type_id == printer_type.id
+    ).count()
+    
+    return printer_type
+
+
+@app.delete("/printer_types/{printer_type_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_printer_type(
+    printer_type_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Delete a printer type"""
+    printer_type = db.get(models.PrinterType, printer_type_id)
+    if not printer_type or printer_type.owner_id != current_user.owner_id:
+        raise HTTPException(status_code=404, detail="Printer type not found")
+    
+    # Check if any printers are using this type
+    printer_count = db.query(models.Printer).filter(
+        models.Printer.printer_type_id == printer_type_id
+    ).count()
+    
+    if printer_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot delete printer type: {printer_count} printer(s) are using this type"
+        )
+    
+    db.delete(printer_type)
+    db.commit()
+    return
+
+
+# ---------- Printer Instances ---------- #
+
+@app.post("/printers", response_model=schemas.PrinterRead, status_code=status.HTTP_201_CREATED)
+def create_printer(
+    printer: schemas.PrinterCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Create a new printer instance"""
+    # Verify printer type exists and belongs to user
+    printer_type = db.get(models.PrinterType, printer.printer_type_id)
+    if not printer_type or printer_type.owner_id != current_user.owner_id:
+        raise HTTPException(status_code=404, detail="Printer type not found")
+    
+    # Check for duplicate printer name (case-insensitive)
+    from sqlalchemy import func
+    import re
+    
+    # Normalize name: trim and remove ALL spaces for comparison
+    printer_name_normalized = printer.name.strip()  # Keep spaces for display
+    printer_name_normalized_lower = re.sub(r'\s+', '', printer.name.strip()).lower()  # Remove all spaces for uniqueness
+    
+    # Check if this normalized name already exists
+    # For god users (owner_id=None), we need to handle NULL comparison differently
+    if current_user.owner_id is None:
+        existing_printer = db.query(models.Printer).filter(
+            models.Printer.name_normalized == printer_name_normalized_lower,
+            models.Printer.owner_id.is_(None)
+        ).first()
+    else:
+        existing_printer = db.query(models.Printer).filter(
+            models.Printer.name_normalized == printer_name_normalized_lower,
+            models.Printer.owner_id == current_user.owner_id
+        ).first()
+    
+    if existing_printer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"You already have a printer named '{printer.name}'. Each printer must have a unique name. Please choose a different name or add a number (e.g., '{printer.name} 2')."
+        )
+    
+    # Create printer with normalized name
+    printer_data = printer.model_dump()
+    printer_data['name'] = printer_name_normalized  # Display name (trimmed)
+    printer_data['name_normalized'] = printer_name_normalized_lower  # Lowercase, no spaces for constraint
+    
+    db_printer = models.Printer(
+        **printer_data,
+        owner_id=current_user.owner_id
+    )
     db.add(db_printer)
     db.commit()
     db.refresh(db_printer)
+    
+    # Load printer type relationship
+    db_printer.printer_type = printer_type
+    
+    return db_printer
+
+
+@app.get("/printers", response_model=list[schemas.PrinterRead])
+def list_printers(
+    skip: int = 0,
+    limit: int = 100,
+    printer_type_id: Optional[int] = None,
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """List all printer instances for the current user"""
+    query = db.query(models.Printer).options(
+        joinedload(models.Printer.printer_type)
+    ).filter(models.Printer.owner_id == current_user.owner_id)
+    
+    if printer_type_id:
+        query = query.filter(models.Printer.printer_type_id == printer_type_id)
+    
+    if status:
+        query = query.filter(models.Printer.status == status)
+    
+    printers = query.offset(skip).limit(limit).all()
+    return printers
+
+
+@app.get("/printers/{printer_id}", response_model=schemas.PrinterRead)
+def get_printer(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Get a specific printer instance"""
+    printer = db.query(models.Printer).options(
+        joinedload(models.Printer.printer_type)
+    ).filter(
+        models.Printer.id == printer_id,
+        models.Printer.owner_id == current_user.owner_id
+    ).first()
+    
+    if not printer:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    
+    return printer
+
+
+@app.put("/printers/{printer_id}", response_model=schemas.PrinterRead)
+def update_printer(
+    printer_id: int,
+    printer_update: schemas.PrinterUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Update a printer instance"""
+    printer = db.get(models.Printer, printer_id)
+    if not printer or printer.owner_id != current_user.owner_id:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    
+    update_data = printer_update.model_dump(exclude_unset=True)
+    
+    # If changing printer type, verify the new type exists
+    if "printer_type_id" in update_data:
+        printer_type = db.get(models.PrinterType, update_data["printer_type_id"])
+        if not printer_type or printer_type.owner_id != current_user.owner_id:
+            raise HTTPException(status_code=404, detail="Printer type not found")
+    
+    # If changing name, check for duplicates
+    if "name" in update_data:
+        from sqlalchemy import func
+        import re
+        
+        # Normalize name: trim and remove ALL spaces for comparison
+        new_name_normalized = update_data["name"].strip()  # Keep spaces for display
+        new_name_normalized_lower = re.sub(r'\s+', '', update_data["name"].strip()).lower()  # Remove all spaces for uniqueness
+        
+        # For god users (owner_id=None), we need to handle NULL comparison differently
+        if current_user.owner_id is None:
+            existing_printer = db.query(models.Printer).filter(
+                models.Printer.id != printer_id,  # Exclude current printer
+                models.Printer.name_normalized == new_name_normalized_lower,
+                models.Printer.owner_id.is_(None)
+            ).first()
+        else:
+            existing_printer = db.query(models.Printer).filter(
+                models.Printer.id != printer_id,  # Exclude current printer
+                models.Printer.name_normalized == new_name_normalized_lower,
+                models.Printer.owner_id == current_user.owner_id
+            ).first()
+        
+        if existing_printer:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"You already have a printer named '{update_data['name']}'. Each printer must have a unique name. Please choose a different name or add a number (e.g., '{update_data['name']} 2')."
+            )
+        
+        # Update with normalized name
+        update_data["name"] = new_name_normalized  # Display name (trimmed)
+        update_data["name_normalized"] = new_name_normalized_lower  # Lowercase, no spaces for constraint
+    
+    for field, value in update_data.items():
+        setattr(printer, field, value)
+    
+    db.commit()
+    db.refresh(printer)
+    
+    # Reload with relationships
+    printer = db.query(models.Printer).options(
+        joinedload(models.Printer.printer_type)
+    ).filter(models.Printer.id == printer_id).first()
+    
+    return printer
+
+
+@app.delete("/printers/{printer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_printer(
+    printer_id: int,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user)
+):
+    """Delete a printer instance"""
+    printer = db.get(models.Printer, printer_id)
+    if not printer or printer.owner_id != current_user.owner_id:
+        raise HTTPException(status_code=404, detail="Printer not found")
+    
+    # Check if printer is currently printing
+    if printer.status == "printing":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete printer: Currently printing"
+        )
+    
+    db.delete(printer)
+    db.commit()
+    return
+
+
+# ---------- Legacy Printer Profiles (for backward compatibility) ---------- #
+
+@app.post("/printer_profiles", response_model=schemas.PrinterProfileRead, status_code=status.HTTP_201_CREATED)
+def create_printer_profile(printer: schemas.PrinterProfileCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    """DEPRECATED: Create a new printer profile (use /printers instead)"""
+    import re
+    
+    # Apply same normalization as the new endpoint
+    printer_name_normalized = printer.name.strip()  # Keep spaces for display
+    printer_name_normalized_lower = re.sub(r'\s+', '', printer.name.strip()).lower()  # Remove all spaces for uniqueness
+    
+    # Check for duplicates using the same logic as the new endpoint
+    if current_user.owner_id is None:
+        existing_printer = db.query(models.Printer).filter(
+            models.Printer.name_normalized == printer_name_normalized_lower,
+            models.Printer.owner_id.is_(None)
+        ).first()
+    else:
+        existing_printer = db.query(models.Printer).filter(
+            models.Printer.name_normalized == printer_name_normalized_lower,
+            models.Printer.owner_id == current_user.owner_id
+        ).first()
+    
+    if existing_printer:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"You already have a printer named '{printer.name}'. Each printer must have a unique name. Please choose a different name or add a number (e.g., '{printer.name} 2')."
+        )
+    
+    # For backward compatibility, create a printer type and instance
+    printer_type = models.PrinterType(
+        brand=printer.manufacturer or "Unknown",
+        model=printer.model or printer.name,
+        expected_life_hours=printer.expected_life_hours,
+        owner_id=current_user.owner_id
+    )
+    db.add(printer_type)
+    db.flush()
+    
+    db_printer = models.Printer(
+        printer_type_id=printer_type.id,
+        name=printer_name_normalized,
+        name_normalized=printer_name_normalized_lower,  # Use the properly normalized version
+        purchase_price_eur=printer.price_eur,
+        working_hours=printer.working_hours,
+        owner_id=current_user.owner_id
+    )
+    db.add(db_printer)
+    db.commit()
+    db.refresh(db_printer)
+    
+    # Return in legacy format
     return db_printer
 
 
 @app.get("/printer_profiles", response_model=list[schemas.PrinterProfileRead])
 def list_printer_profiles(skip: int = 0, limit: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """List all printer profiles (any authenticated user can view printer profiles)"""
-    printers = db.query(models.PrinterProfile).offset(skip).limit(limit).all()
+    """DEPRECATED: List all printer profiles (use /printers instead)"""
+    printers = db.query(models.Printer).filter(
+        models.Printer.owner_id == current_user.owner_id
+    ).offset(skip).limit(limit).all()
     return printers
 
 
 @app.get("/printer_profiles/{printer_id}", response_model=schemas.PrinterProfileRead)
 def get_printer_profile(printer_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Get a specific printer profile"""
-    printer = db.get(models.PrinterProfile, printer_id)
-    if not printer:
+    """DEPRECATED: Get a specific printer profile (use /printers/{id} instead)"""
+    printer = db.get(models.Printer, printer_id)
+    if not printer or printer.owner_id != current_user.owner_id:
         raise HTTPException(status_code=404, detail="Printer profile not found")
     return printer
 @app.get("/printer_profiles/{profile_id}", response_model=schemas.PrinterProfileRead)
@@ -1693,26 +2140,90 @@ def _calculate_print_job_cogs(job: models.PrintJob, db: Session) -> float:
     """Calculate COGS for a print job."""
     total_cogs = 0.0
     
+    logger.info(f"=== Calculating COGS for job {job.id} ===")
+    
     # Products cost
+    products_cost = 0.0
     for pjp in job.products:
         if pjp.product:
-            total_cogs += pjp.product.cop * pjp.items_qty
+            product_cost = pjp.product.cop * pjp.items_qty
+            products_cost += product_cost
+            logger.info(f"Product {pjp.product.name}: COP={pjp.product.cop}, qty={pjp.items_qty}, cost={product_cost}")
+    total_cogs += products_cost
+    logger.info(f"Total products cost: {products_cost}")
     
     # Printers cost  
-    for pjp in job.printers:
-        # Use stored printer data if available
+    printers_cost = 0.0
+    # Single printer cost calculation
+    pjp = job.printers[0] if job.printers else None
+    if pjp:
+        logger.info(f"Processing printer association: type_id={pjp.printer_type_id}, "
+                   f"price_eur={pjp.printer_price_eur}, hours={pjp.hours_each}")
+        # Use stored printer data if available (when printer has been assigned)
         if pjp.printer_price_eur is not None and pjp.printer_expected_life_hours is not None:
+            logger.info(f"Path 1: Using stored printer data")
             if pjp.printer_expected_life_hours > 0:
                 hourly_cost = pjp.printer_price_eur / pjp.printer_expected_life_hours
-                total_cogs += hourly_cost * pjp.hours_each * pjp.printers_qty
-        elif pjp.printer_profile:
-            # Fallback to current printer profile if stored data not available
-            if pjp.printer_profile.expected_life_hours > 0:
-                hourly_cost = pjp.printer_profile.price_eur / pjp.printer_profile.expected_life_hours
-                total_cogs += hourly_cost * pjp.hours_each * pjp.printers_qty
+                printer_cost = hourly_cost * pjp.hours_each
+                printers_cost += printer_cost
+                logger.info(f"Hourly cost: {hourly_cost}, printer cost: {printer_cost}")
+        elif pjp.assigned_printer_id and pjp.assigned_printer:
+            logger.info(f"Path 2: Using assigned printer data")
+            # Use assigned printer data
+            if pjp.assigned_printer.printer_type and pjp.assigned_printer.printer_type.expected_life_hours > 0:
+                hourly_cost = pjp.assigned_printer.purchase_price_eur / pjp.assigned_printer.printer_type.expected_life_hours
+                printer_cost = hourly_cost * pjp.hours_each
+                printers_cost += printer_cost
+                logger.info(f"Hourly cost: {hourly_cost}, printer cost: {printer_cost}")
+        elif pjp.printer_type_id:
+            logger.info(f"Path 3: Calculating average from printer type")
+            # No specific printer assigned yet - calculate average from all printers of this type
+            printer_type = db.get(models.PrinterType, pjp.printer_type_id)
+            if printer_type and printer_type.expected_life_hours > 0:
+                logger.info(f"Printer type: {printer_type.brand} {printer_type.model}, expected_life={printer_type.expected_life_hours}")
+                # Get the owner_id from the job to filter printers correctly
+                owner_id = job.owner_id
+                logger.info(f"Owner ID: {owner_id}")
+                
+                # Get average price from all printers of this type owned by the user
+                # Handle NULL owner_id for god users
+                if owner_id is None:
+                    avg_price_result = db.query(func.avg(models.Printer.purchase_price_eur)).filter(
+                        models.Printer.printer_type_id == pjp.printer_type_id,
+                        models.Printer.owner_id.is_(None)
+                    ).scalar()
+                else:
+                    avg_price_result = db.query(func.avg(models.Printer.purchase_price_eur)).filter(
+                        models.Printer.printer_type_id == pjp.printer_type_id,
+                        models.Printer.owner_id == owner_id
+                    ).scalar()
+                
+                logger.info(f"Average price query result: {avg_price_result}")
+                
+                if avg_price_result and avg_price_result > 0:
+                    avg_hourly_cost = avg_price_result / printer_type.expected_life_hours
+                    printer_cost = avg_hourly_cost * pjp.hours_each
+                    printers_cost += printer_cost
+                    logger.info(f"Calculated printer cost for type {printer_type.brand} {printer_type.model}: "
+                              f"avg_price={avg_price_result:.2f}, hourly_cost={avg_hourly_cost:.3f}, "
+                              f"hours={pjp.hours_each}, total_cost={printer_cost}")
+                else:
+                    # No printers of this type exist yet, can't calculate cost
+                    logger.warning(f"No printers found for printer type {printer_type.brand} {printer_type.model} "
+                                 f"(ID: {pjp.printer_type_id}), printer cost will be 0 in COGS")
+            else:
+                logger.warning(f"Printer type not found or has 0 expected life hours")
+        else:
+            logger.warning(f"No printer data available for calculation")
+    
+    total_cogs += printers_cost
+    logger.info(f"Total printers cost: {printers_cost}")
     
     # Packaging
     total_cogs += job.packaging_cost_eur
+    logger.info(f"Packaging cost: {job.packaging_cost_eur}")
+    
+    logger.info(f"=== TOTAL COGS: {total_cogs:.2f} ===")
     
     return round(total_cogs, 2)
 
@@ -1808,7 +2319,8 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
     db_job = models.PrintJob(
         name=job.name,
         packaging_cost_eur=job.packaging_cost_eur,
-        status=job.status
+        status=job.status,
+        owner_id=current_user.owner_id  # Set owner_id for multi-tenancy
     )
     db.add(db_job)
     db.flush()  # Get the ID without committing
@@ -1825,7 +2337,12 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
             )
     
     # add associations
-    assoc_products = [models.PrintJobProduct(print_job_id=db_job.id, product_id=it.product_id, items_qty=it.items_qty) for it in job.products]
+    assoc_products = [models.PrintJobProduct(
+        print_job_id=db_job.id, 
+        product_id=it.product_id, 
+        items_qty=it.items_qty,
+        owner_id=current_user.owner_id
+    ) for it in job.products]
     
     # Calculate total print time for all products
     total_print_hours = 0.0
@@ -1841,58 +2358,40 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
     if total_print_hours < 0.083:
         total_print_hours = 0.083
     
-    # Create printer associations with stored printer data
-    assoc_printers = []
-    usage_history_records = []
-    for printer_item in job.printers:
-        # Look up printer profile to copy its data
-        printer_profile = db.get(models.PrinterProfile, printer_item.printer_profile_id)
-        if printer_profile:
-            printer_assoc = models.PrintJobPrinter(
-                print_job_id=db_job.id,
-                printer_profile_id=printer_item.printer_profile_id,
-                printers_qty=printer_item.printers_qty,
-                hours_each=total_print_hours,  # Use calculated total print hours
-                # Store printer data at time of job creation
-                printer_name=printer_profile.name,
-                printer_manufacturer=printer_profile.manufacturer,
-                printer_model=printer_profile.model,
-                printer_price_eur=printer_profile.price_eur,
-                printer_expected_life_hours=printer_profile.expected_life_hours
-            )
-            assoc_printers.append(printer_assoc)
-            
-            # Update printer working hours
-            total_hours_used = total_print_hours * printer_item.printers_qty
-            printer_profile.working_hours = (printer_profile.working_hours or 0) + total_hours_used
-            
-            # Create usage history record
-            now = datetime.now()
-            week_year = int(now.strftime("%Y%V"))  # Use %V for ISO week number
-            month_year = int(now.strftime("%Y%m"))
-            quarter_year = int(f"{now.year}{(now.month-1)//3 + 1}")
-            
-            usage_history = models.PrinterUsageHistory(
-                printer_profile_id=printer_item.printer_profile_id,
-                print_job_id=db_job.id,
-                hours_used=printer_item.hours_each,
-                printers_qty=printer_item.printers_qty,
-                week_year=week_year,
-                month_year=month_year,
-                quarter_year=quarter_year
-            )
-            usage_history_records.append(usage_history)
-        else:
-            # Handle case where printer profile doesn't exist
-            logger.warning(f"Printer profile {printer_item.printer_profile_id} not found when creating print job")
-            printer_assoc = models.PrintJobPrinter(
-                print_job_id=db_job.id,
-                printer_profile_id=printer_item.printer_profile_id,
-                printers_qty=printer_item.printers_qty,
-                hours_each=total_print_hours  # Use calculated total print hours
-            )
-            assoc_printers.append(printer_assoc)
-    db.add_all(assoc_products + assoc_printers + usage_history_records)
+    # Validate only one printer type per job
+    if len(job.printers) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Each print job must have exactly one printer type"
+        )
+    
+    # Create printer type association (no specific printer assigned yet)
+    printer_item = job.printers[0]
+    printer_type = db.get(models.PrinterType, printer_item.printer_type_id)
+    if not printer_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Printer type with ID {printer_item.printer_type_id} not found"
+        )
+    
+    printer_assoc = models.PrintJobPrinter(
+        print_job_id=db_job.id,
+        printer_type_id=printer_item.printer_type_id,
+        hours_each=total_print_hours,  # Use calculated total print hours
+        # Store printer type data at time of job creation
+        printer_manufacturer=printer_type.brand,
+        printer_model=printer_type.model,
+        printer_expected_life_hours=printer_type.expected_life_hours,
+        owner_id=current_user.owner_id
+        # Note: printer_name, printer_price_eur, and assigned_printer_id will be set when job starts
+    )
+    assoc_printers = [printer_assoc]
+    
+    # Set the printer type on the job itself for COGS calculation
+    if job.printers:
+        db_job.printer_type_id = job.printers[0].printer_type_id
+    
+    db.add_all(assoc_products + assoc_printers)
     db.flush()  # This makes the associations available without committing
     
     # Deduct filament inventory
@@ -1910,7 +2409,12 @@ def create_print_job(job: schemas.PrintJobCreate, request: Request, db: Session 
     
     # Now we can commit the transaction
     db.commit()
-    db.refresh(db_job)
+    
+    # Reload the job with all relationships for COGS calculation
+    db_job = db.query(models.PrintJob).options(
+        joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
+        joinedload(models.PrintJob.printers).joinedload(models.PrintJobPrinter.printer_type)
+    ).filter(models.PrintJob.id == db_job.id).first()
     
     # Calculate COGS
     db_job.calculated_cogs_eur = _calculate_print_job_cogs(db_job, db)
@@ -1953,7 +2457,7 @@ def list_print_jobs(skip: int = 0, limit: int = 100, db: Session = Depends(get_d
     # Now return the updated list with all relationships
     jobs = db.query(models.PrintJob).options(
         joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
-        joinedload(models.PrintJob.printers).joinedload(models.PrintJobPrinter.printer_profile)
+        joinedload(models.PrintJob.printers).joinedload(models.PrintJobPrinter.printer)
     ).order_by(models.PrintJob.created_at.desc()).offset(skip).limit(limit).all()
     return jobs
 
@@ -1998,23 +2502,42 @@ def delete_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), cur
 @app.patch("/print_jobs/{print_job_id}/status", response_model=schemas.PrintJobRead)
 def update_print_job_status(print_job_id: uuid.UUID, status_update: schemas.PrintJobStatusUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Update the status of a print job."""
-    job = db.get(models.PrintJob, print_job_id)
+    job = db.query(models.PrintJob).options(
+        joinedload(models.PrintJob.printers)
+    ).filter(models.PrintJob.id == print_job_id).first()
+    
     if not job:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Print Job with ID {print_job_id} not found")
     
+    old_status = job.status
     job.status = status_update.status
+    
+    # If job is being completed or failed, release assigned printers
+    if old_status == "printing" and status_update.status in ["completed", "failed"]:
+        for job_printer in job.printers:
+            if job_printer.assigned_printer_id:
+                assigned_printer = db.get(models.Printer, job_printer.assigned_printer_id)
+                if assigned_printer:
+                    assigned_printer.status = "idle"
+                    logger.info(f"Released printer {assigned_printer.name} back to idle after job {status_update.status}")
+    
     db.commit()
     db.refresh(job)
     return job
 
 
 @app.put("/print_jobs/{print_job_id}/start", response_model=schemas.PrintJobRead)
-def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    """Start a print job by moving it from pending to printing status."""
+def start_print_job(
+    print_job_id: uuid.UUID, 
+    start_data: Optional[schemas.PrintJobStart] = None,
+    db: Session = Depends(get_db), 
+    current_user: models.User = Depends(get_current_user)
+):
+    """Start a print job by moving it from pending to printing status and assigning available printers."""
     # Get the job with all relationships
     job = db.query(models.PrintJob).options(
         joinedload(models.PrintJob.products).joinedload(models.PrintJobProduct.product),
-        joinedload(models.PrintJob.printers)
+        joinedload(models.PrintJob.printers).joinedload(models.PrintJobPrinter.printer_type)
     ).filter(models.PrintJob.id == print_job_id).first()
     
     if not job:
@@ -2030,45 +2553,101 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
             detail=f"Cannot start job with status '{job.status}'. Only pending jobs can be started."
         )
     
-    # Check printer availability - ensure no printer is double-booked
-    conflicts = []
-    for job_printer in job.printers:
-        if job_printer.printer_profile_id:
-            # First, auto-complete any overdue jobs for this printer
-            overdue_jobs = db.query(models.PrintJob).join(
-                models.PrintJobPrinter
-            ).filter(
-                models.PrintJob.status == "printing",
-                models.PrintJobPrinter.printer_profile_id == job_printer.printer_profile_id,
-                models.PrintJob.estimated_completion_at != None,
-                models.PrintJob.estimated_completion_at < datetime.utcnow()
-            ).all()
-            
-            for overdue_job in overdue_jobs:
-                logger.info(f"Auto-completing overdue job {overdue_job.id} before starting new job")
-                overdue_job.status = "completed"
-            
-            if overdue_jobs:
-                db.commit()
-            
-            # Check if this printer is currently being used by another printing job
-            active_jobs = db.query(models.PrintJob).join(
-                models.PrintJobPrinter
-            ).filter(
-                models.PrintJob.status == "printing",
-                models.PrintJobPrinter.printer_profile_id == job_printer.printer_profile_id,
-                models.PrintJob.id != print_job_id  # Exclude current job
-            ).first()
-            
-            if active_jobs:
-                printer_name = job_printer.printer_name or f"Printer ID {job_printer.printer_profile_id}"
-                conflicts.append(printer_name)
+    # Auto-complete any overdue jobs
+    overdue_jobs = db.query(models.PrintJob).filter(
+        models.PrintJob.status == "printing",
+        models.PrintJob.estimated_completion_at != None,
+        models.PrintJob.estimated_completion_at < datetime.utcnow()
+    ).all()
     
-    if conflicts:
+    for overdue_job in overdue_jobs:
+        logger.info(f"Auto-completing overdue job {overdue_job.id} before starting new job")
+        overdue_job.status = "completed"
+        # Update printer status back to idle
+        for printer_assoc in overdue_job.printers:
+            if printer_assoc.assigned_printer_id:
+                assigned_printer = db.get(models.Printer, printer_assoc.assigned_printer_id)
+                if assigned_printer:
+                    assigned_printer.status = "idle"
+    
+    if overdue_jobs:
+        db.commit()
+    
+    # Assign printer based on provided ID or auto-assign
+    printer_assignments = []
+    
+    # There should be exactly one printer requirement
+    if len(job.printers) != 1:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"The following printers are currently in use: {', '.join(conflicts)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid job configuration: must have exactly one printer requirement"
         )
+    
+    job_printer = job.printers[0]
+    
+    if start_data and start_data.printer_id:
+        # Manual printer selection mode
+        logger.info(f"Starting job {job.id} with manually selected printer: {start_data.printer_id}")
+        
+        printer = db.get(models.Printer, start_data.printer_id)
+        if not printer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Printer with ID {start_data.printer_id} not found"
+            )
+        if printer.status != "idle":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Printer {printer.name} is not available (status: {printer.status})"
+            )
+        if printer.owner_id != current_user.owner_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied to printer {printer.name}"
+            )
+        
+        # Verify printer is of the correct type
+        if printer.printer_type_id != job_printer.printer_type_id:
+            printer_type = job_printer.printer_type
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Selected printer is not of the required type ({printer_type.brand} {printer_type.model})"
+            )
+        
+        # Assign the selected printer
+        printer.status = "printing"
+        job_printer.assigned_printer_id = printer.id
+        job_printer.printer_name = printer.name
+        job_printer.printer_price_eur = printer.purchase_price_eur
+        printer_assignments.append(printer.name)
+    else:
+        # Auto-assign mode - find an available printer of the correct type
+        if not job_printer.printer_type_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No printer type specified for job"
+            )
+            
+        # Find the printer with lowest working hours (fairest distribution)
+        available_printer = db.query(models.Printer).filter(
+            models.Printer.printer_type_id == job_printer.printer_type_id,
+            models.Printer.status == "idle",
+            models.Printer.owner_id == current_user.owner_id
+        ).order_by(models.Printer.working_hours.asc()).first()
+        
+        if not available_printer:
+            printer_type = job_printer.printer_type
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"No available {printer_type.brand} {printer_type.model} printer"
+            )
+        
+        # Assign the printer
+        available_printer.status = "printing"
+        job_printer.assigned_printer_id = available_printer.id
+        job_printer.printer_name = available_printer.name
+        job_printer.printer_price_eur = available_printer.purchase_price_eur
+        printer_assignments.append(available_printer.name)
     
     # Calculate total print time (hours)
     total_print_hours = 0.0
@@ -2086,6 +2665,34 @@ def start_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curr
         total_print_hours = 0.083
     
     logger.info(f"Starting job {job.id} with total print time: {total_print_hours} hours")
+    logger.info(f"Assigned printers: {', '.join(printer_assignments)}")
+    
+    # Update hours_each on printer associations
+    for job_printer in job.printers:
+        job_printer.hours_each = total_print_hours
+    
+    # Create usage history records for assigned printers
+    now = datetime.now()
+    week_year = int(now.strftime("%Y%V"))  # Use %V for ISO week number
+    month_year = int(now.strftime("%Y%m"))
+    quarter_year = int(f"{now.year}{(now.month-1)//3 + 1}")
+    
+    # Update printer working hours for the single assigned printer
+    if job_printer.assigned_printer_id:
+        assigned_printer = db.get(models.Printer, job_printer.assigned_printer_id)
+        if assigned_printer:
+            assigned_printer.working_hours = (assigned_printer.working_hours or 0) + total_print_hours
+            
+            # Create usage history record
+            usage_history = models.PrinterUsageHistory(
+                printer_id=job_printer.assigned_printer_id,
+                print_job_id=job.id,
+                hours_used=total_print_hours,
+                week_year=week_year,
+                month_year=month_year,
+                quarter_year=quarter_year
+            )
+            db.add(usage_history)
     
     # Update job status and timestamps
     # Use UTC time consistently 
@@ -2127,6 +2734,14 @@ def stop_print_job(print_job_id: uuid.UUID, db: Session = Depends(get_db), curre
         )
     
     logger.info(f"Stopping job {job.id} and moving back to queue")
+    
+    # Release assigned printers
+    for job_printer in job.printers:
+        if job_printer.assigned_printer_id:
+            assigned_printer = db.get(models.Printer, job_printer.assigned_printer_id)
+            if assigned_printer:
+                assigned_printer.status = "idle"
+                logger.info(f"Released printer {assigned_printer.name} back to idle")
     
     # Reset job status and clear timestamps
     job.status = "pending"
@@ -2208,33 +2823,38 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
             if pjp.product:
                 total_print_hours += pjp.product.print_time_hrs * pjp.items_qty
         
+        # Validate only one printer type
+        if len(update_fields["printers"]) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Each print job must have exactly one printer type"
+            )
+        
         # Delete existing printer associations
         db.query(models.PrintJobPrinter).filter(models.PrintJobPrinter.print_job_id == db_job.id).delete()
         
-        # Add new printer associations with calculated hours
-        for printer_data in update_fields["printers"]:
-            printer_profile = db.get(models.PrinterProfile, printer_data['printer_profile_id'])
-            if printer_profile:
-                db_printer_job = models.PrintJobPrinter(
-                    print_job_id=db_job.id,
-                    printer_profile_id=printer_data['printer_profile_id'],
-                    printers_qty=printer_data['printers_qty'],
-                    hours_each=total_print_hours,  # Use calculated total print hours
-                    # Store printer data at time of job creation
-                    printer_name=printer_profile.name,
-                    printer_manufacturer=printer_profile.manufacturer,
-                    printer_model=printer_profile.model,
-                    printer_price_eur=printer_profile.price_eur,
-                    printer_expected_life_hours=printer_profile.expected_life_hours
-                )
-            else:
-                db_printer_job = models.PrintJobPrinter(
-                    print_job_id=db_job.id,
-                    printer_profile_id=printer_data['printer_profile_id'],
-                    printers_qty=printer_data['printers_qty'],
-                    hours_each=total_print_hours  # Use calculated total print hours
-                )
-            db.add(db_printer_job)
+        # Add new printer association with calculated hours
+        printer_data = update_fields["printers"][0]
+        printer_type = db.get(models.PrinterType, printer_data['printer_type_id'])
+        if not printer_type:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Printer type with ID {printer_data['printer_type_id']} not found"
+            )
+        
+        db_printer_job = models.PrintJobPrinter(
+            print_job_id=db_job.id,
+            printer_type_id=printer_data['printer_type_id'],
+            hours_each=total_print_hours,  # Use calculated total print hours
+            # Store printer type data at time of job update
+            printer_manufacturer=printer_type.brand,
+            printer_model=printer_type.model,
+            printer_expected_life_hours=printer_type.expected_life_hours
+        )
+        db.add(db_printer_job)
+        
+        # Update the printer type on the job itself
+        db_job.printer_type_id = printer_data['printer_type_id']
 
     # Flush changes to get the updated job state without committing
     db.flush()
