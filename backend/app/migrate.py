@@ -81,8 +81,22 @@ class MigrationRunner:
         pending = []
         
         for migration_file in migration_files:
+            # Skip rollback files
+            if "_rollback" in migration_file.name:
+                continue
+                
             version = self.extract_version_from_filename(migration_file.name)
             if version and version not in applied_versions:
+                # For SQLite, prefer _sqlite.sql versions if they exist
+                if "_sqlite.sql" not in migration_file.name:
+                    # Check if a SQLite-specific version exists
+                    sqlite_version = migration_file.with_name(
+                        migration_file.name.replace(".sql", "_sqlite.sql")
+                    )
+                    if sqlite_version.exists():
+                        # Skip the non-SQLite version, use SQLite version instead
+                        continue
+                        
                 pending.append(migration_file)
                 
         return pending
