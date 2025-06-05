@@ -272,31 +272,48 @@ update_changelog_file() {
 # Build and push Docker images
 build_and_push_images() {
     local version=$1
-    print_status "Building and pushing Docker images for version $version..."
+    print_status "Building and pushing multi-architecture Docker images for version $version..."
     
-    # Build backend image
-    print_status "Building backend image..."
-    docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" \
-        ./backend
+    # Use the multi-arch build script
+    print_status "Using docker-build-multiarch.sh for multi-platform builds..."
     
-    # Build frontend image
-    print_status "Building frontend image..."
-    docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" \
-        ./frontend
+    # Set environment variables for the build script
+    export REGISTRY="${REGISTRY}"
+    export NAMESPACE="${NAMESPACE}"
+    export VERSION="${version}"
+    export PUSH="true"
+    export PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
     
-    # Push images
-    print_status "Pushing images to registry..."
-    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}"
-    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}"
-    
-    # Tag and push as latest
-    docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" \
-        "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-latest"
-    docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" \
-        "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-latest"
-    
-    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-latest"
-    docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-latest"
+    # Execute multi-arch build script
+    if [[ -f "./scripts/docker-build-multiarch.sh" ]]; then
+        print_status "Building for platforms: ${PLATFORMS}"
+        ./scripts/docker-build-multiarch.sh
+    else
+        print_error "Multi-arch build script not found at ./scripts/docker-build-multiarch.sh"
+        print_warning "Falling back to single-architecture builds..."
+        
+        # Fallback to single-arch builds
+        docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:database-${version}" ./database
+        docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" ./backend
+        docker build -t "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" ./frontend
+        
+        # Push single-arch images
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:database-${version}"
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}"
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}"
+        
+        # Tag and push as latest
+        docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:database-${version}" \
+            "${REGISTRY}/${NAMESPACE}/printfarmhq:database-latest"
+        docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-${version}" \
+            "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-latest"
+        docker tag "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" \
+            "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-latest"
+        
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:database-latest"
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:backend-latest"
+        docker push "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-latest"
+    fi
     
     print_success "Docker images built and pushed successfully"
 }

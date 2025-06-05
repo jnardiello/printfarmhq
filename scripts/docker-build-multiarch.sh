@@ -7,6 +7,7 @@ NAMESPACE="${NAMESPACE:-jnardiello}"
 VERSION="${VERSION:-latest}"
 PUSH="${PUSH:-false}"
 PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
+BUILD_ARGS="${BUILD_ARGS:-}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -105,11 +106,11 @@ main() {
     check_buildx
     setup_builder
     
-    # Build backend base image
+    # Build database image
     build_multiarch_image \
-        "backend/Dockerfile.base" \
-        "backend" \
-        "backend-base" \
+        "database/Dockerfile" \
+        "database" \
+        "database" \
         ""
     
     # Build backend app image
@@ -117,20 +118,13 @@ main() {
         "backend/Dockerfile" \
         "backend" \
         "backend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
+        ""
     
     # Build backend test image
     build_multiarch_image \
         "backend/Dockerfile.test" \
         "backend" \
         "backend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
-    
-    # Build frontend base image
-    build_multiarch_image \
-        "frontend/Dockerfile.base" \
-        "frontend" \
-        "frontend-base" \
         ""
     
     # Build frontend app image
@@ -138,14 +132,14 @@ main() {
         "frontend/Dockerfile" \
         "frontend" \
         "frontend" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
+        "--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
     
     # Build frontend test image
     build_multiarch_image \
         "frontend/Dockerfile.test" \
         "frontend" \
         "frontend-test" \
-        "--build-arg REGISTRY=${REGISTRY} --build-arg NAMESPACE=${NAMESPACE} --build-arg BASE_TAG=latest"
+        ""
     
     print_status "Multi-architecture build process completed successfully!"
 }
