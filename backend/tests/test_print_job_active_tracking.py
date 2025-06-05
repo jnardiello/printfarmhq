@@ -5,7 +5,7 @@ from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from sqlalchemy.orm import Session
 from fastapi.testclient import TestClient
-from app.models import PrintJob, PrintJobPrinter, PrinterProfile, Product, User
+from app.models import PrintJob, PrintJobPrinter, Printer, PrinterType, Product, User
 from app.database import SessionLocal
 from app.main import app
 
@@ -13,12 +13,17 @@ from app.main import app
 @pytest.fixture
 def db():
     """Create a database session for testing."""
+    from app.database import Base, engine
+    # Create tables
+    Base.metadata.create_all(bind=engine)
     session = SessionLocal()
     try:
         yield session
     finally:
         session.rollback()
         session.close()
+        # Clean up tables after test
+        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
@@ -29,7 +34,10 @@ def test_user(db: Session):
         name="Test User",
         hashed_password="hashed",
         is_active=True,
-        is_admin=True
+        is_admin=True,
+        is_superadmin=False,
+        is_god_user=False,
+        token_version=1
     )
     db.add(user)
     db.commit()
@@ -40,12 +48,20 @@ def test_user(db: Session):
 @pytest.fixture
 def test_printer(db: Session, test_user: User):
     """Create a test printer profile."""
-    printer = PrinterProfile(
-        name="Test Printer",
-        manufacturer="Test Manufacturer",
+    # Create printer type first
+    printer_type = PrinterType(
+        brand="Test Manufacturer",
         model="Test Model",
-        price_eur=1000.0,
-        expected_life_hours=5000.0,
+        expected_life_hours=5000.0
+    )
+    db.add(printer_type)
+    db.flush()
+    
+    printer = Printer(
+        name="Test Printer",
+        name_normalized="testprinter",
+        printer_type_id=printer_type.id,
+        purchase_price_eur=1000.0,
         working_hours=0.0,
         owner_id=test_user.id
     )
@@ -74,7 +90,7 @@ def test_product(db: Session, test_user: User):
 class TestPrintJobActiveTracking:
     """Test print job active tracking functionality."""
 
-    def test_start_print_job_success(self, db: Session, test_user: User, test_printer: PrinterProfile, test_product: Product):
+    def test_start_print_job_success(self, db: Session, test_user: User, test_printer: Printer, test_product: Product):
         """Test successfully starting a print job."""
         # Create a pending print job
         job = PrintJob(
@@ -90,9 +106,9 @@ class TestPrintJobActiveTracking:
         printer_assoc = PrintJobPrinter(
             print_job_id=job.id,
             printer_profile_id=test_printer.id,
-            printers_qty=1,
             hours_each=2.0,
-            printer_name=test_printer.name
+            printer_name=test_printer.name,
+            owner_id=test_user.id
         )
         db.add(printer_assoc)
         db.commit()
@@ -108,7 +124,7 @@ class TestPrintJobActiveTracking:
         assert job.started_at is not None
         assert job.estimated_completion_at is not None
 
-    def test_printer_conflict_prevention(self, db: Session, test_user: User, test_printer: PrinterProfile, test_product: Product):
+    def test_printer_conflict_prevention(self, db: Session, test_user: User, test_printer: Printer, test_product: Product):
         """Test that printer conflicts are properly detected."""
         # Create first print job that's currently printing
         job1 = PrintJob(
@@ -124,8 +140,8 @@ class TestPrintJobActiveTracking:
         printer_assoc1 = PrintJobPrinter(
             print_job_id=job1.id,
             printer_profile_id=test_printer.id,
-            printers_qty=1,
-            hours_each=2.0
+            hours_each=2.0,
+            owner_id=test_user.id
         )
         db.add(printer_assoc1)
         db.commit()
@@ -142,8 +158,8 @@ class TestPrintJobActiveTracking:
         printer_assoc2 = PrintJobPrinter(
             print_job_id=job2.id,
             printer_profile_id=test_printer.id,
-            printers_qty=1,
-            hours_each=1.0
+            hours_each=1.0,
+            owner_id=test_user.id
         )
         db.add(printer_assoc2)
         db.commit()
@@ -160,17 +176,33 @@ class TestPrintJobActiveTracking:
 
     def test_multiple_printers_no_conflict(self, db: Session, test_user: User, test_product: Product):
         """Test that different printers can run simultaneously."""
+        # Create printer types
+        printer_type1 = PrinterType(
+            brand="Test Manufacturer",
+            model="Model A",
+            expected_life_hours=5000.0
+        )
+        printer_type2 = PrinterType(
+            brand="Test Manufacturer", 
+            model="Model B",
+            expected_life_hours=5000.0
+        )
+        db.add_all([printer_type1, printer_type2])
+        db.flush()
+        
         # Create two different printers
-        printer1 = PrinterProfile(
+        printer1 = Printer(
             name="Printer 1",
-            price_eur=1000.0,
-            expected_life_hours=5000.0,
+            name_normalized="printer1",
+            printer_type_id=printer_type1.id,
+            purchase_price_eur=1000.0,
             owner_id=test_user.id
         )
-        printer2 = PrinterProfile(
+        printer2 = Printer(
             name="Printer 2",
-            price_eur=1500.0,
-            expected_life_hours=5000.0,
+            name_normalized="printer2",
+            printer_type_id=printer_type2.id,
+            purchase_price_eur=1500.0,
             owner_id=test_user.id
         )
         db.add_all([printer1, printer2])
@@ -196,12 +228,14 @@ class TestPrintJobActiveTracking:
         printer_assoc1 = PrintJobPrinter(
             print_job_id=job1.id,
             printer_profile_id=printer1.id,
-            printers_qty=1
+            hours_each=2.0,
+            owner_id=test_user.id
         )
         printer_assoc2 = PrintJobPrinter(
             print_job_id=job2.id,
             printer_profile_id=printer2.id,
-            printers_qty=1
+            hours_each=2.0,
+            owner_id=test_user.id
         )
         db.add_all([printer_assoc1, printer_assoc2])
         db.commit()

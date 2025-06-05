@@ -33,7 +33,7 @@ class TestTimeFormatIntegration:
         
         response = client.post("/products", data=product_data, headers=auth_headers)
         
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         
         # Should store as decimal hours
@@ -45,13 +45,14 @@ class TestTimeFormatIntegration:
         """Test creating product with legacy decimal format."""
         product_data = {
             "name": "Legacy Product",
-            "print_time_hrs": 2.25,
-            "filament_usages": json.dumps([{"filament_id": test_filament.id, "grams_used": 30.0}])
+            "print_time": "2.25",  # API now expects string format
+            "filament_ids": json.dumps([test_filament.id]),
+            "grams_used_list": json.dumps([30.0])
         }
         
         response = client.post("/products", data=product_data, headers=auth_headers)
         
-        assert response.status_code == 200
+        assert response.status_code == 201  # API returns 201 CREATED
         data = response.json()
         
         assert data["print_time_hrs"] == 2.25
@@ -62,7 +63,8 @@ class TestTimeFormatIntegration:
         product_data = {
             "name": "Invalid Product",
             "print_time": "invalid_format",
-            "filament_usages": json.dumps([{"filament_id": test_filament.id, "grams_used": 25.0}])
+            "filament_ids": json.dumps([test_filament.id]),
+            "grams_used_list": json.dumps([25.0])
         }
         
         response = client.post("/products", data=product_data, headers=auth_headers)
@@ -71,29 +73,18 @@ class TestTimeFormatIntegration:
         error_data = response.json()
         assert "Invalid time format" in str(error_data["detail"])
     
-    def test_create_plate_with_new_time_format(self, client, auth_headers, test_filament, db):
-        """Test creating plate with new time format."""
-        # First create a product
-        product = Product(
-            sku="PLATE-TEST",
-            name="Product for Plates",
-            print_time_hrs=2.0,
-            filament_weight_g=50.0
-        )
-        db.add(product)
-        db.commit()
-        db.refresh(product)
-        
-        plate_data = {
-            "name": "Base Plate",
-            "quantity": 1,
+    def test_create_product_with_minute_time_format(self, client, auth_headers, test_filament):
+        """Test creating product with minute-only time format."""
+        product_data = {
+            "name": "Minute Format Product",
             "print_time": "45m",
-            "filament_usages": json.dumps([{"filament_id": test_filament.id, "grams_used": 15.0}])
+            "filament_ids": json.dumps([test_filament.id]),
+            "grams_used_list": json.dumps([15.0])
         }
         
-        response = client.post(f"/products/{product.id}/plates", data=plate_data, headers=auth_headers)
+        response = client.post("/products", data=product_data, headers=auth_headers)
         
-        assert response.status_code == 200
+        assert response.status_code == 201
         data = response.json()
         assert data["print_time_hrs"] == 0.75
         assert data["print_time_formatted"] == "45m"

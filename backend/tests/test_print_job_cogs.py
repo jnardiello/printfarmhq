@@ -25,68 +25,62 @@ def setup_test_data(db):
     db.add_all([filament1, filament2])
     db.flush()
     
-    # Create test products with plates
+    # Create test products with filament usages
     product1 = models.Product(
         name="Test Product 1",
         sku="TEST-001",
         print_time_hrs=2.5,
-        filament_weight_g=0.0,  # Using plates instead
         additional_parts_cost=5.0
     )
     product2 = models.Product(
         name="Test Product 2",
         sku="TEST-002", 
         print_time_hrs=1.5,
-        filament_weight_g=0.0,
         additional_parts_cost=3.0
     )
     db.add_all([product1, product2])
     db.flush()
     
-    # Create plates for products
-    plate1 = models.Plate(
+    # Add filament usage to products
+    usage1 = models.FilamentUsage(
         product_id=product1.id,
-        name="Main Plate",
-        quantity=1,
-        print_time_hrs=2.5
-    )
-    plate2 = models.Plate(
-        product_id=product2.id,
-        name="Single Plate",
-        quantity=1,
-        print_time_hrs=1.5
-    )
-    db.add_all([plate1, plate2])
-    db.flush()
-    
-    # Add filament usage to plates
-    plate1_usage = models.PlateFilamentUsage(
-        plate_id=plate1.id,
         filament_id=filament1.id,
         grams_used=50.0  # 50g × €20/kg = €1.00
     )
-    plate2_usage = models.PlateFilamentUsage(
-        plate_id=plate2.id,
+    usage2 = models.FilamentUsage(
+        product_id=product2.id,
         filament_id=filament2.id,
         grams_used=40.0  # 40g × €25/kg = €1.00
     )
-    db.add_all([plate1_usage, plate2_usage])
+    db.add_all([usage1, usage2])
     
-    # Create test printers
-    printer1 = models.PrinterProfile(
-        name="Test Printer 1",
-        manufacturer="TestMaker",
+    # Create test printer types
+    printer_type1 = models.PrinterType(
+        brand="TestMaker",
         model="Model X",
-        price_eur=1000.0,
-        expected_life_hours=10000.0,  # €0.10/hour
+        expected_life_hours=10000.0
+    )
+    printer_type2 = models.PrinterType(
+        brand="TestMaker",
+        model="Model Y",
+        expected_life_hours=20000.0
+    )
+    db.add_all([printer_type1, printer_type2])
+    db.flush()
+    
+    # Create test printers with proper name normalization
+    printer1 = models.Printer(
+        name="Test Printer 1",
+        name_normalized="testprinter1",
+        printer_type_id=printer_type1.id,
+        purchase_price_eur=1000.0,  # €0.10/hour
         working_hours=0.0
     )
-    printer2 = models.PrinterProfile(
+    printer2 = models.Printer(
         name="Test Printer 2",
-        manufacturer="TestMaker",
-        model="Model Y",
-        price_eur=2000.0,
-        expected_life_hours=20000.0,  # €0.10/hour
+        name_normalized="testprinter2",
+        printer_type_id=printer_type2.id,
+        purchase_price_eur=2000.0,  # €0.10/hour
         working_hours=100.0
     )
     db.add_all([printer1, printer2])
@@ -96,7 +90,7 @@ def setup_test_data(db):
     yield {
         "filaments": [filament1, filament2],
         "products": [product1, product2],
-        "plates": [plate1, plate2],
+        "printer_types": [printer_type1, printer_type2],
         "printers": [printer1, printer2]
     }
     
@@ -104,9 +98,9 @@ def setup_test_data(db):
     db.query(models.PrintJobPrinter).delete()
     db.query(models.PrintJobProduct).delete()
     db.query(models.PrintJob).delete()
-    db.query(models.PlateFilamentUsage).delete()
-    db.query(models.Plate).delete()
-    db.query(models.PrinterProfile).delete()
+    db.query(models.FilamentUsage).delete()
+    db.query(models.Printer).delete()
+    db.query(models.PrinterType).delete()
     db.query(models.Product).delete()
     db.query(models.Filament).delete()
     db.commit()
@@ -125,7 +119,7 @@ def test_print_job_creation_calculates_hours_correctly(client, db, auth_headers,
             {"product_id": test_data["products"][1].id, "items_qty": 3}
         ],
         "printers": [
-            {"printer_profile_id": test_data["printers"][0].id, "printers_qty": 1}
+            {"printer_type_id": test_data["printer_types"][0].id}
         ],
         "packaging_cost_eur": 2.0,
         "status": "pending"
@@ -160,7 +154,7 @@ def test_print_job_cogs_calculation(client, db, auth_headers, setup_test_data):
             {"product_id": test_data["products"][1].id, "items_qty": 1}   # 1 × €4 = €4
         ],
         "printers": [
-            {"printer_profile_id": test_data["printers"][0].id, "printers_qty": 2}  # 2 printers
+            {"printer_type_id": test_data["printer_types"][0].id}
         ],
         "packaging_cost_eur": 3.0,
         "status": "pending"
@@ -174,11 +168,11 @@ def test_print_job_cogs_calculation(client, db, auth_headers, setup_test_data):
     # Expected calculations:
     # Products cost: €12 + €4 = €16
     # Total print time: 2×2.5 + 1×1.5 = 6.5 hours
-    # Printer cost: €0.10/hour × 6.5 hours × 2 printers = €1.30
+    # Printer cost: €0.10/hour × 6.5 hours = €0.65
     # Packaging: €3.00
-    # Total COGS: €16 + €1.30 + €3.00 = €20.30
+    # Total COGS: €16 + €0.65 + €3.00 = €19.65
     
-    assert job["calculated_cogs_eur"] == 20.30
+    assert job["calculated_cogs_eur"] == 19.65
 
 
 def test_print_job_update_recalculates_correctly(client, db, auth_headers, setup_test_data):
@@ -192,7 +186,7 @@ def test_print_job_update_recalculates_correctly(client, db, auth_headers, setup
             {"product_id": test_data["products"][0].id, "items_qty": 1}
         ],
         "printers": [
-            {"printer_profile_id": test_data["printers"][0].id, "printers_qty": 1}
+            {"printer_type_id": test_data["printer_types"][0].id}
         ],
         "packaging_cost_eur": 1.0,
         "status": "pending"
@@ -210,7 +204,7 @@ def test_print_job_update_recalculates_correctly(client, db, auth_headers, setup
             {"product_id": test_data["products"][1].id, "items_qty": 3}   # Added new product
         ],
         "printers": [
-            {"printer_profile_id": test_data["printers"][0].id, "printers_qty": 1}
+            {"printer_type_id": test_data["printer_types"][0].id}
         ]
     }
     
@@ -242,7 +236,7 @@ def test_print_job_double_update_consistency(client, db, auth_headers, setup_tes
             {"product_id": test_data["products"][0].id, "items_qty": 1}
         ],
         "printers": [
-            {"printer_profile_id": test_data["printers"][0].id, "printers_qty": 1}
+            {"printer_type_id": test_data["printer_types"][0].id}
         ],
         "packaging_cost_eur": 0.0,
         "status": "pending"
@@ -275,7 +269,7 @@ def test_print_job_double_update_consistency(client, db, auth_headers, setup_tes
     # Expected calculation:
     # - Products: 5 × €6 = €30
     # - Total print time: 5 × 2.5h = 12.5h (this is stored as hours_each)
-    # - Printer cost: €0.10/hour × 12.5h × 1 printer = €1.25
+    # - Printer cost: €0.10/hour × 12.5h = €1.25
     # - Packaging: €0
     # - Total COGS: €30 + €1.25 + €0 = €31.25
     assert cogs1 == 31.25
@@ -292,7 +286,7 @@ def test_print_job_serialization_includes_nested_data(client, db, auth_headers, 
             {"product_id": test_data["products"][0].id, "items_qty": 1}
         ],
         "printers": [
-            {"printer_profile_id": test_data["printers"][0].id, "printers_qty": 1}
+            {"printer_type_id": test_data["printer_types"][0].id}
         ],
         "packaging_cost_eur": 0.0,
         "status": "pending"
@@ -313,41 +307,31 @@ def test_print_job_serialization_includes_nested_data(client, db, auth_headers, 
     # Check printers have stored data
     assert len(job["printers"]) == 1
     printer_item = job["printers"][0]
-    assert printer_item["printer_name"] == "Test Printer 1"
+    # printer_name is only set when job is started and printer assigned
+    assert printer_item["printer_name"] is None
+    # But printer type data should be stored
     assert printer_item["printer_manufacturer"] == "TestMaker"
     assert printer_item["printer_model"] == "Model X"
-    assert printer_item["printer_price_eur"] == 1000.0
-    assert printer_item["printer_expected_life_hours"] == 10000.0
 
 
-def test_print_job_with_no_printer_profile(client, db, auth_headers, setup_test_data):
-    """Test that print job handles missing printer profile gracefully"""
+def test_print_job_with_no_printer_type(client, db, auth_headers, setup_test_data):
+    """Test that print job handles missing printer type gracefully"""
     test_data = setup_test_data
     
-    # Create print job with non-existent printer ID
+    # Create print job with non-existent printer type ID
     print_job_data = {
         "name": "Missing Printer Test",
         "products": [
             {"product_id": test_data["products"][0].id, "items_qty": 1}
         ],
         "printers": [
-            {"printer_profile_id": 99999, "printers_qty": 1}  # Non-existent ID
+            {"printer_type_id": 99999}  # Non-existent ID
         ],
         "packaging_cost_eur": 0.0,
         "status": "pending"
     }
     
     response = client.post("/print_jobs", json=print_job_data, headers=auth_headers)
-    assert response.status_code == 201
-    
-    job = response.json()
-    
-    # Should still calculate COGS without printer cost
-    # Only product cost (1×€6) + packaging (€0) = €6.00
-    assert job["calculated_cogs_eur"] == 6.0
-    
-    # Printer should have minimal data
-    assert len(job["printers"]) == 1
-    printer_item = job["printers"][0]
-    assert printer_item["printer_name"] is None
-    assert printer_item["printer_manufacturer"] is None
+    # The API correctly rejects invalid printer type IDs
+    assert response.status_code == 400
+    assert "Printer type with ID 99999 not found" in response.json()["detail"]

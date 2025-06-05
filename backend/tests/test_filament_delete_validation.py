@@ -63,23 +63,24 @@ class TestFilamentDeleteValidation:
         product_data = {
             "name": "Test Product",
             "print_time": "2h30m",
-            "filament_usages": f'[{{"filament_id": {filament_id}, "grams_used": 50}}]'
+            "filament_ids": f'[{filament_id}]',
+            "grams_used_list": '[50]'
         }
         
         response = client.post("/products", data=product_data, headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         
         # Try to delete filament - should fail
         response = client.delete(f"/filaments/{filament_id}", headers=auth_headers)
         assert response.status_code == 400
         assert "Cannot delete filament type that is used in products" in response.json()["detail"]
     
-    def test_cannot_delete_filament_used_in_plates(self, client, auth_headers):
-        """Test that filaments used in plates cannot be deleted."""
+    def test_cannot_delete_filament_used_in_multiple_products(self, client, auth_headers):
+        """Test that filaments used in multiple products cannot be deleted."""
         # Create filament
         filament_data = {
             "color": "Gray",
-            "brand": "PlateBrand",
+            "brand": "MultiBrand",
             "material": "ABS",
             "price_per_kg": 28.00,
             "total_qty_kg": 0
@@ -89,27 +90,28 @@ class TestFilamentDeleteValidation:
         assert response.status_code == 201
         filament_id = response.json()["id"]
         
-        # Create a product first
-        product_data = {
-            "name": "Product with Plate",
+        # Create first product using this filament
+        product1_data = {
+            "name": "Product One",
             "print_time": "1h",
-            "filament_usages": '[]'  # No direct filament usage
+            "filament_ids": f'[{filament_id}]',
+            "grams_used_list": '[25]'
         }
         
-        response = client.post("/products", data=product_data, headers=auth_headers)
-        assert response.status_code == 200
-        product_id = response.json()["id"]
+        response = client.post("/products", data=product1_data, headers=auth_headers)
+        assert response.status_code == 201
+        product1_id = response.json()["id"]
         
-        # Create plate using the filament
-        plate_data = {
-            "name": "Test Plate",
-            "quantity": "1",
-            "print_time": "1h",
-            "filament_usages": f'[{{"filament_id": {filament_id}, "grams_used": 30}}]'
+        # Create second product using the same filament
+        product2_data = {
+            "name": "Product Two",
+            "print_time": "45m",
+            "filament_ids": f'[{filament_id}]',
+            "grams_used_list": '[35]'
         }
         
-        response = client.post(f"/products/{product_id}/plates", data=plate_data, headers=auth_headers)
-        assert response.status_code == 200
+        response = client.post("/products", data=product2_data, headers=auth_headers)
+        assert response.status_code == 201
         
         # Try to delete filament - should fail
         response = client.delete(f"/filaments/{filament_id}", headers=auth_headers)

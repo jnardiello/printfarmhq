@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.main import app
 from app.database import SessionLocal, engine
-from app.models import Base, User, Filament, Product, FilamentUsage, Plate
+from app.models import Base, User, Filament, Product, FilamentUsage
 from app.auth import get_password_hash, create_access_token
 from datetime import timedelta
 import json
@@ -18,7 +18,6 @@ def test_db():
     
     # Clean up before test
     db.query(FilamentUsage).delete()
-    db.query(Plate).delete()
     db.query(Product).delete()
     db.query(Filament).delete()
     db.query(User).delete()
@@ -28,7 +27,6 @@ def test_db():
     
     # Clean up after test
     db.query(FilamentUsage).delete()
-    db.query(Plate).delete()
     db.query(Product).delete()
     db.query(Filament).delete()
     db.query(User).delete()
@@ -44,7 +42,9 @@ def test_user(test_db):
         name="Test Delete User",
         hashed_password=get_password_hash("testpassword"),
         is_admin=False,
-        is_superadmin=False
+        is_superadmin=False,
+        is_god_user=False,
+        token_version=1
     )
     test_db.add(user)
     test_db.commit()
@@ -87,15 +87,13 @@ def test_product(test_db, test_filament, auth_headers):
     # Create product via API
     product_data = {
         "name": "Product to Delete",
-        "print_time_hrs": 1.5,
-        "filament_usages": json.dumps([{
-            "filament_id": test_filament.id,
-            "grams_used": 100
-        }])
+        "print_time": "1.5",
+        "filament_ids": json.dumps([test_filament.id]),
+        "grams_used_list": json.dumps([100])
     }
     
     response = client.post("/products", data=product_data, headers=auth_headers)
-    assert response.status_code == 200
+    assert response.status_code == 201
     return response.json()
 
 
@@ -153,45 +151,41 @@ class TestProductDeletion:
         assert response.status_code in [401, 403]
         assert "Not authenticated" in response.json()["detail"]
     
-    def test_delete_product_with_plates(self, test_db, test_filament, auth_headers):
-        """Test deleting a product that has plates"""
+    def test_delete_product_with_multiple_filament_usages(self, test_db, test_filament, auth_headers):
+        """Test deleting a product that has multiple filament usages"""
         client = TestClient(app)
         
-        # Create a product with plates
+        # Create another filament for testing
+        second_filament = Filament(
+            color="Red",
+            brand="TestBrand2",
+            material="ABS",
+            price_per_kg=25.0,
+            total_qty_kg=3.0
+        )
+        test_db.add(second_filament)
+        test_db.commit()
+        test_db.refresh(second_filament)
+        
+        # Create a product with multiple filament usages
         product_data = {
-            "name": "Product with Plates",
-            "print_time_hrs": 3.0,
-            "filament_usages": json.dumps([{
-                "filament_id": test_filament.id,
-                "grams_used": 200
-            }])
+            "name": "Product with Multiple Filaments",
+            "print_time": "3.0",
+            "filament_ids": json.dumps([test_filament.id, second_filament.id]),
+            "grams_used_list": json.dumps([200, 150])
         }
         
         response = client.post("/products", data=product_data, headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201
         product = response.json()
         product_id = product["id"]
-        
-        # Add a plate to the product
-        plate_data = {
-            "name": "Test Plate",
-            "quantity": 2,
-            "print_time_hrs": 1.5,
-            "filament_usages": json.dumps([{
-                "filament_id": test_filament.id,
-                "grams_used": 50
-            }])
-        }
-        
-        response = client.post(f"/products/{product_id}/plates", data=plate_data, headers=auth_headers)
-        assert response.status_code == 200
         
         # Delete the product
         response = client.delete(f"/products/{product_id}", headers=auth_headers)
         
-        # EXPECTED: Should successfully delete product and its plates
+        # EXPECTED: Should successfully delete product and all its filament usages
         assert response.status_code == 204
         
-        # Verify product and plates are deleted
+        # Verify product and filament usages are deleted
         assert test_db.query(Product).filter(Product.id == product_id).first() is None
-        assert test_db.query(Plate).filter(Plate.product_id == product_id).count() == 0
+        assert test_db.query(FilamentUsage).filter(FilamentUsage.product_id == product_id).count() == 0

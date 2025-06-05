@@ -147,7 +147,7 @@ def test_print_job_with_printer_types(client, auth_headers, db: Session):
     job_data = {
         "name": "Test Print Job",
         "products": [{"product_id": product.id, "items_qty": 2}],
-        "printers": [{"printer_type_id": printer_type_id, "printers_qty": 1}],
+        "printers": [{"printer_type_id": printer_type_id}],
         "packaging_cost_eur": 2.5,
         "status": "pending"
     }
@@ -229,7 +229,7 @@ def test_printer_availability_check(client, auth_headers, db: Session):
     job1_data = {
         "name": "First Job",
         "products": [{"product_id": product.id, "items_qty": 1}],
-        "printers": [{"printer_type_id": printer_type_id, "printers_qty": 1}],
+        "printers": [{"printer_type_id": printer_type_id}],
         "packaging_cost_eur": 1.0,
         "status": "pending"
     }
@@ -245,7 +245,7 @@ def test_printer_availability_check(client, auth_headers, db: Session):
     job2_data = {
         "name": "Second Job",
         "products": [{"product_id": product.id, "items_qty": 1}],
-        "printers": [{"printer_type_id": printer_type_id, "printers_qty": 1}],
+        "printers": [{"printer_type_id": printer_type_id}],
         "packaging_cost_eur": 1.0,
         "status": "pending"
     }
@@ -256,7 +256,7 @@ def test_printer_availability_check(client, auth_headers, db: Session):
     # Try to start second job - should fail due to no available printers
     response = client.put(f"/print_jobs/{job2['id']}/start", headers=auth_headers)
     assert response.status_code == 409  # Conflict
-    assert "Not enough available" in response.json()["detail"]
+    assert "No available" in response.json()["detail"]
 
 
 def test_cannot_delete_printer_type_with_instances(client, auth_headers, db: Session):

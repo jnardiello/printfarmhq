@@ -75,7 +75,8 @@ def test_user(db):
         hashed_password=get_password_hash("testpassword"),
         is_admin=False,
         is_superadmin=False,
-        token_version=0
+        is_god_user=False,
+        token_version=1
     )
     db.add(user)
     db.commit()
@@ -92,7 +93,8 @@ def admin_user(db):
         hashed_password=get_password_hash("adminpassword"),
         is_admin=True,
         is_superadmin=False,
-        token_version=0
+        is_god_user=False,
+        token_version=1
     )
     db.add(user)
     db.commit()
@@ -109,7 +111,8 @@ def superadmin_user(db):
         hashed_password=get_password_hash("superadminpassword"),
         is_admin=True,
         is_superadmin=True,
-        token_version=0
+        is_god_user=False,
+        token_version=1
     )
     db.add(user)
     db.commit()

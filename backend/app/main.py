@@ -1090,25 +1090,31 @@ def export_filament_purchases(
     current_user: models.User = Depends(get_current_user)
 ):
     """Export filament purchases in CSV or JSON format (any authenticated user can export)"""
-    query = db.query(models.FilamentPurchase)
+    # Join with filament table to get filament details
+    query = db.query(models.FilamentPurchase, models.Filament).join(
+        models.Filament, models.FilamentPurchase.filament_id == models.Filament.id
+    ).filter(models.Filament.owner_id == current_user.owner_id)
     
     if filament_id:
         query = query.filter(models.FilamentPurchase.filament_id == filament_id)
     
-    purchases = query.order_by(models.FilamentPurchase.purchase_date.desc()).all()
+    results = query.order_by(models.FilamentPurchase.purchase_date.desc()).all()
     
     if format == "json":
         return [
             {
                 "id": p.id,
                 "filament_id": p.filament_id,
+                "filament_color": f.color,
+                "filament_brand": f.brand,
+                "filament_material": f.material,
                 "quantity_kg": p.quantity_kg,
                 "price_per_kg": p.price_per_kg,
                 "purchase_date": p.purchase_date.isoformat() if p.purchase_date else None,
                 "channel": p.channel,
                 "notes": p.notes
             }
-            for p in purchases
+            for p, f in results
         ]
     else:  # CSV format
         from fastapi.responses import StreamingResponse
@@ -1118,14 +1124,20 @@ def export_filament_purchases(
         output = io.StringIO()
         writer = csv.writer(output)
         
-        # Write header
-        writer.writerow(["ID", "Filament ID", "Quantity (kg)", "Price per kg", "Purchase Date", "Channel", "Notes"])
+        # Write header with filament details
+        writer.writerow([
+            "ID", "Filament ID", "Brand", "Material", "Color", 
+            "Quantity (kg)", "Price per kg", "Purchase Date", "Channel", "Notes"
+        ])
         
         # Write data
-        for p in purchases:
+        for p, f in results:
             writer.writerow([
                 p.id,
                 p.filament_id,
+                f.brand,
+                f.material,
+                f.color,
                 p.quantity_kg,
                 p.price_per_kg,
                 p.purchase_date.isoformat() if p.purchase_date else "",
@@ -1985,9 +1997,16 @@ def get_printer_usage_stats(
     current_user: models.User = Depends(get_current_user)
 ):
     """Get printer usage statistics for specified period"""
-    printer = db.get(models.PrinterProfile, profile_id)
-    if not printer:
-        raise HTTPException(status_code=404, detail="Printer profile not found")
+    printer_type = db.get(models.PrinterType, profile_id)
+    if not printer_type:
+        raise HTTPException(status_code=404, detail="Printer type not found")
+    
+    # Get all printer IDs of this type
+    printer_ids = db.query(models.Printer.id).filter(
+        models.Printer.printer_type_id == profile_id,
+        models.Printer.owner_id == current_user.owner_id
+    ).all()
+    printer_ids = [p[0] for p in printer_ids]
     
     # Validate period
     if period not in ["week", "month", "quarter"]:
@@ -2009,7 +2028,7 @@ def get_printer_usage_stats(
                 func.sum(models.PrinterUsageHistory.hours_used).label("total_hours"),
                 func.count(models.PrinterUsageHistory.id).label("print_count")
             ).filter(
-                models.PrinterUsageHistory.printer_profile_id == profile_id,
+                models.PrinterUsageHistory.printer_id.in_(printer_ids),
                 models.PrinterUsageHistory.week_year == week_key
             ).first()
             
@@ -2032,7 +2051,7 @@ def get_printer_usage_stats(
                 func.sum(models.PrinterUsageHistory.hours_used).label("total_hours"),
                 func.count(models.PrinterUsageHistory.id).label("print_count")
             ).filter(
-                models.PrinterUsageHistory.printer_profile_id == profile_id,
+                models.PrinterUsageHistory.printer_id.in_(printer_ids),
                 models.PrinterUsageHistory.month_year == month_key
             ).first()
             
@@ -2058,7 +2077,7 @@ def get_printer_usage_stats(
                 func.sum(models.PrinterUsageHistory.hours_used).label("total_hours"),
                 func.count(models.PrinterUsageHistory.id).label("print_count")
             ).filter(
-                models.PrinterUsageHistory.printer_profile_id == profile_id,
+                models.PrinterUsageHistory.printer_id.in_(printer_ids),
                 models.PrinterUsageHistory.quarter_year == quarter_key
             ).first()
             
@@ -2073,13 +2092,32 @@ def get_printer_usage_stats(
     # Reverse to have oldest first
     stats.reverse()
     
+    # Calculate aggregate stats for all printers of this type
+    total_working_hours = db.query(func.sum(models.Printer.working_hours)).filter(
+        models.Printer.printer_type_id == profile_id,
+        models.Printer.owner_id == current_user.owner_id
+    ).scalar() or 0.0
+    
+    # Calculate average life percentage
+    printers_with_type = db.query(models.Printer).filter(
+        models.Printer.printer_type_id == profile_id,
+        models.Printer.owner_id == current_user.owner_id
+    ).all()
+    
+    if printers_with_type:
+        avg_life_percentage = sum(p.life_percentage for p in printers_with_type) / len(printers_with_type)
+        avg_life_left_hours = sum(p.life_left_hours for p in printers_with_type) / len(printers_with_type)
+    else:
+        avg_life_percentage = 100.0  # New printer type has 100% life left
+        avg_life_left_hours = printer_type.expected_life_hours
+    
     return schemas.PrinterUsageStatsResponse(
-        printer_id=printer.id,
-        printer_name=printer.name,
+        printer_id=printer_type.id,
+        printer_name=f"{printer_type.brand} {printer_type.model}",
         stats=stats,
-        total_working_hours=printer.working_hours,
-        life_left_hours=printer.life_left_hours,
-        life_percentage=printer.life_percentage
+        total_working_hours=total_working_hours,
+        life_left_hours=avg_life_left_hours,
+        life_percentage=avg_life_percentage
     )
 
 
@@ -2809,6 +2847,7 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
     
     # Handle printers update if provided
     if "printers" in update_fields:
+        printers_data = update_fields.pop("printers")
         # Reload job with fresh products data if products were updated
         if new_products_data is not None:
             db.refresh(db_job)
@@ -2824,7 +2863,7 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
                 total_print_hours += pjp.product.print_time_hrs * pjp.items_qty
         
         # Validate only one printer type
-        if len(update_fields["printers"]) != 1:
+        if len(printers_data) != 1:
             raise HTTPException(
                 status_code=400,
                 detail="Each print job must have exactly one printer type"
@@ -2834,7 +2873,7 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
         db.query(models.PrintJobPrinter).filter(models.PrintJobPrinter.print_job_id == db_job.id).delete()
         
         # Add new printer association with calculated hours
-        printer_data = update_fields["printers"][0]
+        printer_data = printers_data[0]
         printer_type = db.get(models.PrinterType, printer_data['printer_type_id'])
         if not printer_type:
             raise HTTPException(
@@ -2855,6 +2894,11 @@ def update_print_job(print_job_id: uuid.UUID, job_update: schemas.PrintJobUpdate
         
         # Update the printer type on the job itself
         db_job.printer_type_id = printer_data['printer_type_id']
+
+    # Apply any remaining simple field updates (e.g., status, name, packaging_cost_eur)
+    for field, value in update_fields.items():
+        if hasattr(db_job, field):
+            setattr(db_job, field, value)
 
     # Flush changes to get the updated job state without committing
     db.flush()

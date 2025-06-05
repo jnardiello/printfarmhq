@@ -35,81 +35,76 @@ class TestCOGSCalculations:
         mock_filament_usage.grams_used = 50.0  # 50g
         mock_filament_usage.filament = mock_filament
         
-        # Create mock plate with filament usage
-        mock_plate = Mock()
-        mock_plate.id = 1
-        mock_plate.name = "Main Plate"
-        mock_plate.quantity = 1
-        mock_plate.filament_usages = [mock_filament_usage]
-        mock_plate.cost = (50.0 * 25.00 / 1000)  # Pre-calculate plate cost
-        
-        # Create mock product
+        # Create mock product with proper COP calculation
         mock_product = Mock()
         mock_product.id = 1
         mock_product.name = "Test Widget"
-        mock_product.plates = [mock_plate]
-        mock_product.filament_usages = []  # Empty for new structure
-        mock_product.cop = mock_plate.cost  # Set COP to match plate cost
-        mock_product.total_print_time_hrs = 1.5  # Mock print time
+        mock_product.filament_usages = [mock_filament_usage]
+        mock_product.cop = (50.0 * 25.00 / 1000)  # €1.25 per unit
         
         # Create mock print job product
         mock_job_product = Mock()
-        mock_job_product.id = 1
         mock_job_product.product_id = 1
         mock_job_product.items_qty = 2  # 2 items
+        mock_job_product.product = mock_product
         
-        # Create mock printer profile using a simple object for arithmetic compatibility
-        class MockPrinterProfile:
+        # Create mock printer type
+        class MockPrinterType:
             def __init__(self):
                 self.id = 1
-                self.name = "Test Printer"
-                self.price_eur = 600.00
-                self.expected_life_hours = 26280.0  # 3 years * 8760 hours
+                self.brand = "Test"
+                self.model = "Printer"
+                self.expected_life_hours = 10000.0
         
-        mock_printer_profile = MockPrinterProfile()
+        mock_printer_type = MockPrinterType()
         
-        # Mock db.get to return different objects based on the model type
+        # Mock db.get to return printer type
         def mock_db_get(model_class, id_value):
-            if model_class == models.Product:
-                return mock_product
-            elif model_class == models.PrinterProfile:
-                return mock_printer_profile
+            if model_class == models.PrinterType:
+                return mock_printer_type
             return None
         
         db.get.side_effect = mock_db_get
         
+        # Mock the average price query for printers
+        mock_query = Mock()
+        mock_query.filter.return_value.scalar.return_value = 1000.0  # Average printer price
+        db.query.return_value = mock_query
+        
         # Create mock print job printer
         mock_job_printer = Mock()
-        mock_job_printer.id = 1
-        mock_job_printer.printer_profile_id = 1
-        mock_job_printer.printers_qty = 1
-        mock_job_printer.hours_each = 4.0  # 4 hours
-        mock_job_printer.printer_profile = mock_printer_profile
+        mock_job_printer.printer_type_id = 1
+        mock_job_printer.hours_each = 3.0  # 3 hours total (1.5 hrs/product * 2 products)
+        mock_job_printer.printer_price_eur = None  # Not yet assigned
+        mock_job_printer.printer_expected_life_hours = None
+        mock_job_printer.assigned_printer_id = None
+        mock_job_printer.assigned_printer = None
         
         # Create mock print job
         mock_print_job = Mock()
-        mock_print_job.id = 1
+        mock_print_job.id = "test-job-id"
         mock_print_job.name = "Test Job"
         mock_print_job.products = [mock_job_product]
         mock_print_job.printers = [mock_job_printer]
         mock_print_job.packaging_cost_eur = 2.50
+        mock_print_job.owner_id = 1
         
         # Calculate COGS
         total_cogs = _calculate_print_job_cogs(mock_print_job, db)
         
         # Expected calculations:
-        # Filament cost: (50g * €25/kg * 2 items) / 1000 = €2.50
-        # Printer cost: (€600 / 26280 hrs) * 1.5 hrs * 2 items = €0.00068
+        # Product cost: €1.25 * 2 items = €2.50
+        # Printer cost: (€1000 / 10000 hrs) * 3 hrs = €0.30
         # Packaging cost: €2.50
-        # Total expected: €5.00068
+        # Total expected: €5.30
         
-        expected_filament_cost = (50.0 * 25.00 * 2) / 1000  # €2.50
-        expected_printer_cost = (600.00 / 26280.0) * 1.5 * 2   # Printer cost with updated print time
+        expected_product_cost = 1.25 * 2  # €2.50
+        expected_printer_cost = (1000.0 / 10000.0) * 3.0  # €0.30
         expected_packaging = 2.50
-        expected_total = expected_filament_cost + expected_printer_cost + expected_packaging
+        expected_total = expected_product_cost + expected_printer_cost + expected_packaging
         
         assert abs(total_cogs - expected_total) < 0.01
-        assert total_cogs > 5.0  # Sanity check
+        assert abs(total_cogs - 5.30) < 0.01
 
     def test_print_job_cogs_multi_filament_product(self):
         """Test COGS calculation for product using multiple filaments."""
@@ -142,160 +137,142 @@ class TestCOGSCalculations:
         usage2.grams_used = 25.0
         usage2.filament = filament2
         
-        # Mock product with plates structure
-        plate = Mock()
-        plate.id = 1
-        plate.name = "Main Plate"
-        plate.quantity = 1
-        plate.filament_usages = [usage1, usage2]
-        plate.cost = (75.0 * 24.00 / 1000) + (25.0 * 35.00 / 1000)  # Pre-calculate plate cost
+        # Calculate COP from multiple filaments
+        cop = (75.0 * 24.00 / 1000) + (25.0 * 35.00 / 1000)  # €1.80 + €0.875 = €2.675
         
         product = Mock()
         product.id = 1
         product.name = "Multi-Material Part"
-        product.plates = [plate]
-        product.filament_usages = []  # Empty for new structure
-        product.cop = plate.cost  # Set COP to match plate cost
-        product.total_print_time_hrs = 12.0  # Mock print time
+        product.filament_usages = [usage1, usage2]
+        product.cop = cop  # €2.675 per unit
         
         # Mock job product
         job_product = Mock()
         job_product.product_id = 1
         job_product.items_qty = 5
+        job_product.product = product
         
-        # Create printer profile using real object for arithmetic
-        class MockPrinterProfile:
+        # Create mock printer type
+        class MockPrinterType:
             def __init__(self):
-                self.id = 1
-                self.name = "Multi Printer"
-                self.price_eur = 800.00
-                self.expected_life_hours = 4 * 8760  # 4 years * 8760 hours/year
+                self.id = 2
+                self.brand = "Advanced"
+                self.model = "Printer"
+                self.expected_life_hours = 20000.0
         
-        printer_profile = MockPrinterProfile()
+        mock_printer_type = MockPrinterType()
         
-        # Mock db.get to return different objects based on model type
+        # Mock db.get to return printer type
         def mock_db_get(model_class, id_value):
-            if model_class == models.Product:
-                return product
-            elif model_class == models.PrinterProfile:
-                return printer_profile
+            if model_class == models.PrinterType and id_value == 2:
+                return mock_printer_type
             return None
         
         db.get.side_effect = mock_db_get
         
+        # Mock the average price query
+        mock_query = Mock()
+        mock_query.filter.return_value.scalar.return_value = 2000.0  # Average printer price
+        db.query.return_value = mock_query
+        
         job_printer = Mock()
-        job_printer.printer_profile_id = 1
-        job_printer.printers_qty = 1
-        job_printer.hours_each = 12.0
-        job_printer.printer_profile = printer_profile
+        job_printer.printer_type_id = 2
+        job_printer.hours_each = 10.0  # 10 hours for 5 products
+        job_printer.printer_price_eur = None
+        job_printer.printer_expected_life_hours = None
+        job_printer.assigned_printer_id = None
+        job_printer.assigned_printer = None
         
         # Mock print job
         print_job = Mock()
+        print_job.id = "multi-filament-job"
         print_job.products = [job_product]
         print_job.printers = [job_printer]
         print_job.packaging_cost_eur = 0.0
+        print_job.owner_id = 1
         
         total_cogs = _calculate_print_job_cogs(print_job, db)
         
         # Expected calculations:
-        # Filament 1: (75g * €24/kg * 5 items) / 1000 = €9.00
-        # Filament 2: (25g * €35/kg * 5 items) / 1000 = €4.375
-        # Total filament: €13.375
-        # Printer: (€800 / (4 * 8760) hrs) * 12.0 hrs * 5 items = €1.369
-        # Total: €14.744
+        # Product cost: €2.675 * 5 items = €13.375
+        # Printer cost: (€2000 / 20000 hrs) * 10 hrs = €1.00
+        # Total: €14.375
         
-        expected_filament1_cost = (75.0 * 24.00 * 5) / 1000
-        expected_filament2_cost = (25.0 * 35.00 * 5) / 1000
-        expected_printer_cost = (800.00 / (4 * 8760)) * 12.0 * 5  # Updated to include 5 items
-        expected_total = expected_filament1_cost + expected_filament2_cost + expected_printer_cost
+        expected_product_cost = 2.675 * 5  # €13.375
+        expected_printer_cost = (2000.0 / 20000.0) * 10.0  # €1.00
+        expected_total = expected_product_cost + expected_printer_cost
         
         assert abs(total_cogs - expected_total) < 0.01
-        assert total_cogs > 13.0
+        assert abs(total_cogs - 14.375) < 0.01
 
-    def test_print_job_cogs_multiple_printers(self):
-        """Test COGS calculation with multiple printer profiles."""
+    def test_print_job_single_printer_type_calculation(self):
+        """Test COGS calculation with the current single printer type per job model."""
         db = Mock(spec=Session)
         
-        # Simple filament setup using real object for arithmetic
-        class MockFilament:
-            def __init__(self):
-                self.id = 1
-                self.price_per_kg = 30.00
-                self.color = "Blue"
-                self.material = "ABS"
-        
-        filament = MockFilament()
-        
-        usage = Mock()
-        usage.grams_used = 100.0
-        usage.filament = filament
-        
-        # Create mock plate
-        plate = Mock()
-        plate.id = 1
-        plate.name = "Main Plate"
-        plate.quantity = 1
-        plate.filament_usages = [usage]
-        plate.cost = (100.0 * 30.00 / 1000)  # Pre-calculate plate cost
-        
+        # Create mock product
         product = Mock()
         product.id = 1
-        product.name = "Multi-Printer Part"
-        product.plates = [plate]
-        product.filament_usages = []  # Empty for new structure
-        product.cop = plate.cost  # Set COP to match plate cost
-        product.total_print_time_hrs = 5.0  # Product takes 5 hours to print
+        product.name = "Test Product"
+        product.cop = 3.00  # €3.00 per unit
         
         job_product = Mock()
         job_product.product_id = 1
-        job_product.items_qty = 2  # Test with 2 items to verify multiplication
+        job_product.items_qty = 2
+        job_product.product = product
         
-        # Single printer profile using real objects for arithmetic
-        class MockPrinter:
+        # Create mock printer type
+        class MockPrinterType:
             def __init__(self):
                 self.id = 1
-                self.name = "Printer 1"
-                self.price_eur = 500.00
-                self.expected_life_hours = 2 * 8760  # 2 years * 8760 hours/year
+                self.brand = "Test"
+                self.model = "Printer"
+                self.expected_life_hours = 20000.0
         
-        printer = MockPrinter()
+        mock_printer_type = MockPrinterType()
         
-        # Mock db.get to return different objects based on model type and ID
+        # Mock db.get to return printer type
         def mock_db_get(model_class, id_value):
-            if model_class == models.Product:
-                return product
-            elif model_class == models.PrinterProfile:
-                if id_value == 1:
-                    return printer
+            if model_class == models.PrinterType:
+                return mock_printer_type
             return None
         
         db.get.side_effect = mock_db_get
         
+        # Mock the average price query
+        mock_query = Mock()
+        mock_query.filter.return_value.scalar.return_value = 1500.0  # Average printer price
+        db.query.return_value = mock_query
+        
+        # Single printer type (current implementation)
         job_printer = Mock()
-        job_printer.printer_profile_id = 1
-        job_printer.printers_qty = 1
-        job_printer.printer_profile = printer
+        job_printer.printer_type_id = 1
+        job_printer.hours_each = 10.0  # Total hours for the job
+        job_printer.printer_price_eur = None
+        job_printer.printer_expected_life_hours = None
+        job_printer.assigned_printer_id = None
+        job_printer.assigned_printer = None
         
         print_job = Mock()
+        print_job.id = "single-printer-job"
         print_job.products = [job_product]
-        print_job.printers = [job_printer]
+        print_job.printers = [job_printer]  # Single printer type
         print_job.packaging_cost_eur = 1.00
+        print_job.owner_id = 1
         
         total_cogs = _calculate_print_job_cogs(print_job, db)
         
-        # Expected calculations with new logic:
-        # Filament: (100g * €30/kg) / 1000 * 2 items = €6.00
-        # Printer: (€500 / (2 * 8760) hrs) * (5.0 hrs/product * 2 items) * 1 printer = €1.712
+        # Expected calculations:
+        # Product cost: €3.00 * 2 items = €6.00
+        # Printer cost: (€1500 / 20000 hrs) * 10 hrs = €0.75
         # Packaging: €1.00
-        # Total: €8.712
+        # Total: €7.75
         
-        expected_filament_cost = (100.0 * 30.00) / 1000 * 2  # 2 items
-        total_print_hours = 5.0 * 2  # 5 hrs/product * 2 items = 10 hours
-        expected_printer_cost = (500.00 / (2 * 8760)) * total_print_hours * 1  # 1 printer
-        expected_packaging = 1.00
-        expected_total = expected_filament_cost + expected_printer_cost + expected_packaging
+        expected_product_cost = 3.00 * 2
+        expected_printer_cost = (1500.0 / 20000.0) * 10.0
+        expected_total = expected_product_cost + expected_printer_cost + 1.00
         
         assert abs(total_cogs - expected_total) < 0.01
+        assert abs(total_cogs - 7.75) < 0.01
 
     def test_print_job_cogs_zero_packaging_cost(self):
         """Test COGS calculation with zero packaging cost."""
@@ -315,66 +292,64 @@ class TestCOGSCalculations:
         usage.grams_used = 30.0
         usage.filament = filament
         
-        # Create mock plate
-        plate = Mock()
-        plate.id = 1
-        plate.name = "Main Plate"
-        plate.quantity = 1
-        plate.filament_usages = [usage]
-        plate.cost = (30.0 * 20.00 / 1000)  # Pre-calculate plate cost
-        
         product = Mock()
         product.id = 1
         product.name = "Zero Package Part"
-        product.plates = [plate]
-        product.filament_usages = []  # Empty for new structure
-        product.cop = plate.cost  # Set COP to match plate cost
-        product.total_print_time_hrs = 1.0  # Mock print time
+        product.filament_usages = [usage]
+        product.cop = (30.0 * 20.00 / 1000)  # €0.60 per unit
         
         job_product = Mock()
         job_product.product_id = 1
         job_product.items_qty = 1
+        job_product.product = product
         
-        # Create printer using real object for arithmetic
-        class MockPrinter:
+        # Create mock printer type
+        class MockPrinterType:
             def __init__(self):
-                self.id = 1
-                self.name = "Zero Package Printer"
-                self.price_eur = 400.00
-                self.expected_life_hours = 2 * 8760  # 2 years * 8760 hours/year
+                self.id = 3
+                self.brand = "Budget"
+                self.model = "Printer"
+                self.expected_life_hours = 10000.0
         
-        printer = MockPrinter()
+        mock_printer_type = MockPrinterType()
         
-        # Mock db.get to return different objects based on model type
+        # Mock db.get to return printer type
         def mock_db_get(model_class, id_value):
-            if model_class == models.Product:
-                return product
-            elif model_class == models.PrinterProfile:
-                return printer
+            if model_class == models.PrinterType and id_value == 3:
+                return mock_printer_type
             return None
         
         db.get.side_effect = mock_db_get
         
+        # Mock the average price query
+        mock_query = Mock()
+        mock_query.filter.return_value.scalar.return_value = 500.0  # Average printer price
+        db.query.return_value = mock_query
+        
         job_printer = Mock()
-        job_printer.printer_profile_id = 1
-        job_printer.printers_qty = 1
+        job_printer.printer_type_id = 3
         job_printer.hours_each = 1.0
-        job_printer.printer_profile = printer
+        job_printer.printer_price_eur = None
+        job_printer.printer_expected_life_hours = None
+        job_printer.assigned_printer_id = None
+        job_printer.assigned_printer = None
         
         print_job = Mock()
+        print_job.id = "zero-packaging-job"
         print_job.products = [job_product]
         print_job.printers = [job_printer]
         print_job.packaging_cost_eur = 0.0  # Zero packaging
+        print_job.owner_id = 1
         
         total_cogs = _calculate_print_job_cogs(print_job, db)
         
-        # Should only include filament and printer costs
-        expected_filament_cost = (30.0 * 20.00) / 1000  # €0.60
-        expected_printer_cost = (400.00 / (2 * 8760)) * 1.0  # €0.023
-        expected_total = expected_filament_cost + expected_printer_cost
+        # Should only include product and printer costs
+        expected_product_cost = 0.60  # €0.60
+        expected_printer_cost = (500.0 / 10000.0) * 1.0  # €0.05
+        expected_total = expected_product_cost + expected_printer_cost
         
         assert abs(total_cogs - expected_total) < 0.01
-        assert total_cogs > 0.6  # Should be mostly filament cost
+        assert abs(total_cogs - 0.65) < 0.01
 
 
 class TestSKUGeneration:
@@ -586,129 +561,5 @@ class TestPricingCalculations:
         markup_percentage = (profit / cost_of_goods) * 100  # 61.29%
         assert abs(markup_percentage - 61.29) < 0.1
 
-    def test_print_job_cogs_with_plates(self):
-        """Test COGS calculation for products with plate-based structure."""
-        db = Mock(spec=Session)
-        
-        # Create mock filaments
-        class MockFilament:
-            def __init__(self, id, price_per_kg):
-                self.id = id
-                self.price_per_kg = price_per_kg
-                self.color = "Test"
-                self.material = "PLA"
-        
-        filament1 = MockFilament(1, 25.00)
-        filament2 = MockFilament(2, 30.00)
-        
-        # Create mock plate filament usages
-        plate_usage1 = Mock()
-        plate_usage1.grams_used = 50.0
-        plate_usage1.filament = filament1
-        
-        plate_usage2 = Mock()
-        plate_usage2.grams_used = 30.0
-        plate_usage2.filament = filament2
-        
-        # Create mock plates
-        plate1 = Mock()
-        plate1.quantity = 1
-        plate1.filament_usages = [plate_usage1]  # 50g * €25/kg = €1.25
-        plate1.cost = (50.0 * 25.00 / 1000) * 1  # €1.25
-        
-        plate2 = Mock()
-        plate2.quantity = 2
-        plate2.filament_usages = [plate_usage2]  # 30g * €30/kg * 2 = €1.80
-        plate2.cost = (30.0 * 30.00 / 1000) * 2  # €1.80
-        
-        # Create mock product with plates
-        product = Mock()
-        product.id = 1
-        product.name = "Plate-based Product"
-        product.plates = [plate1, plate2]
-        product.filament_usages = []  # No legacy usages
-        product.cop = plate1.cost + plate2.cost  # Total cost of all plates
-        product.total_print_time_hrs = 2.5  # Mock print time
-        
-        # Mock job product
-        job_product = Mock()
-        job_product.product_id = 1
-        job_product.items_qty = 3  # 3 units
-        
-        # Mock db.get to return the product
-        db.get.return_value = product
-        
-        # Mock print job (no printers for simplicity)
-        print_job = Mock()
-        print_job.products = [job_product]
-        print_job.printers = []
-        print_job.packaging_cost_eur = 0.0
-        
-        total_cogs = _calculate_print_job_cogs(print_job, db)
-        
-        # Expected calculations:
-        # Plate 1: 50g/1000 * €25 * 1 = €1.25 per product
-        # Plate 2: 30g/1000 * €30 * 2 = €1.80 per product
-        # Total per product: €3.05
-        # 3 products: €3.05 * 3 = €9.15
-        
-        expected_plate1_cost = (50.0 / 1000) * 25.00 * 1
-        expected_plate2_cost = (30.0 / 1000) * 30.00 * 2
-        expected_per_product = expected_plate1_cost + expected_plate2_cost
-        expected_total = expected_per_product * 3
-        
-        assert abs(total_cogs - expected_total) < 0.01
-        assert abs(total_cogs - 9.15) < 0.01
-
-    def test_print_job_cogs_fallback_to_legacy(self):
-        """Test COGS calculation falls back to legacy when no plates exist."""
-        db = Mock(spec=Session)
-        
-        # Create mock filament
-        class MockFilament:
-            def __init__(self):
-                self.id = 1
-                self.price_per_kg = 25.00
-                self.color = "Red"
-                self.material = "PLA"
-        
-        filament = MockFilament()
-        
-        # Create mock legacy filament usage
-        usage = Mock()
-        usage.grams_used = 50.0
-        usage.filament = filament
-        
-        # Create mock product with NO plates (legacy mode)
-        product = Mock()
-        product.id = 1
-        product.name = "Legacy Product"
-        product.plates = []  # No plates
-        product.filament_usages = [usage]  # Legacy usages
-        product.cop = (50.0 * 25.00 / 1000)  # Legacy COP calculation
-        product.total_print_time_hrs = 1.0  # Mock print time
-        
-        # Mock job product
-        job_product = Mock()
-        job_product.product_id = 1
-        job_product.items_qty = 2
-        
-        # Mock db.get to return the product
-        db.get.return_value = product
-        
-        # Mock print job
-        print_job = Mock()
-        print_job.products = [job_product]
-        print_job.printers = []
-        print_job.packaging_cost_eur = 0.0
-        
-        total_cogs = _calculate_print_job_cogs(print_job, db)
-        
-        # Expected calculations (legacy):
-        # 50g/1000 * €25 = €1.25 per product
-        # 2 products: €1.25 * 2 = €2.50
-        
-        expected_legacy_cost = (50.0 / 1000) * 25.00 * 2
-        
-        assert abs(total_cogs - expected_legacy_cost) < 0.01
-        assert abs(total_cogs - 2.50) < 0.01
+    # REMOVED: test_print_job_cogs_with_plates - Plates feature no longer exists
+    # REMOVED: test_print_job_cogs_fallback_to_legacy - Plates feature no longer exists

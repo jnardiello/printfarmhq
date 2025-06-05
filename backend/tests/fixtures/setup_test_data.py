@@ -30,7 +30,9 @@ def setup_test_data():
                 name="Admin User",
                 is_active=True,
                 is_admin=True,
-                is_superadmin=True
+                is_superadmin=True,
+                is_god_user=False,
+                token_version=1
             )
             db.add(admin_user)
             db.commit()

@@ -30,7 +30,7 @@ class TestFlexibleFilamentCreation:
         assert result["filament"]["total_qty_kg"] == 0.0
         assert result["purchase"] is None
         assert "No inventory tracked for this filament" in result["warnings"]
-        assert result["message"] == "Filament created successfully"
+        assert result["message"] == "Filament 'Cosmic Blue Generic PLA' created successfully"
     
     def test_create_filament_with_inventory(self, client, auth_headers, db):
         """Test creating a filament with initial inventory."""

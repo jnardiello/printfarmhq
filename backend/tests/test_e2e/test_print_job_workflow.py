@@ -54,13 +54,22 @@ class TestPrintJobWorkflow:
         petg_purchase_response = client.post("/filament_purchases", json=petg_purchase_data, headers=auth_headers)
         assert petg_purchase_response.status_code == 201
         
-        # Step 2: Create printer profile
-        printer_data = {
-            "name": "Prusa i3 MK3S+",
-            "price_eur": 750.00,
+        # Step 2: Create printer type and printer
+        printer_type_data = {
+            "brand": "Prusa",
+            "model": "i3 MK3S+",
             "expected_life_hours": 3 * 8760  # 3 years * 8760 hours/year
         }
-        printer_response = client.post("/printer_profiles", json=printer_data, headers=auth_headers)
+        printer_type_response = client.post("/printer_types", json=printer_type_data, headers=auth_headers)
+        assert printer_type_response.status_code == 201
+        printer_type_id = printer_type_response.json()["id"]
+        
+        printer_data = {
+            "printer_type_id": printer_type_id,
+            "name": "Prusa i3 MK3S+",
+            "purchase_price_eur": 750.00
+        }
+        printer_response = client.post("/printers", json=printer_data, headers=auth_headers)
         assert printer_response.status_code == 201
         printer_id = printer_response.json()["id"]
         
@@ -72,12 +81,13 @@ class TestPrintJobWorkflow:
         
         product_form_data = {
             "name": "Multi-Color Phone Case",
-            "print_time_hrs": 2.5,
-            "filament_usages": json.dumps(filament_usages)
+            "print_time": "2.5",
+            "filament_ids": json.dumps([pla_filament_id, petg_filament_id]),
+            "grams_used_list": json.dumps([45.5, 23.2])
         }
         
         product_response = client.post("/products", data=product_form_data, headers=auth_headers)
-        assert product_response.status_code == 200
+        assert product_response.status_code == 201
         product_data = product_response.json()
         product_id = product_data["id"]
         
@@ -93,7 +103,7 @@ class TestPrintJobWorkflow:
                 {"product_id": product_id, "items_qty": 10}
             ],
             "printers": [
-                {"printer_profile_id": printer_id, "printers_qty": 1}
+                {"printer_type_id": printer_type_id}
             ],
             "packaging_cost_eur": 5.00,
             "status": "pending"
@@ -159,8 +169,7 @@ class TestPrintJobWorkflow:
         purchase_response = client.post("/filament_purchases", json=purchase_data, headers=auth_headers)
         assert purchase_response.status_code == 201
         
-        # Create product with mock STL file
-        filament_usages = [{"filament_id": filament_id, "grams_used": 15.8}]
+        # Create product with mock STL file using correct API format
         
         # Simulate STL file upload
         mock_stl_content = b"solid mock_stl\nfacet normal 0 0 1\n  outer loop\n    vertex 0 0 0\n    vertex 1 0 0\n    vertex 0 1 0\n  endloop\nendfacet\nendsolid"
@@ -168,12 +177,13 @@ class TestPrintJobWorkflow:
         files = {"file": ("test_model.stl", mock_stl_content, "application/octet-stream")}
         data = {
             "name": "Custom Bracket",
-            "print_time_hrs": 1.2,
-            "filament_usages": json.dumps(filament_usages)
+            "print_time": "1.2",  # API expects string format
+            "filament_ids": json.dumps([filament_id]),  # Separate filament IDs
+            "grams_used_list": json.dumps([15.8])  # Separate grams list
         }
         
         response = client.post("/products", data=data, files=files, headers=auth_headers)
-        assert response.status_code == 200
+        assert response.status_code == 201  # API returns 201 CREATED
         
         product_data = response.json()
         assert product_data["name"] == "Custom Bracket"
@@ -200,23 +210,24 @@ class TestPrintJobWorkflow:
         
         product_data = {
             "name": "Status Test Product",
-            "print_time_hrs": 1.0,
-            "filament_usages": json.dumps([{"filament_id": filament_id, "grams_used": 10.0}])
+            "print_time": "1.0",
+            "filament_ids": json.dumps([filament_id]),
+            "grams_used_list": json.dumps([10.0])
         }
         product_response = client.post("/products", data=product_data, headers=auth_headers)
-        assert product_response.status_code == 200
+        assert product_response.status_code == 201
         product_id = product_response.json()["id"]
         
-        printer_data = {"name": "Test Printer", "price_eur": 500.00, "expected_life_hours": 2 * 8760}
-        printer_response = client.post("/printer_profiles", json=printer_data, headers=auth_headers)
-        assert printer_response.status_code == 201
-        printer_id = printer_response.json()["id"]
+        printer_type_data = {"brand": "Test", "model": "Printer", "expected_life_hours": 2 * 8760}
+        printer_type_response = client.post("/printer_types", json=printer_type_data, headers=auth_headers)
+        assert printer_type_response.status_code == 201
+        printer_type_id = printer_type_response.json()["id"]
         
         # Add to print queue
         job_data = {
             "name": "Status Test Job",
             "products": [{"product_id": product_id, "items_qty": 1}],
-            "printers": [{"printer_profile_id": printer_id, "printers_qty": 1, "hours_each": 1.0}],
+            "printers": [{"printer_type_id": printer_type_id}],
             "packaging_cost_eur": 0.0,
             "status": "pending"
         }
@@ -276,28 +287,30 @@ class TestPrintJobWorkflow:
         # Create multiple products
         product1_data = {
             "name": "Widget A",
-            "print_time_hrs": 1.0,
-            "filament_usages": json.dumps([{"filament_id": filament1_id, "grams_used": 20.0}])
+            "print_time": "1.0",
+            "filament_ids": json.dumps([filament1_id]),
+            "grams_used_list": json.dumps([20.0])
         }
         product2_data = {
             "name": "Widget B", 
-            "print_time_hrs": 1.5,
-            "filament_usages": json.dumps([{"filament_id": filament2_id, "grams_used": 35.0}])
+            "print_time": "1.5",
+            "filament_ids": json.dumps([filament2_id]),
+            "grams_used_list": json.dumps([35.0])
         }
         
         p1_response = client.post("/products", data=product1_data, headers=auth_headers)
         p2_response = client.post("/products", data=product2_data, headers=auth_headers)
-        assert p1_response.status_code == 200
-        assert p2_response.status_code == 200
+        assert p1_response.status_code == 201
+        assert p2_response.status_code == 201
         
         product1_id = p1_response.json()["id"]
         product2_id = p2_response.json()["id"]
         
-        # Create printer profile
-        printer_data = {"name": "Multi Printer", "price_eur": 500.00, "expected_life_hours": 2 * 8760}
-        printer_response = client.post("/printer_profiles", json=printer_data, headers=auth_headers)
-        assert printer_response.status_code == 201
-        printer_id = printer_response.json()["id"]
+        # Create printer type  
+        printer_type_data = {"brand": "Multi", "model": "Printer", "expected_life_hours": 2 * 8760}
+        printer_type_response = client.post("/printer_types", json=printer_type_data, headers=auth_headers)
+        assert printer_type_response.status_code == 201
+        printer_type_id = printer_type_response.json()["id"]
         
         # Add multiple products to print queue
         job_data = {
@@ -307,7 +320,7 @@ class TestPrintJobWorkflow:
                 {"product_id": product2_id, "items_qty": 3}
             ],
             "printers": [
-                {"printer_profile_id": printer_id, "printers_qty": 1, "hours_each": 9.5}  # (1.0 * 5) + (1.5 * 3)
+                {"printer_type_id": printer_type_id}
             ],
             "packaging_cost_eur": 2.50,
             "status": "pending"
@@ -350,23 +363,33 @@ class TestPrintJobWorkflow:
         
         product_data = {
             "name": "Simple Part",
-            "print_time_hrs": 0.5,
-            "filament_usages": json.dumps([{"filament_id": filament_id, "grams_used": 12.0}])
+            "print_time": "0.5",
+            "filament_ids": json.dumps([filament_id]),
+            "grams_used_list": json.dumps([12.0])
         }
         product_response = client.post("/products", data=product_data, headers=auth_headers)
-        assert product_response.status_code == 200
+        assert product_response.status_code == 201
         product_id = product_response.json()["id"]
         
-        printer_data = {"name": "Budget Printer", "price_eur": 300.00, "expected_life_hours": 2 * 8760}
-        printer_response = client.post("/printer_profiles", json=printer_data, headers=auth_headers)
+        printer_type_data = {"brand": "Budget", "model": "Printer", "expected_life_hours": 2 * 8760}
+        printer_type_response = client.post("/printer_types", json=printer_type_data, headers=auth_headers)
+        assert printer_type_response.status_code == 201
+        printer_type_id = printer_type_response.json()["id"]
+        
+        # Create actual printer instance for COGS calculation
+        printer_data = {
+            "printer_type_id": printer_type_id,
+            "name": "Budget Printer 1",
+            "purchase_price_eur": 300.00
+        }
+        printer_response = client.post("/printers", json=printer_data, headers=auth_headers)
         assert printer_response.status_code == 201
-        printer_id = printer_response.json()["id"]
         
         # Create job with packaging cost
         job_data = {
             "name": "Packaged Order",
             "products": [{"product_id": product_id, "items_qty": 1}],
-            "printers": [{"printer_profile_id": printer_id, "printers_qty": 1, "hours_each": 0.5}],
+            "printers": [{"printer_type_id": printer_type_id}],
             "packaging_cost_eur": 2.50,
             "status": "pending"
         }
@@ -407,23 +430,24 @@ class TestPrintJobWorkflow:
         # Create product that requires 150g (more than available)
         product_data = {
             "name": "High Usage Product",
-            "print_time_hrs": 2.0,
-            "filament_usages": json.dumps([{"filament_id": filament_id, "grams_used": 150.0}])
+            "print_time": "2.0",
+            "filament_ids": json.dumps([filament_id]),
+            "grams_used_list": json.dumps([150.0])
         }
         product_response = client.post("/products", data=product_data, headers=auth_headers)
-        assert product_response.status_code == 200
+        assert product_response.status_code == 201
         product_id = product_response.json()["id"]
         
-        printer_data = {"name": "Test Printer", "price_eur": 500.00, "expected_life_hours": 2 * 8760}
-        printer_response = client.post("/printer_profiles", json=printer_data, headers=auth_headers)
-        assert printer_response.status_code == 201
-        printer_id = printer_response.json()["id"]
+        printer_type_data = {"brand": "Test", "model": "Printer", "expected_life_hours": 2 * 8760}
+        printer_type_response = client.post("/printer_types", json=printer_type_data, headers=auth_headers)
+        assert printer_type_response.status_code == 201
+        printer_type_id = printer_type_response.json()["id"]
         
         # Attempt to add to print queue - should fail
         job_data = {
             "name": "Impossible Job",
             "products": [{"product_id": product_id, "items_qty": 1}],
-            "printers": [{"printer_profile_id": printer_id, "printers_qty": 1, "hours_each": 2.0}],
+            "printers": [{"printer_type_id": printer_type_id}],
             "packaging_cost_eur": 0.0,
             "status": "pending"
         }
@@ -460,23 +484,24 @@ class TestPrintJobWorkflow:
         grams_used = 200.0
         product_data = {
             "name": "Deletable Part",
-            "print_time_hrs": 3.0,
-            "filament_usages": json.dumps([{"filament_id": filament_id, "grams_used": grams_used}])
+            "print_time": "3.0",
+            "filament_ids": json.dumps([filament_id]),
+            "grams_used_list": json.dumps([grams_used])
         }
         product_response = client.post("/products", data=product_data, headers=auth_headers)
-        assert product_response.status_code == 200
+        assert product_response.status_code == 201
         product_id = product_response.json()["id"]
         
-        printer_data = {"name": "Delete Test Printer", "price_eur": 400.00, "expected_life_hours": 2 * 8760}
-        printer_response = client.post("/printer_profiles", json=printer_data, headers=auth_headers)
-        assert printer_response.status_code == 201
-        printer_id = printer_response.json()["id"]
+        printer_type_data = {"brand": "Delete Test", "model": "Printer", "expected_life_hours": 2 * 8760}
+        printer_type_response = client.post("/printer_types", json=printer_type_data, headers=auth_headers)
+        assert printer_type_response.status_code == 201
+        printer_type_id = printer_type_response.json()["id"]
         
         # Add to print queue
         job_data = {
             "name": "To Be Deleted",
             "products": [{"product_id": product_id, "items_qty": 2}],  # 2 items = 400g total
-            "printers": [{"printer_profile_id": printer_id, "printers_qty": 1, "hours_each": 6.0}],
+            "printers": [{"printer_type_id": printer_type_id}],
             "packaging_cost_eur": 1.00,
             "status": "pending"
         }
