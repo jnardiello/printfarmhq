@@ -19,7 +19,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       } else if (godUserRequired) {
         router.push('/setup/god-user')
       } else if (!user) {
-        router.push('/welcome')
+        router.push('/auth')
       }
     }
   }, [user, isLoading, setupRequired, godUserRequired, router])
