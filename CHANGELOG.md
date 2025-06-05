@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.0.1 (2025-06-05)
+
+- refactor: remove landing page for SaaS separation
+- Removing unused documentation
+- refactor: separate SQLite database into dedicated container
+- fix: ensure database is fully separated from backend container
+- feat: enable multi-architecture Docker image builds
+
+
 ## v2.0.0 (2025-06-05)
 
 - fix: support plate-based inventory deduction in print jobs
