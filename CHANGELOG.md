@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.0.0 (2025-06-05)
+
+- fix: support plate-based inventory deduction in print jobs
+- feat: upgrade Administration filament creation to advanced QuickFilamentForm
+- refactor: rename "Administration" to "Configurations" in main menu
+- feat: enhance printer management with manufacturer field and UI improvements
+- fix: add missing printer update endpoint and fix HTTP method
+- feat: add printer cloning functionality
+- feat: add model field to printers
+- fix: decouple printer lifecycle from print jobs
+- fix: update SQLAlchemy relationships for decoupled printer lifecycle
+- fix: add foreign() annotation to SQLAlchemy relationships
+- feat: implement comprehensive multi-tenancy with God Dashboard and enhanced user management
+- feat: complete frontend implementation for multi-tenancy and God Dashboard
+- feat: implement professional password reset modals and comprehensive audit ledger
+- feat: implement enhanced God Admin metrics system with comprehensive user analytics
+- feat: add smart printer management with working hours tracking
+- refactor: simplify printers table and add detailed info modal
+- fix: resolve print job COGS calculation and data display issues
+- feat: implement comprehensive user-controlled table sorting with session persistence
+- refactor: complete plates system removal and simplify product architecture
+- feat: implement print job active tracking with real-time progress monitoring
+- fix: add automatic migration for print job active tracking columns
+- fix: ensure print jobs have minimum 1 hour duration for visible progress
+- fix: auto-complete print jobs when estimated time expires
+- feat: add stop button for currently printing jobs
+- fix: resolve print job progress showing 100% on start
+- refactor: replace alerts with modal dialogs in Print Jobs page
+- feat: redesign stop button for better visibility and aesthetics
+- fix: resolve product update error by using correct HTTP method
+- feat: add migrations to remove multiple printer support
+- refactor: remove printers_qty from database models
+- refactor: update API schemas for single printer per job
+- refactor: update API endpoints for single printer assignment
+- refactor: remove printers_qty from frontend types
+- refactor: remove printer quantity selection from UI
+- test: add comprehensive tests for printer working hours
+- chore: update migration runner imports
+- fix: update alerts to handle printer type relationships
+- feat: add printer types system migrations
+- fix: add printer unique constraints and fixes
+- test: add printer types and deletion tests
+- feat: add printer types UI components
+- refactor: update printers tab for printer types
+- refactor: update frontend components for printer types
+- docs: update AI guidelines
+- fix: resolve all failing tests after printer types refactoring
+
+
 ## v1.5.0 (2025-06-02)
 
 - refactor: rename "Print Jobs" to "Print Queue" throughout UI
