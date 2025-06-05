@@ -5,6 +5,13 @@ set -e
 echo "📊 Database configuration:"
 echo "   DATABASE_URL: ${DATABASE_URL:-sqlite:///./hq.db}"
 
+# Check for local database file (shouldn't exist in container)
+if [[ -f "./hq.db" ]]; then
+    echo "⚠️  WARNING: Local database file found at ./hq.db"
+    echo "   This should not exist in the container. Database should be in /data/hq.db"
+    echo "   Please check your volume mounts and DATABASE_URL configuration."
+fi
+
 # Wait for database to be ready (if using shared volume)
 if [[ "${DATABASE_URL}" == "sqlite:///data/hq.db" ]] || [[ "${DATABASE_URL}" == "sqlite:////data/hq.db" ]]; then
     echo "⏳ Waiting for database container to initialize..."

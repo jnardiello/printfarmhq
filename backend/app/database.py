@@ -3,7 +3,9 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 import secrets
 import os
 
-# Get database URL from environment or use local file for development
+# Get database URL from environment
+# In Docker, this should be sqlite:////data/hq.db (shared volume)
+# For local development without Docker, use sqlite:///./hq.db
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./hq.db")
 
 # Configure engine based on database type
