@@ -1,13 +1,22 @@
 # Development override for hot reloading
 services:
+  database:
+    volumes:
+      - db-data-dev:/data  # Use separate volume for dev
+      - ./database:/database  # Allow live editing of database scripts
+    environment:
+      - DEV_MODE=true
+  
   backend:
     volumes:
       - ./backend:/app
       - /app/__pycache__  # Exclude cache
+      - db-data-dev:/data  # Share the dev database volume
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
     environment:
       - PYTHONPATH=/app
       - DEVELOPMENT=true
+      - DATABASE_URL=sqlite:////data/hq.db
   
   frontend:
     volumes:
@@ -19,3 +28,7 @@ services:
       - NODE_ENV=development
       - NEXT_PUBLIC_API_URL=http://localhost:8000
       - FAST_REFRESH=true
+
+volumes:
+  db-data-dev:
+    name: printfarmhq-db-data-dev

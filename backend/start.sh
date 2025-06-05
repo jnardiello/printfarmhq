@@ -1,6 +1,25 @@
 #!/bin/bash
 set -e
 
+# Display database connection info
+echo "📊 Database configuration:"
+echo "   DATABASE_URL: ${DATABASE_URL:-sqlite:///./hq.db}"
+
+# Wait for database to be ready (if using shared volume)
+if [[ "${DATABASE_URL}" == "sqlite:///data/hq.db" ]] || [[ "${DATABASE_URL}" == "sqlite:////data/hq.db" ]]; then
+    echo "⏳ Waiting for database container to initialize..."
+    # Give the database container time to initialize
+    sleep 2
+    
+    # Check if database file exists
+    DB_PATH="/data/hq.db"
+    if [[ -f "$DB_PATH" ]]; then
+        echo "✅ Database file found at $DB_PATH"
+    else
+        echo "⚠️  Database file not found at $DB_PATH, will be created by migrations"
+    fi
+fi
+
 # Check if migrations should be run
 if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
     echo "🔄 Running database migrations..."

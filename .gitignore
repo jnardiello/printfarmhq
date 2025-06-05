@@ -136,3 +136,9 @@ dmypy.json
 .claude/
 CLAUDE.md
 
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+database/data/

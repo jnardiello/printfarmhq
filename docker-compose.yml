@@ -1,4 +1,24 @@
 services:
+  # SQLite database service
+  database:
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:database-${VERSION:-v2.0.0}
+    container_name: printfarmhq-database
+    volumes:
+      - db-data:/data
+      - ./backend/migrations:/migrations:ro
+    networks:
+      - printfarmhq-network
+    healthcheck:
+      test: ["CMD", "sqlite3", "/data/hq.db", "SELECT 1;"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   backend:
     build:
       context: ./backend
@@ -7,9 +27,14 @@ services:
     container_name: printfarmhq-backend
     volumes:
       - ./backend:/app
+      - db-data:/data  # Share the database volume
     ports:
       - "8000:8000"
-    # No environment variables needed - using database-based configuration
+    environment:
+      - DATABASE_URL=sqlite:////data/hq.db
+    depends_on:
+      database:
+        condition: service_healthy
     networks:
       - printfarmhq-network
 
@@ -35,3 +60,7 @@ services:
 networks:
   printfarmhq-network:
     driver: bridge
+
+volumes:
+  db-data:
+    name: printfarmhq-db-data

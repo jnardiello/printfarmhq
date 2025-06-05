@@ -2,8 +2,11 @@
 FROM python:3.11-slim AS backend-app
 
 # Install system dependencies
+# Note: SQLite client is needed for migrations, but the actual database
+# runs in a separate container in production
 RUN apt-get update && apt-get install -y \
     gcc \
+    sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
