@@ -730,17 +730,26 @@ export function FilamentsTab() {
       <Dialog open={isPurchaseHistoryModalOpen} onOpenChange={setIsPurchaseHistoryModalOpen}>
         <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3 text-2xl">
-              <div className="p-2 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg">
-                <Clock className="h-6 w-6 text-white" />
-              </div>
-              Purchase History
-            </DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-3 text-2xl">
+                <div className="p-2 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg">
+                  <Clock className="h-6 w-6 text-white" />
+                </div>
+                Purchase History
+              </DialogTitle>
+              <Button
+                onClick={exportPurchasesCSV}
+                className="bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-green-600 dark:text-green-400 border-2 border-green-500 hover:border-green-600 mr-8"
+              >
+                <Download className="mr-2 h-4 w-4" /> 
+                Export CSV
+              </Button>
+            </div>
           </DialogHeader>
 
           <div className="space-y-6 mt-6">
             {/* Summary Statistics */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Card className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-blue-200 dark:border-blue-800">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
@@ -780,18 +789,6 @@ export function FilamentsTab() {
                       <p className="text-2xl font-bold text-gray-900 dark:text-white">€{avgPricePerKg.toFixed(2)}</p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20 border-orange-200 dark:border-orange-800">
-                <CardContent className="p-4">
-                  <Button
-                    onClick={exportPurchasesCSV}
-                    className="w-full h-full bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-green-600 dark:text-green-400 border-2 border-green-500 hover:border-green-600"
-                  >
-                    <Download className="mr-2 h-5 w-5" /> 
-                    Export CSV
-                  </Button>
                 </CardContent>
               </Card>
             </div>
