@@ -177,6 +177,45 @@ NAMESPACE=yourusername make docker-push-multiarch
 
 All images are hosted on GitHub Container Registry for fast, reliable access.
 
+## 👩‍💻 Development
+
+### Getting Started
+```bash
+# Start development environment with hot reload
+make dev
+
+# View all available commands
+make help
+```
+
+### Database Migrations
+PrintFarmHQ uses Alembic for database version control:
+
+```bash
+# Apply migrations
+make migrate
+
+# Create new migration after model changes
+make migrate-create DESC="Add new feature"
+
+# Check migration status
+make migrate-list
+```
+
+📚 **Migration Documentation:**
+- [Quick Reference](docs/migrations-quick-reference.md) - Common commands and examples
+- [Workflow Guide](docs/database-migrations-workflow.md) - Complete development workflow
+- [Technical Guide](docs/alembic-migration-guide.md) - In-depth Alembic details
+
+### Key Development Commands
+```bash
+make dev              # Start development with hot reload
+make migrate          # Run database migrations
+make migrate-create   # Create new migration
+make test            # Run all tests
+make logs            # View application logs
+```
+
 ## 🧪 Testing
 
 We have a comprehensive suite of automated tests, mainly focusing on functional and e2e tests, both for the backend and the frontend:

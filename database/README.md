@@ -72,12 +72,28 @@ docker volume inspect printfarmhq-db-data
 docker volume rm printfarmhq-db-data
 ```
 
+## Database Migrations
+
+PrintFarmHQ uses Alembic for database schema migrations. See the [Alembic Migration Guide](../docs/alembic-migration-guide.md) for detailed information.
+
+Quick commands:
+```bash
+# Apply migrations
+make migrate
+
+# Create new migration
+make migrate-create DESC="Add new feature"
+
+# List migrations
+make migrate-list
+```
+
 ## Migration to Other Databases
 
 While SQLite is excellent for single-instance deployments, you can easily migrate to PostgreSQL or MySQL by:
 
 1. Updating `DATABASE_URL` environment variable
 2. Installing appropriate Python database driver
-3. Running migrations on the new database
+3. Running Alembic migrations on the new database
 
 The application code is database-agnostic thanks to SQLAlchemy ORM.
