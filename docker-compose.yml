@@ -26,8 +26,9 @@ services:
     image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend-${VERSION:-v2.0.1}
     container_name: printfarmhq-backend
     volumes:
-      - ./backend:/app
-      - db-data:/data  # Share the database volume
+      - db-data:/data  # Share the database volume only
+      # NOTE: Do not mount ./backend:/app in production! 
+      # It overwrites the container's /app directory where packages are installed
     ports:
       - "8000:8000"
     environment:
@@ -37,6 +38,13 @@ services:
         condition: service_healthy
     networks:
       - printfarmhq-network
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    restart: unless-stopped
 
   frontend:
     build:
@@ -53,9 +61,17 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - printfarmhq-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 50s
+    restart: unless-stopped
 
 networks:
   printfarmhq-network:
