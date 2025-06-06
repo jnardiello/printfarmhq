@@ -69,12 +69,7 @@ def log_user_activity(
     db.commit()
 
 # Create DB tables
-Base.metadata.create_all(bind=engine)
-
-# ensure extra columns exist (simple migration)
-from .database import _ensure_columns
-
-_ensure_columns()
+# Base.metadata.create_all(bind=engine)  # Now handled by Alembic
 
 # Remove environment-based superadmin creation - now handled via setup endpoint
 

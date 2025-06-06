@@ -182,38 +182,80 @@ restore-db: ## Restore database from backup
 	@sqlite3 $(DB_PATH) ".read $(DUMP_FILE)"
 	@echo "✅ Database restored from $(DUMP_FILE)"
 
-# Database migrations
+# Database migrations (Alembic)
 migrate: ## Run database migrations
-	@echo "🔄 Running database migrations..."
-	@cd backend && python3 app/migrate.py migrate
+	@echo "🔄 Running database migrations with Alembic..."
+	@if [ "$$(docker compose ps -q backend 2>/dev/null)" ]; then \
+		docker compose exec backend python -m alembic upgrade head; \
+	else \
+		echo "⚠️  Backend container not running. Starting it..."; \
+		docker compose up -d backend; \
+		sleep 5; \
+		docker compose exec backend python -m alembic upgrade head; \
+	fi
 
 migrate-list: ## List all migrations and their status
 	@echo "📋 Migration status:"
-	@cd backend && python3 app/migrate.py list
+	@if [ "$$(docker compose ps -q backend 2>/dev/null)" ]; then \
+		docker compose exec backend python -m alembic history --verbose; \
+	else \
+		echo "⚠️  Backend container not running. Starting it..."; \
+		docker compose up -d backend; \
+		sleep 5; \
+		docker compose exec backend python -m alembic history --verbose; \
+	fi
 
 migrate-create: ## Create a new migration (usage: make migrate-create DESC="description")
 	@if [ -z "$(DESC)" ]; then \
 		echo "Usage: make migrate-create DESC=\"your migration description\""; \
 		exit 1; \
 	fi
-	@echo "📝 Creating new migration..."
-	@cd backend && python3 app/migrate.py create --description "$(DESC)"
+	@echo "📝 Creating new migration with Alembic..."
+	@if [ "$$(docker compose ps -q backend 2>/dev/null)" ]; then \
+		docker compose exec backend python -m alembic revision --autogenerate -m "$(DESC)"; \
+	else \
+		echo "⚠️  Backend container not running. Starting it..."; \
+		docker compose up -d backend; \
+		sleep 5; \
+		docker compose exec backend python -m alembic revision --autogenerate -m "$(DESC)"; \
+	fi
 
 migrate-revert: ## Revert last migration (usage: make migrate-revert [COUNT=N])
 	@echo "🔄 Reverting migration(s)..."
-	@cd backend && python3 app/migrate.py revert --count $(or $(COUNT),1)
+	@if [ "$$(docker compose ps -q backend 2>/dev/null)" ]; then \
+		docker compose exec backend python -m alembic downgrade -$(or $(COUNT),1); \
+	else \
+		echo "⚠️  Backend container not running. Starting it..."; \
+		docker compose up -d backend; \
+		sleep 5; \
+		docker compose exec backend python -m alembic downgrade -$(or $(COUNT),1); \
+	fi
 
-migrate-revert-to: ## Revert to specific version (usage: make migrate-revert-to VERSION=YYYYMMDD_HHMMSS)
+migrate-revert-to: ## Revert to specific version (usage: make migrate-revert-to VERSION=revision_id)
 	@if [ -z "$(VERSION)" ]; then \
-		echo "Usage: make migrate-revert-to VERSION=YYYYMMDD_HHMMSS"; \
+		echo "Usage: make migrate-revert-to VERSION=revision_id"; \
 		exit 1; \
 	fi
 	@echo "🔄 Reverting to version $(VERSION)..."
-	@cd backend && python3 app/migrate.py revert-to --version "$(VERSION)"
+	@if [ "$$(docker compose ps -q backend 2>/dev/null)" ]; then \
+		docker compose exec backend python -m alembic downgrade "$(VERSION)"; \
+	else \
+		echo "⚠️  Backend container not running. Starting it..."; \
+		docker compose up -d backend; \
+		sleep 5; \
+		docker compose exec backend python -m alembic downgrade "$(VERSION)"; \
+	fi
 
-migrate-dry-run: ## Show pending migrations without applying them
-	@echo "🔍 Checking pending migrations (dry run)..."
-	@cd backend && python3 app/migrate.py migrate --dry-run
+migrate-dry-run: ## Show current database revision
+	@echo "🔍 Checking current database revision..."
+	@if [ "$$(docker compose ps -q backend 2>/dev/null)" ]; then \
+		docker compose exec backend python -m alembic current; \
+	else \
+		echo "⚠️  Backend container not running. Starting it..."; \
+		docker compose up -d backend; \
+		sleep 5; \
+		docker compose exec backend python -m alembic current; \
+	fi
 
 # Docker Registry (for maintainers)
 REGISTRY ?= ghcr.io

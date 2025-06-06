@@ -29,20 +29,15 @@ fi
 
 # Check if migrations should be run
 if [[ "${RUN_MIGRATIONS:-true}" == "true" ]]; then
-    echo "🔄 Running database migrations..."
+    echo "🔄 Running database migrations with Alembic..."
     
-    # Check if migrate script exists
-    if [[ -f "app/migrate.py" ]]; then
-        # Run migrations
-        python3 app/migrate.py migrate
-        if [[ $? -eq 0 ]]; then
-            echo "✅ Database migrations completed successfully"
-        else
-            echo "❌ Database migration failed"
-            exit 1
-        fi
+    # Run Alembic migrations
+    python3 -m alembic upgrade head
+    if [[ $? -eq 0 ]]; then
+        echo "✅ Database migrations completed successfully"
     else
-        echo "⚠️  Migration script not found, skipping migrations"
+        echo "❌ Database migration failed"
+        exit 1
     fi
 else
     echo "⏭️  Skipping migrations (RUN_MIGRATIONS=false)"
