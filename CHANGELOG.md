@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.1 (2025-06-06)
+
+- fix: handle race condition in jwt_secret creation
+
+
 ## v2.1.0 (2025-06-06)
 
 - feat: migrate from custom migrations to Alembic
