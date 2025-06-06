@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.1.0 (2025-06-06)
+
+- feat: migrate from custom migrations to Alembic
+- fix: ensure all services start with health checks
+- test: replace custom migration tests with Alembic tests
+- docs: add comprehensive Alembic migration guides
+- fix: relocate export CSV button for cleaner UI
+
+
 ## v2.0.1 (2025-06-05)
 
 - refactor: remove landing page for SaaS separation
