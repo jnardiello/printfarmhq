@@ -24,6 +24,7 @@ Base = declarative_base()
 def get_jwt_secret(db_session) -> str:
     """Get or create JWT secret from database."""
     from .models import AppConfig
+    from sqlalchemy.exc import IntegrityError
     
     config = db_session.query(AppConfig).filter(AppConfig.key == "jwt_secret").first()
     if not config:
@@ -31,8 +32,17 @@ def get_jwt_secret(db_session) -> str:
         secret = secrets.token_urlsafe(32)
         config = AppConfig(key="jwt_secret", value=secret)
         db_session.add(config)
-        db_session.commit()
-        return secret
+        try:
+            db_session.commit()
+            return secret
+        except IntegrityError:
+            # Another process may have created it, rollback and fetch again
+            db_session.rollback()
+            config = db_session.query(AppConfig).filter(AppConfig.key == "jwt_secret").first()
+            if config:
+                return config.value
+            else:
+                raise  # Re-raise if still not found
     return config.value
 
 
