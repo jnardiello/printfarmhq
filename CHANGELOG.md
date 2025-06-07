@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.4 (2025-06-07)
+
+- fix: ensure frontend builds use /api instead of localhost:8000
+
+
 ## v2.1.3 (2025-06-07)
 
 - fix: pass NEXT_PUBLIC_API_URL to Docker build process
