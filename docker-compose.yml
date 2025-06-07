@@ -8,7 +8,6 @@ services:
     container_name: printfarmhq-database
     volumes:
       - db-data:/data
-      - ./backend/migrations:/migrations:ro
     networks:
       - printfarmhq-network
     healthcheck:
