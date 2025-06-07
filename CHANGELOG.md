@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.5 (2025-06-07)
+
+- fix: use regex capture group in Next.js rewrite to strip /api prefix
+
+
 ## v2.1.4 (2025-06-07)
 
 - fix: ensure frontend builds use /api instead of localhost:8000
