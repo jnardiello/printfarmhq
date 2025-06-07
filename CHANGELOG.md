@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.3 (2025-06-07)
+
+- fix: pass NEXT_PUBLIC_API_URL to Docker build process
+
+
 ## v2.1.2 (2025-06-07)
 
 - fix: remove obsolete migrations volume mount
