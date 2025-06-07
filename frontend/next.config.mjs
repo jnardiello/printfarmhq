@@ -15,8 +15,9 @@ const nextConfig = {
       const backendUrl = process.env.BACKEND_URL || 'http://backend:8000'
       return [
         {
-          source: '/api/(.*)',
-          destination: `${backendUrl}/$1`,
+          source: '/api/:path*',
+          destination: `${backendUrl}/:path*`,
+          basePath: false,
         },
       ]
     }
