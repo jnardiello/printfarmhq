@@ -4,7 +4,7 @@ services:
     build:
       context: ./database
       dockerfile: Dockerfile
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:database-${VERSION:-v2.1.1}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:database-${VERSION:-v2.1.2}
     container_name: printfarmhq-database
     volumes:
       - db-data:/data
@@ -22,7 +22,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend-${VERSION:-v2.1.1}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:backend-${VERSION:-v2.1.2}
     container_name: printfarmhq-backend
     volumes:
       - db-data:/data  # Share the database volume only
@@ -52,7 +52,7 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
         DOCKER_ENV: "true"
-    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:frontend-${VERSION:-v2.1.1}
+    image: ${REGISTRY:-ghcr.io}/${NAMESPACE:-jnardiello}/printfarmhq:frontend-${VERSION:-v2.1.2}
     container_name: printfarmhq-frontend
     environment:
       - NEXT_PUBLIC_API_URL=/api

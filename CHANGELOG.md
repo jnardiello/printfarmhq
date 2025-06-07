@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.1.2 (2025-06-07)
+
+- fix: remove obsolete migrations volume mount
+- refactor: configure Next.js as API gateway for production
+- fix: update hardcoded API URLs to use relative paths
+
+
 ## v2.1.1 (2025-06-06)
 
 - fix: handle race condition in jwt_secret creation
