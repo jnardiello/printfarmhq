@@ -35,7 +35,7 @@ ARG BACKEND_URL
 RUN mkdir -p .next/cache/google-fonts
 
 # Build the application
-RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} BACKEND_URL=${BACKEND_URL} npm run build
+RUN NODE_ENV=production DOCKER_ENV=${DOCKER_ENV} BACKEND_URL=${BACKEND_URL} NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} npm run build
 
 # Production stage
 FROM node:20-alpine AS runner
