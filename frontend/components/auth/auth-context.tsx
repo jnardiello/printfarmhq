@@ -63,7 +63,7 @@ const authStorage = {
 
 const authApi = {
   login: async (credentials: { email: string; password: string }) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/login`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -80,7 +80,7 @@ const authApi = {
   },
   
   register: async (credentials: { email: string; password: string; name: string }) => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/register`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/register`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -100,7 +100,7 @@ const authApi = {
     const token = authStorage.getToken()
     if (!token) throw new Error('No token found')
     
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/me`, {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/me`, {
       headers: {
         'Authorization': `Bearer ${token}`,
       },
@@ -114,7 +114,7 @@ const authApi = {
   },
 
   getSetupStatus: async () => {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/setup-status`)
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/setup-status`)
     
     if (!response.ok) {
       throw new Error('Failed to get setup status')

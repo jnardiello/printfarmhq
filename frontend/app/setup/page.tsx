@@ -54,7 +54,7 @@ export default function SetupPage() {
     }
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/auth/setup`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/setup`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
