@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.1.6 (2025-06-07)
+
+- fix: add basePath:false to Next.js rewrite configuration
+
+
 ## v2.1.5 (2025-06-07)
 
 - fix: use regex capture group in Next.js rewrite to strip /api prefix
