@@ -283,6 +283,8 @@ build_and_push_images() {
     export VERSION="${version}"
     export PUSH="true"
     export PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
+    # Use Next.js API proxy pattern for production builds
+    export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-/api}"
     
     # Execute multi-arch build script
     if [[ -f "./scripts/docker-build-multiarch.sh" ]]; then
@@ -316,6 +318,14 @@ build_and_push_images() {
     fi
     
     print_success "Docker images built and pushed successfully"
+    
+    # Verify frontend was built with correct API URL
+    print_status "Verifying frontend build configuration..."
+    if docker run --rm "${REGISTRY}/${NAMESPACE}/printfarmhq:frontend-${version}" sh -c "grep -q 'localhost:8000' /app/.next/server/app/page.js" 2>/dev/null; then
+        print_warning "Frontend may still contain localhost:8000 references"
+    else
+        print_success "Frontend correctly built with API proxy pattern"
+    fi
 }
 
 # Create GitHub release

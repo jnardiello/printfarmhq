@@ -128,11 +128,12 @@ main() {
         ""
     
     # Build frontend app image
+    # Default to /api to use Next.js API proxy pattern in production
     build_multiarch_image \
         "frontend/Dockerfile" \
         "frontend" \
         "frontend" \
-        "--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}"
+        "--build-arg NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-/api}"
     
     # Build frontend test image
     build_multiarch_image \
